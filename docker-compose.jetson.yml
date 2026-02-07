@@ -1,0 +1,21 @@
+version: '3.8'
+
+# AI Hotel Check-in Kiosk — Docker Compose (NVIDIA Jetson)
+# Run: docker compose -f docker-compose.yml -f docker-compose.jetson.yml up --build
+
+services:
+  backend:
+    environment:
+      - HARDWARE_MODE=jetson
+    # Enable GPU access on Jetson
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+  frontend:
+    environment:
+      - VITE_HARDWARE_MODE=jetson
+    # Run in kiosk mode on Jetson display
+    # The frontend will be served and opened in Chromium kiosk mode

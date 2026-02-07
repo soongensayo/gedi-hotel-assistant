@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/* Custom holographic / kiosk theme */
+@theme {
+  --color-hotel-dark: #0a0e1a;
+  --color-hotel-darker: #060810;
+  --color-hotel-panel: rgba(13, 20, 40, 0.85);
+  --color-hotel-accent: #00d4ff;
+  --color-hotel-accent-2: #7b61ff;
+  --color-hotel-gold: #c9a55c;
+  --color-hotel-success: #00e676;
+  --color-hotel-error: #ff5252;
+  --color-hotel-text: #e0e8f0;
+  --color-hotel-text-dim: #7a8ba0;
+  --color-hotel-glow: rgba(0, 212, 255, 0.3);
+  --color-hotel-border: rgba(0, 212, 255, 0.15);
+}
+
+/* Base styles for kiosk mode */
+html, body, #root {
+  @apply h-full w-full m-0 p-0 overflow-hidden;
+  background-color: var(--color-hotel-dark);
+  color: var(--color-hotel-text);
+  font-family: 'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent text selection on kiosk */
+  user-select: none;
+  -webkit-user-select: none;
+  /* Prevent pull-to-refresh on touch */
+  overscroll-behavior: none;
+}
+
+/* Holographic scan lines overlay */
+@keyframes scanlines {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 100%; }
+}
+
+.hologram-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 212, 255, 0.03) 2px,
+    rgba(0, 212, 255, 0.03) 4px
+  );
+  animation: scanlines 8s linear infinite;
+  z-index: 10;
+}
+
+/* Holographic flicker effect */
+@keyframes hologram-flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.8; }
+  94% { opacity: 1; }
+  96% { opacity: 0.9; }
+  97% { opacity: 1; }
+}
+
+.hologram-flicker {
+  animation: hologram-flicker 4s ease-in-out infinite;
+}
+
+/* Glow pulse for avatar */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 212, 255, 0.3), 0 0 60px rgba(0, 212, 255, 0.1); }
+  50% { box-shadow: 0 0 30px rgba(0, 212, 255, 0.5), 0 0 80px rgba(0, 212, 255, 0.2); }
+}
+
+.glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* Glass morphism panel */
+.glass-panel {
+  background: var(--color-hotel-panel);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--color-hotel-border);
+  border-radius: 16px;
+}
+
+/* Smooth transitions for wizard steps */
+.step-enter {
+  opacity: 0;
+  transform: translateX(30px);
+}
+.step-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 400ms ease, transform 400ms ease;
+}
+.step-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+.step-exit-active {
+  opacity: 0;
+  transform: translateX(-30px);
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+/* Scrollbar styling for kiosk */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-hotel-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-hotel-accent);
+}
