@@ -10,11 +10,12 @@ A full-stack kiosk application featuring a **voice-interactive AI concierge** th
 
 ## ✨ Features
 
-- **🤖 AI Concierge** — Powered by OpenAI GPT-4 (or Gemini fallback), with full hotel context
+- **🤖 AI Concierge with Tool Use** — Powered by OpenAI GPT-4 (or Gemini fallback) with function calling. The AI queries real hotel data, looks up reservations, and triggers UI actions — never fabricates information.
 - **🎭 Talking-Head Avatar** — Real-time lip-synced avatar via [Simli](https://simli.com) WebRTC SDK
-- **🗣️ Voice Interaction** — Speech-to-text (Whisper) + text-to-speech (OpenAI TTS) pipeline
+- **🗣️ Hands-Free Voice Mode** — Voice Activity Detection (VAD) keeps the mic open and auto-detects speech. No button presses needed — just speak naturally, like ChatGPT voice mode.
 - **🌀 Holographic UI** — Animated hologram effects on the avatar display
-- **📋 Check-in Wizard** — Step-by-step flow: Welcome → Passport → Reservation → Room Selection → Payment → Key Card
+- **📋 Check-in Wizard** — AI-guided flow: Welcome → Identify → Passport Scan → Reservation → Room Selection → Upgrades → Payment → Key Card
+- **💬 Post Check-in Conversation** — After check-in completes, the AI continues chatting as a personal concierge — sharing local tips, answering hotel questions, and making the guest feel welcome.
 - **🔌 Mock Hardware** — Simulated passport scanner & credit card reader (swappable for real hardware on Jetson)
 - **📊 Hotel Data Backend** — In-memory mock data with Supabase support for production
 
@@ -32,7 +33,7 @@ ai-checkin-robot/
 │   │   │   ├── conversation/# ChatPanel, VoiceButton, TranscriptDisplay
 │   │   │   ├── hardware/    # MockPassportScanner, MockCardReader
 │   │   │   └── ui/          # Shared UI components
-│   │   ├── hooks/           # useAvatar, useVoiceInput, useVoiceOutput, useCheckin
+│   │   ├── hooks/           # useAvatar, useVoiceInput (VAD), useVoiceOutput, useCheckin
 │   │   ├── stores/          # Zustand state (conversation, checkin, avatar)
 │   │   ├── services/        # API client, Socket.IO, Supabase
 │   │   └── utils/           # Audio processing, hologram effects
@@ -40,7 +41,7 @@ ai-checkin-robot/
 ├── backend/                 # Express + Socket.IO + TypeScript
 │   └── src/
 │       ├── routes/          # REST endpoints (chat, voice, hotel, checkin, avatar)
-│       ├── services/        # AI, TTS, STT, avatar, hotel data
+│       ├── services/        # AI (with tool use), TTS, STT, avatar, hotel data
 │       ├── prompts/         # System prompts for the AI concierge
 │       ├── config/          # Environment config
 │       └── socket.ts        # Real-time voice pipeline via WebSocket
@@ -110,15 +111,53 @@ Open **http://localhost:5173** in your browser.
 ## 🎮 How to Use
 
 1. **Open the app** in your browser — you'll see the check-in kiosk with the AI avatar
-2. **Type or tap the mic** to talk to the AI concierge
-3. **Follow the check-in wizard** — the AI will guide you through passport scanning, room selection, and payment
-4. **The avatar** lip-syncs to the AI's spoken responses in real-time
+2. **Tap the mic button** to enter hands-free voice mode, or type in the chat box
+3. **Just speak naturally** — the AI detects when you start and stop talking automatically
+4. **Follow the check-in flow** — the AI will guide you through identity verification, room selection, and payment
+5. **Keep chatting after check-in** — the AI stays as your personal concierge, happy to answer questions and share recommendations
 
-### Voice Interaction
+### Voice Mode (VAD)
 
-- Click the **microphone button** to start recording
-- Click again to **stop** — your speech is transcribed and sent to the AI
-- The AI responds with **text + voice**, and the avatar animates in sync
+The voice system uses **Voice Activity Detection** for a natural, hands-free experience:
+
+- Tap the **microphone button once** to enter listening mode (cyan pulse)
+- **Just speak** — the system detects speech onset automatically (red pulse while recording)
+- **Pause naturally** — it waits for ~1.5s of silence before processing, so mid-sentence pauses are fine
+- Your speech is transcribed (Whisper) and sent to the AI
+- **While the AI is speaking**, detection pauses automatically to prevent echo
+- Tap the mic again to **exit** listening mode
+
+> No audio is streamed or sent to any API while you're silent — the VAD runs entirely locally via the Web Audio API. The only API call is the Whisper transcription when you finish an utterance.
+
+---
+
+## 🧠 AI Concierge — How It Works
+
+The AI concierge ("Azure") uses **OpenAI function calling** (tool use) to interact with real data and control the kiosk UI. It never fabricates hotel information.
+
+### Available AI Tools
+
+| Tool | Type | Description |
+|---|---|---|
+| `lookup_reservation_by_name` | Data | Find reservation by guest's first + last name |
+| `lookup_reservation` | Data | Find reservation by confirmation code |
+| `lookup_reservation_by_passport` | Data | Find reservation by passport number |
+| `get_hotel_info` | Data | Hotel amenities, Wi-Fi, breakfast, nearby attractions |
+| `get_available_rooms` | Data | List available rooms with prices |
+| `get_room_upgrades` | Data | Upgrade options for a given room type |
+| `set_checkin_step` | UI | Update the progress bar step |
+| `trigger_passport_scan` | UI | Show the passport scanner screen |
+| `trigger_payment` | UI | Show the payment screen |
+| `dispense_key_card` | UI | Show the key card dispensing screen |
+| `store_reservation` | State | Persist reservation + guest data in frontend store |
+
+### Context Persistence
+
+The frontend sends the current check-in state (step, reservation, guest) with every message. Once the AI finds a reservation, a `store_reservation` action saves it to the frontend's Zustand store, so the AI always has access to the guest's details throughout the entire conversation — even after check-in completes.
+
+### Post Check-in
+
+After the key card is dispensed, the AI **continues the conversation** as a personal concierge — asking about the guest's trip, sharing restaurant recommendations, local tips, and more. The check-in wizard UI clears away and the avatar stays on screen.
 
 ---
 
@@ -166,27 +205,40 @@ The app uses **in-memory mock data** by default — no database needed for devel
 │                                                        │
 │  ┌─────────┐  ┌──────────┐  ┌───────────────────┐    │
 │  │  Chat   │  │  Voice   │  │   Simli Avatar    │    │
-│  │  Panel  │  │  Button  │  │   (WebRTC SDK)    │    │
+│  │  Panel  │  │  (VAD)   │  │   (WebRTC SDK)    │    │
 │  └────┬────┘  └────┬─────┘  └─────────▲─────────┘    │
 │       │             │                  │ PCM16 audio   │
 │       │   REST/WS   │                  │               │
-└───────┼─────────────┼──────────────────┼──────────────┘
-        │             │                  │
-        ▼             ▼                  │
-┌───────────────────────────────────┐    │
-│         Backend (Express)         │    │
-│                                   │    │
-│  ┌─────┐  ┌─────┐  ┌─────────┐  │    │
-│  │ GPT │  │ TTS │  │   STT   │  │    │
-│  │ -4  │  │     │  │ Whisper │  │    │
-│  └─────┘  └──┬──┘  └─────────┘  │    │
-│              │ MP3                │    │
-│              └───────────────────►┼────┘
-│                                   │ (decoded to PCM16
-│  ┌────────────────────────────┐  │  on frontend)
-│  │   Hotel Data (in-memory    │  │
-│  │   or Supabase)             │  │
-│  └────────────────────────────┘  │
+│  ┌────┴─────────────┴──┐               │               │
+│  │  Zustand Stores     │               │               │
+│  │  (checkin, convo)   │               │               │
+│  └─────────────────────┘               │               │
+└───────┼─────────────────────────────────┼──────────────┘
+        │                                 │
+        ▼                                 │
+┌───────────────────────────────────┐     │
+│         Backend (Express)         │     │
+│                                   │     │
+│  ┌─────────────────────────────┐ │     │
+│  │  AI Service (GPT-4)         │ │     │
+│  │  ┌─────────────────────┐   │ │     │
+│  │  │  Function Calling   │   │ │     │
+│  │  │  (tool use)         │   │ │     │
+│  │  └─────────┬───────────┘   │ │     │
+│  └────────────┼───────────────┘ │     │
+│               ▼                  │     │
+│  ┌─────┐  ┌─────┐  ┌─────────┐ │     │
+│  │Hotel│  │ TTS │  │   STT   │ │     │
+│  │Svc  │  │     │  │ Whisper │ │     │
+│  └──┬──┘  └──┬──┘  └─────────┘ │     │
+│     │        │ MP3              │     │
+│     │        └─────────────────►┼─────┘
+│     │                           │ (decoded to PCM16
+│     ▼                           │  on frontend)
+│  ┌────────────────────────────┐ │
+│  │   Hotel Data (in-memory   │ │
+│  │   mock or Supabase)       │ │
+│  └────────────────────────────┘ │
 └───────────────────────────────────┘
 ```
 
