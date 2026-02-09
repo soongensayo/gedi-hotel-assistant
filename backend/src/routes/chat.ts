@@ -6,6 +6,7 @@ const router = Router();
 /**
  * POST /api/chat
  * Send a message to the AI concierge and get a response.
+ * Returns { reply, actions, sessionId } where actions are UI commands.
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -17,9 +18,9 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const sid = sessionId || `anonymous-${Date.now()}`;
-    const reply = await chat(message, sid, context);
+    const { reply, actions } = await chat(message, sid, context);
 
-    res.json({ reply, sessionId: sid });
+    res.json({ reply, actions, sessionId: sid });
   } catch (error) {
     console.error('[Chat Route] Error:', error);
     res.status(500).json({ error: 'Failed to process message' });

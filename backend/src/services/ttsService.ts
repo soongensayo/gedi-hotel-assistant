@@ -22,7 +22,7 @@ export async function textToSpeech(
 
   try {
     const response = await openai.audio.speech.create({
-      model: 'tts-1-hd',
+      model: 'tts-1',
       voice: (voice || config.ttsVoice) as TTSVoice,
       input: text,
       response_format: 'mp3',

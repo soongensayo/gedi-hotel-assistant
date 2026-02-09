@@ -4,6 +4,20 @@
  */
 
 /**
+ * Split text into sentences for chunked TTS processing.
+ * Keeps punctuation with each sentence.
+ *
+ * "Hello! I'm your concierge. How can I help?"
+ * → ["Hello!", "I'm your concierge.", "How can I help?"]
+ */
+export function splitIntoSentences(text: string): string[] {
+  // Split on sentence-ending punctuation followed by whitespace
+  const parts = text.split(/(?<=[.!?])\s+/);
+  const sentences = parts.map((s) => s.trim()).filter((s) => s.length > 0);
+  return sentences.length > 0 ? sentences : [text.trim()];
+}
+
+/**
  * Decode an MP3/audio ArrayBuffer into raw PCM16 (Int16) samples.
  * Simli expects PCM16 as Uint8Array via sendAudioData().
  *

@@ -301,6 +301,50 @@ export async function lookupReservationByPassport(passportNumber: string) {
   return null;
 }
 
+export async function lookupReservationByName(firstName: string, lastName: string) {
+  const firstLower = firstName.toLowerCase();
+  const lastLower = lastName.toLowerCase();
+
+  if (supabase) {
+    // Case-insensitive search by first and last name via Supabase
+    const { data: guests, error: guestError } = await supabase
+      .from('guests')
+      .select('id')
+      .ilike('first_name', firstLower)
+      .ilike('last_name', lastLower);
+
+    if (!guestError && guests && guests.length > 0) {
+      // Try each matching guest for a confirmed reservation
+      for (const guest of guests) {
+        const { data, error } = await supabase
+          .from('reservations')
+          .select('*, guest:guests(*), room:rooms(*)')
+          .eq('guest_id', guest.id)
+          .eq('status', 'confirmed')
+          .single();
+        if (!error && data) return data;
+      }
+    }
+  }
+
+  // Mock lookup — case-insensitive match
+  const guest = MOCK_GUESTS.find(
+    (g) =>
+      g.firstName.toLowerCase() === firstLower &&
+      g.lastName.toLowerCase() === lastLower
+  );
+  if (guest) {
+    const reservation = MOCK_RESERVATIONS.find(
+      (r) => r.guestId === guest.id && r.status === 'confirmed'
+    );
+    if (reservation) {
+      const room = MOCK_ROOMS.find((r) => r.id === reservation.roomId);
+      return { ...reservation, guest, room };
+    }
+  }
+  return null;
+}
+
 export async function getGuestByPassport(passportNumber: string) {
   if (supabase) {
     const { data, error } = await supabase

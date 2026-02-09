@@ -32,7 +32,7 @@ export function HologramOverlay({ children, isActive = true, className = '' }: H
       <div className="absolute top-0 left-1/4 right-1/4 h-px bg-gradient-to-r from-transparent via-hotel-accent/50 to-transparent pointer-events-none z-20" />
 
       {/* Content */}
-      <div className="relative z-5">
+      <div className="relative z-5 h-full">
         {children}
       </div>
     </div>

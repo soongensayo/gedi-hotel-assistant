@@ -46,11 +46,11 @@ INSERT INTO rooms (id, room_number, type, floor, price_per_night, currency, max_
 
 -- Reservations (dates relative to "today")
 INSERT INTO reservations (id, confirmation_code, guest_id, room_id, check_in_date, check_out_date, number_of_guests, status, special_requests, total_amount, currency) VALUES
-  ('res-0000-0000-0000-000000000001', 'GAH-2024-001', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'r001-0000-0000-0000-000000000001', CURRENT_DATE, CURRENT_DATE + 3, 2, 'confirmed', 'High floor, extra pillows', 1050, 'SGD'),
-  ('res-0000-0000-0000-000000000002', 'GAH-2024-002', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', 'r001-0000-0000-0000-000000000003', CURRENT_DATE, CURRENT_DATE + 5, 1, 'confirmed', NULL, 2600, 'SGD'),
-  ('res-0000-0000-0000-000000000003', 'GAH-2024-003', 'c3d4e5f6-a7b8-9012-cdef-012345678912', 'r001-0000-0000-0000-000000000005', CURRENT_DATE, CURRENT_DATE + 2, 2, 'confirmed', 'Late check-in, Japanese newspaper', 1760, 'SGD'),
-  ('res-0000-0000-0000-000000000004', 'GAH-2024-004', 'd4e5f6a7-b8c9-0123-defa-123456789023', 'r001-0000-0000-0000-000000000002', CURRENT_DATE + 1, CURRENT_DATE + 4, 1, 'confirmed', 'Ground floor if available', 1050, 'SGD'),
-  ('res-0000-0000-0000-000000000005', 'GAH-2024-005', 'e5f6a7b8-c9d0-1234-efab-234567890134', 'r001-0000-0000-0000-000000000004', CURRENT_DATE, CURRENT_DATE + 7, 2, 'confirmed', 'Anniversary celebration, champagne in room', 3640, 'SGD');
+  ('res-0001', 'GAH-2026-1', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'r001-0000-0000-0000-000000000001', CURRENT_DATE, CURRENT_DATE + 3, 2, 'confirmed', 'High floor, extra pillows', 1050, 'SGD'),
+  ('res-0002', 'GAH-2026-2', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', 'r001-0000-0000-0000-000000000003', CURRENT_DATE, CURRENT_DATE + 5, 1, 'confirmed', NULL, 2600, 'SGD'),
+  ('res-0003', 'GAH-2026-3', 'c3d4e5f6-a7b8-9012-cdef-012345678912', 'r001-0000-0000-0000-000000000005', CURRENT_DATE, CURRENT_DATE + 2, 2, 'confirmed', 'Late check-in, Japanese newspaper', 1760, 'SGD'),
+  ('res-0004', 'GAH-2026-4', 'd4e5f6a7-b8c9-0123-defa-123456789023', 'r001-0000-0000-0000-000000000002', CURRENT_DATE + 1, CURRENT_DATE + 4, 1, 'confirmed', 'Ground floor if available', 1050, 'SGD'),
+  ('res-0005', 'GAH-2026-5', 'e5f6a7b8-c9d0-1234-efab-234567890134', 'r001-0000-0000-0000-000000000004', CURRENT_DATE, CURRENT_DATE + 7, 2, 'confirmed', 'Anniversary celebration, champagne in room', 3640, 'SGD');
 
 -- Room Upgrades
 INSERT INTO room_upgrades (from_room_type, to_room_type, additional_cost_per_night, currency, description, highlights) VALUES

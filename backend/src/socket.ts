@@ -25,7 +25,11 @@ export function setupSocketIO(server: HTTPServer): SocketIOServer {
 
     // --- Full voice pipeline via socket (STT → AI → TTS) ---
 
-    socket.on('voice:process', async (data: { audio: ArrayBuffer; sessionId: string }) => {
+    socket.on('voice:process', async (data: {
+      audio: ArrayBuffer;
+      sessionId: string;
+      context?: Record<string, unknown>;
+    }) => {
       try {
         // 1. STT
         socket.emit('voice:transcribing');
@@ -33,15 +37,15 @@ export function setupSocketIO(server: HTTPServer): SocketIOServer {
         const transcript = await speechToText(audioBuffer);
         socket.emit('voice:transcribed', { text: transcript });
 
-        // 2. AI Chat
+        // 2. AI Chat (with context and function calling)
         socket.emit('voice:thinking');
-        const reply = await chat(transcript, data.sessionId);
-        socket.emit('voice:reply', { text: reply });
+        const { reply, actions } = await chat(transcript, data.sessionId, data.context);
+        socket.emit('voice:reply', { text: reply, actions });
 
         // 3. TTS
         socket.emit('voice:synthesizing');
         const ttsAudio = await textToSpeech(reply);
-        socket.emit('voice:audio', { audio: ttsAudio, text: reply });
+        socket.emit('voice:audio', { audio: ttsAudio, text: reply, actions });
 
       } catch (error) {
         console.error('[Socket] Voice pipeline error:', error);
@@ -51,11 +55,15 @@ export function setupSocketIO(server: HTTPServer): SocketIOServer {
 
     // --- Simple chat via socket (text only) ---
 
-    socket.on('chat:message', async (data: { message: string; sessionId: string; context?: Record<string, unknown> }) => {
+    socket.on('chat:message', async (data: {
+      message: string;
+      sessionId: string;
+      context?: Record<string, unknown>;
+    }) => {
       try {
         socket.emit('chat:thinking');
-        const reply = await chat(data.message, data.sessionId, data.context);
-        socket.emit('chat:reply', { text: reply });
+        const { reply, actions } = await chat(data.message, data.sessionId, data.context);
+        socket.emit('chat:reply', { text: reply, actions });
       } catch (error) {
         console.error('[Socket] Chat error:', error);
         socket.emit('chat:error', { message: 'Chat processing failed' });

@@ -11,12 +11,23 @@ import {
 } from '../services/api';
 import type { CheckinStep } from '../types';
 
+/** Mock passport scan delay — simulates hardware scanning (10 seconds) */
+const MOCK_SCAN_DELAY_MS = 10_000;
+
 export function useCheckin() {
   const store = useCheckinStore();
   const addMessage = useConversationStore((s) => s.addMessage);
 
   const handlePassportScan = useCallback(async () => {
     try {
+      addMessage({
+        role: 'assistant',
+        content: 'Please place your passport on the scanner. I\'ll read it automatically.',
+      });
+
+      // In mock mode, wait ~10 seconds then auto-approve
+      await new Promise((resolve) => setTimeout(resolve, MOCK_SCAN_DELAY_MS));
+
       const result = await scanPassport();
       store.setPassportScan(result);
 
@@ -134,10 +145,12 @@ export function useCheckin() {
 
     try {
       const result = await completeCheckin(store.reservation.id, store.selectedRoom.id);
+      // Move to 'farewell' step — the avatar stays visible and the AI
+      // continues the conversation naturally (no FarewellScreen).
       store.setStep('farewell');
       addMessage({
         role: 'assistant',
-        content: `Your key card for Room ${result.roomNumber} is ready! Have a wonderful stay at our hotel. If you need anything, don't hesitate to ask.`,
+        content: `Your key card for Room ${result.roomNumber} is ready! You're all checked in. Is there anything else I can help you with — maybe some local tips, or questions about the hotel?`,
       });
     } catch (err) {
       console.error('Check-in completion failed:', err);

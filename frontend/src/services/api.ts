@@ -9,13 +9,31 @@ const api = axios.create({
   },
 });
 
+// --- Types for AI actions ---
+
+export interface AIAction {
+  type:
+    | 'set_step'
+    | 'show_passport_scanner'
+    | 'show_payment'
+    | 'show_key_card'
+    | 'store_reservation';
+  payload?: Record<string, unknown>;
+}
+
+export interface ChatResponse {
+  reply: string;
+  actions: AIAction[];
+  sessionId: string;
+}
+
 // --- Chat ---
 
 export async function sendChatMessage(
   message: string,
   sessionId: string,
   context?: Record<string, unknown>
-): Promise<{ reply: string; audioUrl?: string }> {
+): Promise<ChatResponse> {
   const { data } = await api.post('/chat', { message, sessionId, context });
   return data;
 }
