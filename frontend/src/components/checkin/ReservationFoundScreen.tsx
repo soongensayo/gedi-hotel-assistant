@@ -3,7 +3,7 @@ import { Card } from '../ui/Card';
 import { useCheckinStore } from '../../stores/checkinStore';
 
 export function ReservationFoundScreen() {
-  const { reservation, guest, setStep } = useCheckinStore();
+  const { reservation, guest, setPendingMessage } = useCheckinStore();
 
   if (!reservation) return null;
 
@@ -69,10 +69,10 @@ export function ReservationFoundScreen() {
       </Card>
 
       <div className="flex gap-4">
-        <Button variant="secondary" onClick={() => setStep('identify')}>
+        <Button variant="secondary" onClick={() => setPendingMessage("That's not my reservation.")}>
           Not Me
         </Button>
-        <Button onClick={() => setStep('room-selection')}>
+        <Button onClick={() => setPendingMessage("Yes, that's my reservation. Please proceed.")}>
           Confirm & Continue
         </Button>
       </div>

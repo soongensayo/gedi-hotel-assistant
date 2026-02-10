@@ -6,7 +6,7 @@ import { getRoomUpgrades } from '../../services/api';
 import type { RoomUpgrade } from '../../types';
 
 export function UpgradeOfferScreen() {
-  const { selectedRoom, selectedUpgrade, setSelectedUpgrade, setStep } = useCheckinStore();
+  const { selectedRoom, selectedUpgrade, setSelectedUpgrade, setPendingMessage } = useCheckinStore();
   const [upgrades, setUpgrades] = useState<RoomUpgrade[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +38,9 @@ export function UpgradeOfferScreen() {
     return (
       <div className="flex flex-col items-center justify-center h-full px-8 gap-6">
         <p className="text-hotel-text text-lg">Your room is already our best option!</p>
-        <Button onClick={() => setStep('payment')}>Continue to Payment</Button>
+        <Button onClick={() => setPendingMessage("No upgrades needed, let's proceed to payment.")}>
+          Continue to Payment
+        </Button>
       </div>
     );
   }
@@ -91,16 +93,20 @@ export function UpgradeOfferScreen() {
       </div>
 
       <div className="flex justify-between">
-        <Button variant="secondary" onClick={() => setStep('room-selection')}>
+        <Button variant="secondary" onClick={() => setPendingMessage("Actually, let me go back and pick a different room.")}>
           Back
         </Button>
         <div className="flex gap-3">
-          <Button variant="ghost" onClick={() => { setSelectedUpgrade(null); setStep('payment'); }}>
+          <Button variant="ghost" onClick={() => { setSelectedUpgrade(null); setPendingMessage("No upgrade for me, let's proceed to payment."); }}>
             No Thanks
           </Button>
           <Button
             variant="gold"
-            onClick={() => setStep('payment')}
+            onClick={() => setPendingMessage(
+              selectedUpgrade
+                ? `I'd like the ${selectedUpgrade.toRoomType} upgrade please.`
+                : "Let's proceed to payment."
+            )}
             disabled={!selectedUpgrade}
           >
             {selectedUpgrade ? 'Accept Upgrade' : 'Select an Upgrade'}

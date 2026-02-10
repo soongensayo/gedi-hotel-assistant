@@ -21,6 +21,9 @@ interface CheckinState {
   // Payment
   paymentResult: PaymentResult | null;
   
+  // AI-driven flow: pending message to send to AI on behalf of the user
+  pendingMessage: string | null;
+  
   // Session
   sessionId: string;
   sessionStartTime: number | null;
@@ -37,6 +40,7 @@ interface CheckinState {
   setAvailableUpgrades: (upgrades: RoomUpgrade[]) => void;
   setSelectedUpgrade: (upgrade: RoomUpgrade | null) => void;
   setPaymentResult: (result: PaymentResult) => void;
+  setPendingMessage: (msg: string | null) => void;
   resetSession: () => void;
 }
 
@@ -64,6 +68,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   availableUpgrades: [],
   selectedUpgrade: null,
   paymentResult: null,
+  pendingMessage: null,
   sessionId: generateSessionId(),
   sessionStartTime: null,
 
@@ -93,6 +98,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   setAvailableUpgrades: (upgrades) => set({ availableUpgrades: upgrades }),
   setSelectedUpgrade: (upgrade) => set({ selectedUpgrade: upgrade }),
   setPaymentResult: (result) => set({ paymentResult: result }),
+  setPendingMessage: (msg) => set({ pendingMessage: msg }),
 
   resetSession: () => set({
     currentStep: 'welcome',
@@ -104,6 +110,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     availableUpgrades: [],
     selectedUpgrade: null,
     paymentResult: null,
+    pendingMessage: null,
     sessionId: generateSessionId(),
     sessionStartTime: null,
   }),

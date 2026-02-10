@@ -326,6 +326,8 @@ export async function chat(
         hotelInfo?: Record<string, unknown>;
         reservation?: Record<string, unknown>;
         guest?: Record<string, unknown>;
+        selectedRoom?: Record<string, unknown>;
+        selectedUpgrade?: Record<string, unknown>;
         currentStep?: string;
       })
     : '';

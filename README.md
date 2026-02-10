@@ -14,7 +14,7 @@ A full-stack kiosk application featuring a **voice-interactive AI concierge** th
 - **🎭 Talking-Head Avatar** — Real-time lip-synced avatar via [Simli](https://simli.com) WebRTC SDK
 - **🗣️ Hands-Free Voice Mode** — Voice Activity Detection (VAD) keeps the mic open and auto-detects speech. No button presses needed — just speak naturally, like ChatGPT voice mode.
 - **🌀 Holographic UI** — Animated hologram effects on the avatar display
-- **📋 Check-in Wizard** — AI-guided flow: Welcome → Identify → Passport Scan → Reservation → Room Selection → Upgrades → Payment → Key Card
+- **📋 AI-Driven Check-in Flow** — The AI avatar drives every screen transition: Welcome → Identify → Passport Scan → Reservation Confirm → Room Selection → Upgrades → Payment → Key Card. Guests confirm each step via voice or button — the AI acknowledges naturally and advances the UI.
 - **💬 Post Check-in Conversation** — After check-in completes, the AI continues chatting as a personal concierge — sharing local tips, answering hotel questions, and making the guest feel welcome.
 - **🔌 Mock Hardware** — Simulated passport scanner & credit card reader (swappable for real hardware on Jetson)
 - **📊 Hotel Data Backend** — In-memory mock data with Supabase support for production
@@ -113,7 +113,7 @@ Open **http://localhost:5173** in your browser.
 1. **Open the app** in your browser — you'll see the check-in kiosk with the AI avatar
 2. **Tap the mic button** to enter hands-free voice mode, or type in the chat box
 3. **Just speak naturally** — the AI detects when you start and stop talking automatically
-4. **Follow the check-in flow** — the AI will guide you through identity verification, room selection, and payment
+4. **Follow the check-in flow** — the AI drives the entire process. It advances screens after you confirm each step (via voice or on-screen buttons). You can still tap to select rooms and upgrades — the AI picks up your choices and responds accordingly.
 5. **Keep chatting after check-in** — the AI stays as your personal concierge, happy to answer questions and share recommendations
 
 ### Voice Mode (VAD)
@@ -151,9 +151,15 @@ The AI concierge ("Azure") uses **OpenAI function calling** (tool use) to intera
 | `dispense_key_card` | UI | Show the key card dispensing screen |
 | `store_reservation` | State | Persist reservation + guest data in frontend store |
 
+### AI-Driven Flow Transitions
+
+The AI controls all screen transitions during check-in. When a guest confirms a step — either by speaking ("Yes, that's my reservation") or tapping a button on-screen — the confirmation is sent as a chat message to the AI. The AI responds naturally, then uses `set_checkin_step` to advance the kiosk UI. This keeps the avatar's conversation and the on-screen flow perfectly in sync.
+
+Interactive elements (room cards, upgrade cards) remain fully clickable. The guest's selections are included in the AI context (`selectedRoom`, `selectedUpgrade`), so the AI always knows what was picked and can reference it in conversation.
+
 ### Context Persistence
 
-The frontend sends the current check-in state (step, reservation, guest) with every message. Once the AI finds a reservation, a `store_reservation` action saves it to the frontend's Zustand store, so the AI always has access to the guest's details throughout the entire conversation — even after check-in completes.
+The frontend sends the current check-in state (step, reservation, guest, selected room, selected upgrade) with every message. Once the AI finds a reservation, a `store_reservation` action saves it to the frontend's Zustand store, so the AI always has access to the guest's details throughout the entire conversation — even after check-in completes.
 
 ### Post Check-in
 

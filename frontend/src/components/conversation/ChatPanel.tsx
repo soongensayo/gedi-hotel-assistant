@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { VoiceButton } from './VoiceButton';
 import { useConversationStore } from '../../stores/conversationStore';
@@ -86,6 +86,10 @@ export function ChatPanel() {
   const currentStep = useCheckinStore((s) => s.currentStep);
   const reservation = useCheckinStore((s) => s.reservation);
   const guest = useCheckinStore((s) => s.guest);
+  const selectedRoom = useCheckinStore((s) => s.selectedRoom);
+  const selectedUpgrade = useCheckinStore((s) => s.selectedUpgrade);
+  const pendingMessage = useCheckinStore((s) => s.pendingMessage);
+  const setPendingMessage = useCheckinStore((s) => s.setPendingMessage);
   const processActions = useActionProcessor();
 
   /** Build context object to send with each chat message */
@@ -93,8 +97,10 @@ export function ChatPanel() {
     const ctx: Record<string, unknown> = { currentStep };
     if (reservation) ctx.reservation = reservation;
     if (guest) ctx.guest = guest;
+    if (selectedRoom) ctx.selectedRoom = selectedRoom;
+    if (selectedUpgrade) ctx.selectedUpgrade = selectedUpgrade;
     return ctx;
-  }, [currentStep, reservation, guest]);
+  }, [currentStep, reservation, guest, selectedRoom, selectedUpgrade]);
 
   /**
    * Shared handler for sending a user message to the AI.
@@ -119,6 +125,21 @@ export function ChatPanel() {
     },
     [addMessage, setLoading, setError, speak, sessionId, buildContext, processActions]
   );
+
+  /**
+   * Watch for pending messages from overlay screens (e.g. "Confirm" buttons).
+   * When a screen sets pendingMessage, we auto-send it to the AI and clear it.
+   */
+  const pendingHandledRef = useRef(false);
+  useEffect(() => {
+    if (pendingMessage && !pendingHandledRef.current) {
+      pendingHandledRef.current = true;
+      handleSendMessage(pendingMessage).finally(() => {
+        setPendingMessage(null);
+        pendingHandledRef.current = false;
+      });
+    }
+  }, [pendingMessage, handleSendMessage, setPendingMessage]);
 
   /** Handle text form submission */
   const handleTextSubmit = useCallback(

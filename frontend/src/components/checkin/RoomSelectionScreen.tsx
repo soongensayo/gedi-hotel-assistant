@@ -6,7 +6,7 @@ import { getAvailableRooms } from '../../services/api';
 import type { Room } from '../../types';
 
 export function RoomSelectionScreen() {
-  const { reservation, selectedRoom, setSelectedRoom, setStep } = useCheckinStore();
+  const { reservation, selectedRoom, setSelectedRoom, setPendingMessage } = useCheckinStore();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -99,14 +99,18 @@ export function RoomSelectionScreen() {
       </div>
 
       <div className="flex justify-between">
-        <Button variant="secondary" onClick={() => setStep('reservation-found')}>
+        <Button variant="secondary" onClick={() => setPendingMessage("Actually, let me go back to review my reservation.")}>
           Back
         </Button>
         <Button
-          onClick={() => setStep('upgrade-offer')}
+          onClick={() => setPendingMessage(
+            selectedRoom
+              ? `I'd like Room ${selectedRoom.roomNumber}, the ${selectedRoom.type} room.`
+              : "I'll go with the assigned room."
+          )}
           disabled={!selectedRoom}
         >
-          Continue
+          Confirm Room
         </Button>
       </div>
     </div>

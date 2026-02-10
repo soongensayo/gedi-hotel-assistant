@@ -212,13 +212,108 @@ const MOCK_RESERVATIONS = [
 ];
 
 // =============================================================================
+// Supabase → camelCase normalizers
+// =============================================================================
+// Supabase returns snake_case column names, but the frontend expects camelCase.
+// These functions transform the data so the rest of the app always sees camelCase.
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+function normalizeGuest(row: any) {
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    firstName: row.first_name ?? row.firstName,
+    lastName: row.last_name ?? row.lastName,
+    email: row.email,
+    phone: row.phone,
+    nationality: row.nationality,
+    passportNumber: row.passport_number ?? row.passportNumber,
+    dateOfBirth: row.date_of_birth ?? row.dateOfBirth,
+  };
+}
+
+function normalizeRoom(row: any) {
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    roomNumber: row.room_number ?? row.roomNumber,
+    type: row.type,
+    floor: row.floor,
+    pricePerNight: Number(row.price_per_night ?? row.pricePerNight),
+    currency: row.currency,
+    maxOccupancy: row.max_occupancy ?? row.maxOccupancy,
+    bedType: row.bed_type ?? row.bedType,
+    amenities: row.amenities ?? [],
+    imageUrl: row.image_url ?? row.imageUrl,
+    isAvailable: row.is_available ?? row.isAvailable,
+    description: row.description,
+  };
+}
+
+function normalizeReservation(row: any) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    confirmationCode: row.confirmation_code ?? row.confirmationCode,
+    guestId: row.guest_id ?? row.guestId,
+    roomId: row.room_id ?? row.roomId,
+    checkInDate: row.check_in_date ?? row.checkInDate,
+    checkOutDate: row.check_out_date ?? row.checkOutDate,
+    numberOfGuests: row.number_of_guests ?? row.numberOfGuests,
+    status: row.status,
+    specialRequests: row.special_requests ?? row.specialRequests,
+    totalAmount: Number(row.total_amount ?? row.totalAmount),
+    currency: row.currency,
+    guest: row.guest ? normalizeGuest(row.guest) : undefined,
+    room: row.room ? normalizeRoom(row.room) : undefined,
+  };
+}
+
+function normalizeUpgrade(row: any) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    fromRoomType: row.from_room_type ?? row.fromRoomType,
+    toRoomType: row.to_room_type ?? row.toRoomType,
+    additionalCostPerNight: Number(row.additional_cost_per_night ?? row.additionalCostPerNight),
+    currency: row.currency,
+    description: row.description,
+    highlights: row.highlights ?? [],
+  };
+}
+
+function normalizeHotelInfo(row: any) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    address: row.address,
+    city: row.city,
+    country: row.country,
+    phone: row.phone,
+    email: row.email,
+    website: row.website,
+    description: row.description,
+    amenities: row.amenities ?? [],
+    checkInTime: row.check_in_time ?? row.checkInTime,
+    checkOutTime: row.check_out_time ?? row.checkOutTime,
+    wifiPassword: row.wifi_password ?? row.wifiPassword,
+    emergencyContact: row.emergency_contact ?? row.emergencyContact,
+    nearbyAttractions: row.nearby_attractions ?? row.nearbyAttractions ?? [],
+  };
+}
+
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// =============================================================================
 // Service Functions
 // =============================================================================
 
 export async function getHotelInfo() {
   if (supabase) {
     const { data, error } = await supabase.from('hotel_info').select('*').single();
-    if (!error && data) return data;
+    if (!error && data) return normalizeHotelInfo(data);
   }
   return MOCK_HOTEL_INFO;
 }
@@ -230,7 +325,7 @@ export async function getAvailableRooms(_checkIn?: string, _checkOut?: string) {
       .select('*')
       .eq('is_available', true)
       .order('price_per_night', { ascending: true });
-    if (!error && data) return data;
+    if (!error && data) return data.map(normalizeRoom);
   }
   return MOCK_ROOMS.filter((r) => r.isAvailable);
 }
@@ -241,7 +336,7 @@ export async function getRoomUpgrades(currentRoomType: string) {
       .from('room_upgrades')
       .select('*')
       .eq('from_room_type', currentRoomType);
-    if (!error && data) return data;
+    if (!error && data) return data.map(normalizeUpgrade);
   }
   return MOCK_UPGRADES.filter((u) => u.fromRoomType === currentRoomType);
 }
@@ -253,7 +348,7 @@ export async function lookupReservation(query: string) {
       .select('*, guest:guests(*), room:rooms(*)')
       .or(`confirmation_code.eq.${query},id.eq.${query}`)
       .single();
-    if (!error && data) return data;
+    if (!error && data) return normalizeReservation(data);
   }
 
   // Mock lookup
@@ -283,7 +378,7 @@ export async function lookupReservationByPassport(passportNumber: string) {
         .eq('guest_id', guest.id)
         .eq('status', 'confirmed')
         .single();
-      if (!error && data) return data;
+      if (!error && data) return normalizeReservation(data);
     }
   }
 
@@ -322,7 +417,7 @@ export async function lookupReservationByName(firstName: string, lastName: strin
           .eq('guest_id', guest.id)
           .eq('status', 'confirmed')
           .single();
-        if (!error && data) return data;
+        if (!error && data) return normalizeReservation(data);
       }
     }
   }
@@ -352,7 +447,7 @@ export async function getGuestByPassport(passportNumber: string) {
       .select('*')
       .eq('passport_number', passportNumber)
       .single();
-    if (!error && data) return data;
+    if (!error && data) return normalizeGuest(data);
   }
   return MOCK_GUESTS.find((g) => g.passportNumber === passportNumber) || null;
 }
