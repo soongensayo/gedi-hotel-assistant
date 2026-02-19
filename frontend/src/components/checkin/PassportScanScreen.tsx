@@ -13,7 +13,7 @@ export function PassportScanScreen() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full px-8 gap-8">
+    <div className="flex flex-col items-center justify-center h-full px-8 py-8 gap-8">
       <h2 className="text-2xl font-light text-hotel-text">Passport Scanner</h2>
 
       {/* Scanner visualization */}

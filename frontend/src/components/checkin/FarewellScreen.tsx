@@ -13,7 +13,7 @@ export function FarewellScreen() {
   }, [resetSession]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full px-8 gap-8 text-center">
+    <div className="flex flex-col items-center justify-center h-full px-8 py-8 gap-8 text-center">
       {/* Success animation */}
       <div className="relative w-24 h-24">
         <div className="absolute inset-0 rounded-full bg-hotel-success/10 border border-hotel-success/30 flex items-center justify-center animate-[scale-in_0.5s_ease-out]">

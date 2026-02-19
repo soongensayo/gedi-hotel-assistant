@@ -15,7 +15,7 @@ export function IdentifyScreen() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full px-8 gap-8">
+    <div className="flex flex-col items-center justify-center h-full px-8 py-8 gap-8">
       <div className="text-center mb-4">
         <h2 className="text-2xl font-light text-hotel-text mb-2">
           How would you like to check in?

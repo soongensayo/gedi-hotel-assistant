@@ -5,7 +5,6 @@ const STEPS: { key: CheckinStep; label: string }[] = [
   { key: 'identify', label: 'Identify' },
   { key: 'passport-scan', label: 'Passport' },
   { key: 'reservation-found', label: 'Reservation' },
-  { key: 'room-selection', label: 'Room' },
   { key: 'upgrade-offer', label: 'Upgrade' },
   { key: 'payment', label: 'Payment' },
   { key: 'key-card', label: 'Key Card' },

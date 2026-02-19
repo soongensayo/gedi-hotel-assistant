@@ -17,7 +17,7 @@ function useActionProcessor() {
   const setStep = useCheckinStore((s) => s.setStep);
   const setReservation = useCheckinStore((s) => s.setReservation);
   const setGuest = useCheckinStore((s) => s.setGuest);
-  const { handlePassportScan, handlePayment, handleCompleteCheckin } = useCheckin();
+  const { handlePassportScan } = useCheckin();
 
   const processActions = useCallback(
     (actions: AIAction[]) => {
@@ -53,22 +53,14 @@ function useActionProcessor() {
             break;
           case 'show_payment':
             setStep('payment');
-            // Auto-trigger payment processing (mock auto-approves)
-            setTimeout(() => {
-              handlePayment();
-            }, 500);
             break;
           case 'show_key_card':
             setStep('key-card');
-            // Auto-trigger key card dispensing
-            setTimeout(() => {
-              handleCompleteCheckin();
-            }, 500);
             break;
         }
       }
     },
-    [setStep, setReservation, setGuest, handlePassportScan, handlePayment, handleCompleteCheckin]
+    [setStep, setReservation, setGuest, handlePassportScan]
   );
 
   return processActions;

@@ -1,3 +1,10 @@
+// =============================================================================
+// RoomSelectionScreen — TEMPORARILY DISABLED
+// Room is now pre-selected on the booking website before the guest arrives.
+// This component is kept for easy restoration if room selection is re-enabled.
+// =============================================================================
+
+/*
 import { useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -116,3 +123,4 @@ export function RoomSelectionScreen() {
     </div>
   );
 }
+*/

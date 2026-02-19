@@ -197,7 +197,6 @@ const CONCIERGE_TOOLS: OpenAI.ChatCompletionTool[] = [
               'identify',
               'passport-scan',
               'reservation-found',
-              'room-selection',
               'upgrade-offer',
               'payment',
               'key-card',

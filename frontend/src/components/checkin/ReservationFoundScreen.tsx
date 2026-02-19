@@ -8,7 +8,7 @@ export function ReservationFoundScreen() {
   if (!reservation) return null;
 
   return (
-    <div className="flex flex-col items-center justify-center h-full px-8 gap-6">
+    <div className="flex flex-col items-center justify-center h-full px-8 py-8 gap-6">
       <div className="text-center">
         <div className="w-14 h-14 rounded-full bg-hotel-success/10 border border-hotel-success/30 flex items-center justify-center mx-auto mb-4">
           <svg className="w-7 h-7 text-hotel-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">

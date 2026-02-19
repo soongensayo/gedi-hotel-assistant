@@ -5,6 +5,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Reservation } from '@/lib/types';
 import { formatDate, getNights } from '@/lib/utils';
+import { activateKeyCard } from '@/components/KeyCardButton';
 import Link from 'next/link';
 
 function ConfirmationContent() {
@@ -21,7 +22,11 @@ function ConfirmationContent() {
       .eq('confirmation_code', code)
       .single()
       .then(({ data }) => {
-        if (data) setReservation(data as unknown as Reservation);
+        if (data) {
+          const r = data as unknown as Reservation;
+          setReservation(r);
+          activateKeyCard(r);
+        }
         setLoading(false);
       });
   }, [code]);

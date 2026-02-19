@@ -9,7 +9,7 @@ export type CheckinStep =
   | 'identify'
   | 'passport-scan'
   | 'reservation-found'
-  | 'room-selection'
+  // | 'room-selection' // Room is pre-selected on the booking website
   | 'upgrade-offer'
   | 'payment'
   | 'key-card'

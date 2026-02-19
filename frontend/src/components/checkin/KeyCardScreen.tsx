@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Button } from '../ui/Button';
 import { useCheckin } from '../../hooks/useCheckin';
 import { useCheckinStore } from '../../stores/checkinStore';
 
@@ -10,7 +9,6 @@ export function KeyCardScreen() {
   const [keyCardReady, setKeyCardReady] = useState(false);
 
   useEffect(() => {
-    // Simulate key card encoding
     const timer = setTimeout(() => {
       setIsEncoding(false);
       setKeyCardReady(true);
@@ -18,8 +16,16 @@ export function KeyCardScreen() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (!keyCardReady) return;
+    const timer = setTimeout(() => {
+      handleCompleteCheckin();
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [keyCardReady, handleCompleteCheckin]);
+
   return (
-    <div className="flex flex-col items-center justify-center h-full px-8 gap-8">
+    <div className="flex flex-col items-center justify-center h-full px-8 py-8 gap-8">
       <h2 className="text-2xl font-light text-hotel-text">
         {isEncoding ? 'Preparing Your Key Card' : 'Key Card Ready'}
       </h2>
@@ -33,7 +39,6 @@ export function KeyCardScreen() {
         }
       `}>
         <div className="absolute inset-0 p-6 flex flex-col justify-between">
-          {/* Hotel name */}
           <div className="flex justify-between items-start">
             <div>
               <p className="text-hotel-accent text-xs tracking-widest uppercase font-medium">
@@ -46,7 +51,6 @@ export function KeyCardScreen() {
             )}
           </div>
 
-          {/* Room info */}
           <div>
             {isEncoding ? (
               <div className="flex items-center gap-2">
@@ -66,7 +70,6 @@ export function KeyCardScreen() {
           </div>
         </div>
 
-        {/* Encoding animation */}
         {isEncoding && (
           <div className="absolute inset-0 rounded-2xl overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-hotel-accent to-transparent animate-pulse" />
@@ -75,19 +78,16 @@ export function KeyCardScreen() {
       </div>
 
       {keyCardReady && (
-        <div className="text-center">
+        <div className="text-center space-y-3">
           <p className="text-hotel-success text-sm">✓ Key card encoded successfully</p>
-          <p className="text-hotel-text-dim text-xs mt-1">Please take your key card</p>
+          <p className="text-hotel-text-dim text-xs">Please take your key card</p>
+          <div className="mt-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10">
+            <p className="text-hotel-text text-sm">
+              You can also access your <span className="text-hotel-accent font-medium">digital key</span> anytime via the guest portal
+            </p>
+          </div>
         </div>
       )}
-
-      <Button
-        onClick={handleCompleteCheckin}
-        disabled={!keyCardReady}
-        size="lg"
-      >
-        Complete Check-in
-      </Button>
     </div>
   );
 }

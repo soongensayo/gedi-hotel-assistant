@@ -122,19 +122,6 @@ export function useCheckin() {
       );
 
       store.setPaymentResult(result);
-
-      if (result.success) {
-        store.setStep('key-card');
-        addMessage({
-          role: 'assistant',
-          content: `Payment processed successfully. Let me prepare your key card.`,
-        });
-      } else {
-        addMessage({
-          role: 'assistant',
-          content: `There was an issue processing your payment. Would you like to try again?`,
-        });
-      }
     } catch (err) {
       console.error('Payment failed:', err);
     }

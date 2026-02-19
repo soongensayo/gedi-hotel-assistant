@@ -14,7 +14,7 @@ export function WelcomeScreen() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-8 gap-8">
+    <div className="flex flex-col items-center justify-center h-full text-center px-8 py-8 gap-8">
       {/* Hotel logo area */}
       <div className="flex flex-col items-center gap-4">
         <div className="w-24 h-24 rounded-full bg-gradient-to-br from-hotel-accent/15 to-hotel-accent-2/15 border border-hotel-accent/20 flex items-center justify-center shadow-[0_0_40px_rgba(196,162,101,0.1)]">

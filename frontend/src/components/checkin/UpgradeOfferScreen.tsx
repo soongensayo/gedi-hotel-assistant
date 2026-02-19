@@ -46,7 +46,7 @@ export function UpgradeOfferScreen() {
   }
 
   return (
-    <div className="flex flex-col h-full px-8 py-6 gap-6">
+    <div className="flex flex-col h-full px-8 py-8 gap-6">
       <div className="text-center">
         <h2 className="text-2xl font-light text-hotel-text">Upgrade Your Stay</h2>
         <p className="text-hotel-text-dim text-sm mt-1">
@@ -93,7 +93,7 @@ export function UpgradeOfferScreen() {
       </div>
 
       <div className="flex justify-between">
-        <Button variant="secondary" onClick={() => setPendingMessage("Actually, let me go back and pick a different room.")}>
+        <Button variant="secondary" onClick={() => setPendingMessage("Actually, let me go back and review my reservation.")}>
           Back
         </Button>
         <div className="flex gap-3">

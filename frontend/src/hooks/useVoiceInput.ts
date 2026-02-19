@@ -8,7 +8,7 @@ import { useConversationStore } from '../stores/conversationStore';
 const VAD_CONFIG = {
   SPEECH_THRESHOLD: 0.012,    // RMS level that counts as "someone is talking"
   SILENCE_THRESHOLD: 0.008,   // RMS level that counts as "silence"
-  SPEECH_START_MS: 250,       // Sustained speech before we start recording
+  SPEECH_START_MS: 100,       // Sustained speech before we mark a segment
   SILENCE_DURATION_MS: 1500,  // Sustained silence before we stop recording
   MIN_RECORDING_MS: 600,      // Minimum recording length to bother transcribing
   VAD_INTERVAL_MS: 50,        // How often we sample audio levels (20 fps)
@@ -32,11 +32,11 @@ interface UseVoiceInputReturn {
 /**
  * Hands-free voice input with Voice Activity Detection.
  *
- * The mic stays open while in "listening" mode. Audio energy is monitored
- * via an AnalyserNode (~20×/sec, zero API calls). When speech is detected
- * (sustained volume above threshold), a MediaRecorder captures the audio.
- * When the user stops talking (silence for ~1.5s), the recording is sent
- * to Whisper for transcription and the callback fires.
+ * Audio energy is monitored via an AnalyserNode (~20×/sec, zero API calls).
+ * When speech is detected (sustained volume above threshold), a fresh
+ * MediaRecorder is created for that segment — guaranteeing a valid WebM
+ * container with proper headers. When the user stops talking (silence for
+ * ~1.5s), the recorder is stopped and the audio sent to Whisper.
  *
  * Detection is automatically **paused** while the AI is speaking or loading
  * to prevent echo / feedback loops.
@@ -57,9 +57,10 @@ export function useVoiceInput(
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const segmentRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const vadIntervalRef = useRef<number | null>(null);
+  const recorderMimeRef = useRef<string>('audio/webm');
 
   // VAD timing refs (must be refs so the setInterval callback sees latest values)
   const speechStartTimeRef = useRef<number | null>(null);
@@ -91,46 +92,57 @@ export function useVoiceInput(
     return Math.sqrt(sum / bufferLength);
   }, []);
 
-  /** Begin capturing audio into MediaRecorder (called when VAD detects speech). */
+  /** Start a fresh MediaRecorder for this speech segment. */
   const startSegmentRecording = useCallback(() => {
-    if (!streamRef.current || isRecordingRef.current) return;
+    if (isRecordingRef.current || !streamRef.current) return;
 
     audioChunksRef.current = [];
-    const recorder = new MediaRecorder(streamRef.current, {
-      mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm',
-    });
+    const mimeType = recorderMimeRef.current;
+    const recorder = new MediaRecorder(streamRef.current, { mimeType });
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) audioChunksRef.current.push(e.data);
     };
-    mediaRecorderRef.current = recorder;
-    recorder.start(100); // collect chunks every 100 ms
+    segmentRecorderRef.current = recorder;
+    recorder.start(100);
+
     recordingStartTimeRef.current = Date.now();
     isRecordingRef.current = true;
     setIsRecording(true);
-    console.log('[VAD] Speech detected — recording started');
+    console.log('[VAD] Speech detected — fresh segment recorder started');
   }, []);
 
-  /** Stop the MediaRecorder, transcribe, and fire the callback. */
+  /** Stop the segment recorder, build a valid WebM blob, and transcribe. */
   const stopSegmentAndTranscribe = useCallback(() => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === 'inactive') return;
+    if (!isRecordingRef.current) return;
 
-    // We don't await this — the onstop handler runs asynchronously
-    recorder.onstop = async () => {
-      isRecordingRef.current = false;
-      setIsRecording(false);
+    isRecordingRef.current = false;
+    setIsRecording(false);
 
-      const duration = Date.now() - (recordingStartTimeRef.current ?? 0);
-      console.log(`[VAD] Recording stopped — ${duration}ms`);
+    const duration = Date.now() - (recordingStartTimeRef.current ?? 0);
+    console.log(`[VAD] Segment ended — ${duration}ms`);
 
-      if (duration < VAD_CONFIG.MIN_RECORDING_MS) {
-        console.log('[VAD] Too short, ignoring');
-        return;
-      }
+    const rec = segmentRecorderRef.current;
 
-      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    if (duration < VAD_CONFIG.MIN_RECORDING_MS) {
+      console.log('[VAD] Too short, ignoring');
+      if (rec && rec.state !== 'inactive') rec.stop();
+      segmentRecorderRef.current = null;
+      audioChunksRef.current = [];
+      return;
+    }
+
+    if (!rec || rec.state === 'inactive') {
+      audioChunksRef.current = [];
+      return;
+    }
+
+    // Stopping the recorder flushes the final chunk, then fires onstop
+    rec.onstop = () => {
+      const mimeType = rec.mimeType || 'audio/webm';
+      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+      audioChunksRef.current = [];
+      segmentRecorderRef.current = null;
+
       if (audioBlob.size < 1000) {
         console.log('[VAD] Audio blob too small, ignoring');
         return;
@@ -138,20 +150,23 @@ export function useVoiceInput(
 
       isProcessingRef.current = true;
       setIsProcessing(true);
-      try {
-        const { text } = await transcribeAudio(audioBlob);
-        if (text?.trim() && onTranscriptRef.current) {
-          console.log('[VAD] Transcript:', text.trim());
-          onTranscriptRef.current(text.trim());
+
+      (async () => {
+        try {
+          const { text } = await transcribeAudio(audioBlob);
+          if (text?.trim() && onTranscriptRef.current) {
+            console.log('[VAD] Transcript:', text.trim());
+            onTranscriptRef.current(text.trim());
+          }
+        } catch (err) {
+          console.error('[VAD] Transcription failed:', err);
+        } finally {
+          isProcessingRef.current = false;
+          setIsProcessing(false);
         }
-      } catch (err) {
-        console.error('[VAD] Transcription failed:', err);
-      } finally {
-        isProcessingRef.current = false;
-        setIsProcessing(false);
-      }
+      })();
     };
-    recorder.stop();
+    rec.stop();
   }, []);
 
   // ── Public API ─────────────────────────────────────────────────────
@@ -175,6 +190,11 @@ export function useVoiceInput(
       analyserRef.current = analyser;
       audioContextRef.current = audioContext;
 
+      // Store preferred MIME type for per-segment recorders
+      recorderMimeRef.current = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+
       // ── Start the VAD monitoring interval ─────────────────────────
       vadIntervalRef.current = window.setInterval(() => {
         const now = Date.now();
@@ -190,9 +210,15 @@ export function useVoiceInput(
           silenceStartTimeRef.current = null;
           // If we were mid-recording and the AI started speaking, discard
           if (isRecordingRef.current && isSpeaking) {
-            mediaRecorderRef.current?.stop();
+            const rec = segmentRecorderRef.current;
+            if (rec && rec.state !== 'inactive') {
+              rec.onstop = null;
+              rec.stop();
+            }
+            segmentRecorderRef.current = null;
             isRecordingRef.current = false;
             setIsRecording(false);
+            audioChunksRef.current = [];
           }
           return;
         }
@@ -242,12 +268,12 @@ export function useVoiceInput(
       vadIntervalRef.current = null;
     }
 
-    // Stop any active MediaRecorder without triggering transcription
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.onstop = null; // discard pending audio
-      mediaRecorderRef.current.stop();
+    // Stop any active segment recorder
+    if (segmentRecorderRef.current && segmentRecorderRef.current.state !== 'inactive') {
+      segmentRecorderRef.current.onstop = null;
+      segmentRecorderRef.current.stop();
     }
-    mediaRecorderRef.current = null;
+    segmentRecorderRef.current = null;
 
     // Close audio context
     audioContextRef.current?.close();
@@ -264,6 +290,7 @@ export function useVoiceInput(
     recordingStartTimeRef.current = null;
     isRecordingRef.current = false;
     isProcessingRef.current = false;
+    audioChunksRef.current = [];
 
     setIsListening(false);
     setIsRecording(false);
@@ -276,9 +303,9 @@ export function useVoiceInput(
   useEffect(() => {
     return () => {
       if (vadIntervalRef.current) clearInterval(vadIntervalRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.onstop = null;
-        mediaRecorderRef.current.stop();
+      if (segmentRecorderRef.current && segmentRecorderRef.current.state !== 'inactive') {
+        segmentRecorderRef.current.onstop = null;
+        segmentRecorderRef.current.stop();
       }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       audioContextRef.current?.close();

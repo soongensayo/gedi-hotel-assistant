@@ -49,7 +49,7 @@ const STEP_ORDER: CheckinStep[] = [
   'identify',
   'passport-scan',
   'reservation-found',
-  'room-selection',
+  // 'room-selection' removed — room is pre-selected on the booking website
   'upgrade-offer',
   'payment',
   'key-card',
@@ -92,7 +92,10 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
 
   setGuest: (guest) => set({ guest }),
   setPassportScan: (result) => set({ passportScan: result }),
-  setReservation: (reservation) => set({ reservation }),
+  setReservation: (reservation) => set({
+    reservation,
+    selectedRoom: reservation.room || get().selectedRoom,
+  }),
   setConfirmationCode: (code) => set({ confirmationCode: code }),
   setSelectedRoom: (room) => set({ selectedRoom: room }),
   setAvailableUpgrades: (upgrades) => set({ availableUpgrades: upgrades }),
