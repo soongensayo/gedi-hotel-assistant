@@ -81,8 +81,8 @@ function ActionButtons() {
         className={`
           px-4 py-2.5 text-sm rounded-xl backdrop-blur-md transition-all duration-300 flex items-center gap-2 font-medium
           ${isPassportActive
-            ? 'bg-hotel-accent/20 border-2 border-hotel-accent/50 text-hotel-accent shadow-[0_0_25px_rgba(0,212,255,0.3)] scale-105'
-            : 'bg-hotel-panel/80 border border-hotel-border text-hotel-text-dim hover:text-hotel-accent hover:border-hotel-accent/30 hover:bg-hotel-accent/10'
+            ? 'bg-hotel-accent/15 border-2 border-hotel-accent/40 text-hotel-accent shadow-[0_0_25px_rgba(196,162,101,0.2)] scale-105'
+            : 'bg-hotel-panel/80 border border-hotel-border text-hotel-text-dim hover:text-hotel-accent hover:border-hotel-accent/25 hover:bg-hotel-accent/8'
           }
           ${scanningPassport ? 'animate-pulse' : ''}
         `}
@@ -100,8 +100,8 @@ function ActionButtons() {
         className={`
           px-4 py-2.5 text-sm rounded-xl backdrop-blur-md transition-all duration-300 flex items-center gap-2 font-medium
           ${isPaymentActive
-            ? 'bg-hotel-accent/20 border-2 border-hotel-accent/50 text-hotel-accent shadow-[0_0_25px_rgba(0,212,255,0.3)] scale-105'
-            : 'bg-hotel-panel/80 border border-hotel-border text-hotel-text-dim hover:text-hotel-accent hover:border-hotel-accent/30 hover:bg-hotel-accent/10'
+            ? 'bg-hotel-accent/15 border-2 border-hotel-accent/40 text-hotel-accent shadow-[0_0_25px_rgba(196,162,101,0.2)] scale-105'
+            : 'bg-hotel-panel/80 border border-hotel-border text-hotel-text-dim hover:text-hotel-accent hover:border-hotel-accent/25 hover:bg-hotel-accent/8'
           }
           ${processingPayment ? 'animate-pulse' : ''}
         `}

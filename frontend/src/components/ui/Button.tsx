@@ -9,13 +9,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles = {
   primary:
-    'bg-hotel-accent/20 text-hotel-accent border border-hotel-accent/40 hover:bg-hotel-accent/30 hover:border-hotel-accent/60 shadow-[0_0_15px_rgba(0,212,255,0.15)]',
+    'bg-hotel-accent/15 text-hotel-accent border border-hotel-accent/30 hover:bg-hotel-accent/25 hover:border-hotel-accent/50 shadow-[0_0_15px_rgba(196,162,101,0.1)]',
   secondary:
     'bg-white/5 text-hotel-text border border-white/10 hover:bg-white/10 hover:border-white/20',
   ghost:
     'bg-transparent text-hotel-text-dim hover:text-hotel-text hover:bg-white/5',
   gold:
-    'bg-hotel-gold/20 text-hotel-gold border border-hotel-gold/40 hover:bg-hotel-gold/30 hover:border-hotel-gold/60 shadow-[0_0_15px_rgba(201,165,92,0.15)]',
+    'bg-hotel-gold/15 text-hotel-gold border border-hotel-gold/30 hover:bg-hotel-gold/25 hover:border-hotel-gold/50 shadow-[0_0_15px_rgba(212,176,122,0.1)]',
 };
 
 const sizeStyles = {

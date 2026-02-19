@@ -307,8 +307,90 @@ function normalizeHotelInfo(row: any) {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 // =============================================================================
+// Fuzzy Matching Utilities
+// =============================================================================
+
+const FUZZY_MAX_DISTANCE = 4;
+
+function levenshteinDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+  return dp[m][n];
+}
+
+// =============================================================================
 // Service Functions
 // =============================================================================
+
+export interface NameSuggestion {
+  firstName: string;
+  lastName: string;
+  distance: number;
+}
+
+export interface NameLookupResult {
+  reservation: ReturnType<typeof normalizeReservation> | (typeof MOCK_RESERVATIONS[number] & { guest?: typeof MOCK_GUESTS[number]; room?: typeof MOCK_ROOMS[number] }) | null;
+  suggestions: NameSuggestion[];
+}
+
+/**
+ * Fetch all guests and rank them by Levenshtein distance to the input name.
+ * Returns guests within FUZZY_MAX_DISTANCE, sorted closest first.
+ */
+async function searchGuestsFuzzy(
+  firstName: string,
+  lastName: string
+): Promise<NameSuggestion[]> {
+  const firstLower = firstName.toLowerCase();
+  const lastLower = lastName.toLowerCase();
+  const hasLastName = lastLower.length > 0;
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  let allGuests: Array<{ firstName: string; lastName: string }> = [];
+
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('guests')
+      .select('first_name, last_name');
+    if (!error && data) {
+      allGuests = data.map((row: any) => ({
+        firstName: row.first_name,
+        lastName: row.last_name,
+      }));
+    }
+  }
+
+  if (allGuests.length === 0) {
+    allGuests = MOCK_GUESTS.map((g) => ({
+      firstName: g.firstName,
+      lastName: g.lastName,
+    }));
+  }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  const scored = allGuests.map((g) => {
+    const firstDist = levenshteinDistance(firstLower, g.firstName.toLowerCase());
+    const lastDist = hasLastName
+      ? levenshteinDistance(lastLower, g.lastName.toLowerCase())
+      : 0;
+    return {
+      firstName: g.firstName,
+      lastName: g.lastName,
+      distance: firstDist + lastDist,
+    };
+  });
+
+  return scored
+    .filter((s) => s.distance > 0 && s.distance <= FUZZY_MAX_DISTANCE)
+    .sort((a, b) => a.distance - b.distance);
+}
 
 export async function getHotelInfo() {
   if (supabase) {
@@ -396,12 +478,15 @@ export async function lookupReservationByPassport(passportNumber: string) {
   return null;
 }
 
-export async function lookupReservationByName(firstName: string, lastName: string) {
+export async function lookupReservationByName(
+  firstName: string,
+  lastName: string
+): Promise<NameLookupResult> {
   const firstLower = firstName.toLowerCase();
   const lastLower = lastName.toLowerCase();
 
+  // --- Exact match (Supabase) ---
   if (supabase) {
-    // Case-insensitive search by first and last name via Supabase
     const { data: guests, error: guestError } = await supabase
       .from('guests')
       .select('id')
@@ -409,7 +494,6 @@ export async function lookupReservationByName(firstName: string, lastName: strin
       .ilike('last_name', lastLower);
 
     if (!guestError && guests && guests.length > 0) {
-      // Try each matching guest for a confirmed reservation
       for (const guest of guests) {
         const { data, error } = await supabase
           .from('reservations')
@@ -417,12 +501,14 @@ export async function lookupReservationByName(firstName: string, lastName: strin
           .eq('guest_id', guest.id)
           .eq('status', 'confirmed')
           .single();
-        if (!error && data) return normalizeReservation(data);
+        if (!error && data) {
+          return { reservation: normalizeReservation(data), suggestions: [] };
+        }
       }
     }
   }
 
-  // Mock lookup — case-insensitive match
+  // --- Exact match (mock) ---
   const guest = MOCK_GUESTS.find(
     (g) =>
       g.firstName.toLowerCase() === firstLower &&
@@ -434,10 +520,13 @@ export async function lookupReservationByName(firstName: string, lastName: strin
     );
     if (reservation) {
       const room = MOCK_ROOMS.find((r) => r.id === reservation.roomId);
-      return { ...reservation, guest, room };
+      return { reservation: { ...reservation, guest, room }, suggestions: [] };
     }
   }
-  return null;
+
+  // --- No exact match — fall back to fuzzy search ---
+  const suggestions = await searchGuestsFuzzy(firstName, lastName);
+  return { reservation: null, suggestions };
 }
 
 export async function getGuestByPassport(passportNumber: string) {

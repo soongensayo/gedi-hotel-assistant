@@ -18,7 +18,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
         onClick={onClose}
       />
       {/* Modal content */}
-      <div className="relative glass-panel p-8 max-w-lg w-full mx-4 shadow-[0_0_40px_rgba(0,212,255,0.15)]">
+      <div className="relative glass-panel p-8 max-w-lg w-full mx-4 shadow-[0_0_40px_rgba(196,162,101,0.1)]">
         {title && (
           <h2 className="text-xl font-semibold text-hotel-accent mb-4">{title}</h2>
         )}

@@ -35,7 +35,7 @@ export function ProgressBar({ currentStep }: ProgressBarProps) {
               <div
                 className={`
                   w-2.5 h-2.5 rounded-full transition-all duration-500
-                  ${isActive ? 'bg-hotel-accent shadow-[0_0_10px_rgba(0,212,255,0.6)] scale-125' : ''}
+                  ${isActive ? 'bg-hotel-accent shadow-[0_0_10px_rgba(196,162,101,0.4)] scale-125' : ''}
                   ${isCompleted ? 'bg-hotel-accent/70' : ''}
                   ${!isActive && !isCompleted ? 'bg-white/15' : ''}
                 `}

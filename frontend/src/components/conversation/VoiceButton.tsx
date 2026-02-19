@@ -46,10 +46,10 @@ export function VoiceButton({ onTranscript }: VoiceButtonProps) {
         relative w-10 h-10 rounded-full transition-all duration-300
         flex items-center justify-center flex-shrink-0
         ${isRecording
-          ? 'bg-hotel-error/20 border-2 border-hotel-error/60 shadow-[0_0_20px_rgba(255,82,82,0.3)]'
+          ? 'bg-hotel-error/15 border-2 border-hotel-error/50 shadow-[0_0_20px_rgba(196,112,112,0.2)]'
           : isListening
-            ? 'bg-hotel-accent/20 border-2 border-hotel-accent/50 shadow-[0_0_15px_rgba(0,212,255,0.2)]'
-            : 'bg-hotel-accent/15 border border-hotel-accent/40 hover:bg-hotel-accent/25 hover:border-hotel-accent/60 shadow-[0_0_10px_rgba(0,212,255,0.1)]'
+            ? 'bg-hotel-accent/15 border-2 border-hotel-accent/40 shadow-[0_0_15px_rgba(196,162,101,0.15)]'
+            : 'bg-hotel-accent/10 border border-hotel-accent/30 hover:bg-hotel-accent/20 hover:border-hotel-accent/50 shadow-[0_0_10px_rgba(196,162,101,0.08)]'
         }
         ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}
         ${isPaused ? 'opacity-60' : ''}

@@ -28,7 +28,7 @@ export function KeyCardScreen() {
       <div className={`
         relative w-80 h-48 rounded-2xl transition-all duration-1000
         ${keyCardReady
-          ? 'bg-gradient-to-br from-hotel-accent/20 via-hotel-accent-2/10 to-hotel-gold/20 border border-hotel-accent/40 shadow-[0_0_30px_rgba(0,212,255,0.2)]'
+          ? 'bg-gradient-to-br from-hotel-accent/15 via-hotel-accent-2/8 to-hotel-gold/15 border border-hotel-accent/30 shadow-[0_0_30px_rgba(196,162,101,0.12)]'
           : 'bg-hotel-panel border border-hotel-border'
         }
       `}>

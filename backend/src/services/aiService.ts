@@ -236,14 +236,23 @@ async function executeToolCall(
       return { result: { error: 'No reservation found with that code.' } };
     }
     case 'lookup_reservation_by_name': {
-      const data = await lookupReservationByName(
+      const { reservation, suggestions } = await lookupReservationByName(
         args.firstName as string,
         args.lastName as string
       );
-      if (data) {
+      if (reservation) {
         return {
-          result: data,
-          action: { type: 'store_reservation', payload: data as unknown as Record<string, unknown> },
+          result: reservation,
+          action: { type: 'store_reservation', payload: reservation as unknown as Record<string, unknown> },
+        };
+      }
+      if (suggestions.length > 0) {
+        return {
+          result: {
+            error: `No exact match found for '${args.firstName} ${args.lastName}'.`,
+            didYouMean: suggestions.map((s) => `${s.firstName} ${s.lastName}`),
+            hint: 'Ask the guest politely if they meant one of these names. When they confirm, call lookup_reservation_by_name again with the corrected name.',
+          },
         };
       }
       return { result: { error: 'No reservation found for that name. Ask the guest for a confirmation code or passport number instead.' } };

@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
-/* Custom holographic / kiosk theme */
+/* Luxury hotel kiosk theme */
 @theme {
-  --color-hotel-dark: #0a0e1a;
-  --color-hotel-darker: #060810;
-  --color-hotel-panel: rgba(13, 20, 40, 0.85);
-  --color-hotel-accent: #00d4ff;
-  --color-hotel-accent-2: #7b61ff;
-  --color-hotel-gold: #c9a55c;
-  --color-hotel-success: #00e676;
-  --color-hotel-error: #ff5252;
-  --color-hotel-text: #e0e8f0;
-  --color-hotel-text-dim: #7a8ba0;
-  --color-hotel-glow: rgba(0, 212, 255, 0.3);
-  --color-hotel-border: rgba(0, 212, 255, 0.15);
+  --color-hotel-dark: #0c0a09;
+  --color-hotel-darker: #080605;
+  --color-hotel-panel: rgba(20, 17, 14, 0.92);
+  --color-hotel-accent: #c4a265;
+  --color-hotel-accent-2: #a08060;
+  --color-hotel-gold: #d4b07a;
+  --color-hotel-success: #7dae8e;
+  --color-hotel-error: #c47070;
+  --color-hotel-text: #f0ebe3;
+  --color-hotel-text-dim: #8a7e72;
+  --color-hotel-glow: rgba(196, 162, 101, 0.25);
+  --color-hotel-border: rgba(196, 162, 101, 0.12);
 }
 
 /* Base styles for kiosk mode */
@@ -31,7 +31,7 @@ html, body, #root {
   overscroll-behavior: none;
 }
 
-/* Holographic scan lines overlay */
+/* Subtle scan lines overlay */
 @keyframes scanlines {
   0% { background-position: 0 0; }
   100% { background-position: 0 100%; }
@@ -45,35 +45,31 @@ html, body, #root {
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 212, 255, 0.03) 2px,
-    rgba(0, 212, 255, 0.03) 4px
+    rgba(196, 162, 101, 0.02) 2px,
+    rgba(196, 162, 101, 0.02) 4px
   );
   animation: scanlines 8s linear infinite;
   z-index: 10;
 }
 
-/* Holographic flicker effect */
+/* Subtle ambient breathing effect */
 @keyframes hologram-flicker {
   0%, 100% { opacity: 1; }
-  92% { opacity: 1; }
-  93% { opacity: 0.8; }
-  94% { opacity: 1; }
-  96% { opacity: 0.9; }
-  97% { opacity: 1; }
+  50% { opacity: 0.97; }
 }
 
 .hologram-flicker {
-  animation: hologram-flicker 4s ease-in-out infinite;
+  animation: hologram-flicker 6s ease-in-out infinite;
 }
 
-/* Glow pulse for avatar */
+/* Warm glow pulse */
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(0, 212, 255, 0.3), 0 0 60px rgba(0, 212, 255, 0.1); }
-  50% { box-shadow: 0 0 30px rgba(0, 212, 255, 0.5), 0 0 80px rgba(0, 212, 255, 0.2); }
+  0%, 100% { box-shadow: 0 0 20px rgba(196, 162, 101, 0.2), 0 0 60px rgba(196, 162, 101, 0.06); }
+  50% { box-shadow: 0 0 30px rgba(196, 162, 101, 0.3), 0 0 80px rgba(196, 162, 101, 0.1); }
 }
 
 .glow-pulse {
-  animation: glow-pulse 3s ease-in-out infinite;
+  animation: glow-pulse 4s ease-in-out infinite;
 }
 
 /* Glass morphism panel */

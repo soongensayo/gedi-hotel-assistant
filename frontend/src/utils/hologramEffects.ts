@@ -25,13 +25,13 @@ export const hologramStyles = {
   accentBorder: [
     'border',
     'border-hotel-accent/20',
-    'shadow-[0_0_15px_rgba(0,212,255,0.15)]',
+    'shadow-[0_0_15px_rgba(196,162,101,0.1)]',
   ].join(' '),
 
   /** Text with glow effect */
   glowText: [
     'text-hotel-accent',
-    'drop-shadow-[0_0_8px_rgba(0,212,255,0.5)]',
+    'drop-shadow-[0_0_8px_rgba(196,162,101,0.3)]',
   ].join(' '),
 };
 

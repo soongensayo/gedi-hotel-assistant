@@ -19,17 +19,17 @@ export function HologramOverlay({ children, isActive = true, className = '' }: H
         ${className}
       `}
     >
-      {/* Holographic glow border */}
-      <div className="absolute inset-0 rounded-2xl border border-hotel-accent/20 shadow-[0_0_30px_rgba(0,212,255,0.15),inset_0_0_30px_rgba(0,212,255,0.05)] pointer-events-none z-20" />
+      {/* Warm glow border */}
+      <div className="absolute inset-0 rounded-2xl border border-hotel-accent/12 shadow-[0_0_30px_rgba(196,162,101,0.08),inset_0_0_30px_rgba(196,162,101,0.03)] pointer-events-none z-20" />
 
       {/* Scan lines */}
       {isActive && <div className="hologram-scanlines rounded-2xl" />}
 
-      {/* Blue color grading overlay */}
-      <div className="absolute inset-0 bg-gradient-to-b from-hotel-accent/5 via-transparent to-hotel-accent/10 pointer-events-none z-10 rounded-2xl" />
+      {/* Warm color grading overlay */}
+      <div className="absolute inset-0 bg-gradient-to-b from-hotel-accent/3 via-transparent to-hotel-accent/5 pointer-events-none z-10 rounded-2xl" />
 
       {/* Top edge glow */}
-      <div className="absolute top-0 left-1/4 right-1/4 h-px bg-gradient-to-r from-transparent via-hotel-accent/50 to-transparent pointer-events-none z-20" />
+      <div className="absolute top-0 left-1/4 right-1/4 h-px bg-gradient-to-r from-transparent via-hotel-accent/30 to-transparent pointer-events-none z-20" />
 
       {/* Content */}
       <div className="relative z-5 h-full">
