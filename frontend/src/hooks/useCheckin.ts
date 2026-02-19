@@ -131,14 +131,8 @@ export function useCheckin() {
     if (!store.reservation || !store.selectedRoom) return;
 
     try {
-      const result = await completeCheckin(store.reservation.id, store.selectedRoom.id);
-      // Move to 'farewell' step — the avatar stays visible and the AI
-      // continues the conversation naturally (no FarewellScreen).
+      await completeCheckin(store.reservation.id, store.selectedRoom.id);
       store.setStep('farewell');
-      addMessage({
-        role: 'assistant',
-        content: `Your key card for Room ${result.roomNumber} is ready! You're all checked in. Is there anything else I can help you with — maybe some local tips, or questions about the hotel?`,
-      });
     } catch (err) {
       console.error('Check-in completion failed:', err);
     }

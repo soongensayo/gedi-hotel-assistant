@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useCheckin } from '../../hooks/useCheckin';
@@ -140,9 +140,12 @@ function ProcessingPhase({ onDone, handlePayment }: { onDone: () => void; handle
 }
 
 function DonePhase({ onContinue }: { onContinue: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onContinue, 3000);
-    return () => clearTimeout(timer);
+  const firedRef = useRef(false);
+
+  const handleContinue = useCallback(() => {
+    if (firedRef.current) return;
+    firedRef.current = true;
+    onContinue();
   }, [onContinue]);
 
   return (
@@ -155,7 +158,7 @@ function DonePhase({ onContinue }: { onContinue: () => void }) {
         </div>
       </div>
       <p className="text-hotel-success text-sm font-medium">Payment successful</p>
-      <Button onClick={onContinue}>
+      <Button onClick={handleContinue}>
         Continue
       </Button>
     </>

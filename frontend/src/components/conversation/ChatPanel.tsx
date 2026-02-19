@@ -6,7 +6,6 @@ import { useCheckinStore } from '../../stores/checkinStore';
 import { sendChatMessage } from '../../services/api';
 import type { AIAction } from '../../services/api';
 import { useVoiceOutput } from '../../hooks/useVoiceOutput';
-import { useCheckin } from '../../hooks/useCheckin';
 import type { CheckinStep } from '../../types';
 
 /**
@@ -17,8 +16,6 @@ function useActionProcessor() {
   const setStep = useCheckinStore((s) => s.setStep);
   const setReservation = useCheckinStore((s) => s.setReservation);
   const setGuest = useCheckinStore((s) => s.setGuest);
-  const { handlePassportScan } = useCheckin();
-
   const processActions = useCallback(
     (actions: AIAction[]) => {
       if (!actions || actions.length === 0) return;
@@ -46,10 +43,6 @@ function useActionProcessor() {
           }
           case 'show_passport_scanner':
             setStep('passport-scan');
-            // Auto-trigger the passport scan (mock auto-approves after ~10s)
-            setTimeout(() => {
-              handlePassportScan();
-            }, 500);
             break;
           case 'show_payment':
             setStep('payment');
@@ -60,7 +53,7 @@ function useActionProcessor() {
         }
       }
     },
-    [setStep, setReservation, setGuest, handlePassportScan]
+    [setStep, setReservation, setGuest]
   );
 
   return processActions;

@@ -4,7 +4,7 @@ import { useCheckinStore } from '../../stores/checkinStore';
 
 export function KeyCardScreen() {
   const { handleCompleteCheckin } = useCheckin();
-  const { selectedRoom } = useCheckinStore();
+  const { selectedRoom, reservation } = useCheckinStore();
   const [isEncoding, setIsEncoding] = useState(true);
   const [keyCardReady, setKeyCardReady] = useState(false);
 
@@ -20,7 +20,7 @@ export function KeyCardScreen() {
     if (!keyCardReady) return;
     const timer = setTimeout(() => {
       handleCompleteCheckin();
-    }, 5000);
+    }, 7000);
     return () => clearTimeout(timer);
   }, [keyCardReady, handleCompleteCheckin]);
 
@@ -62,9 +62,16 @@ export function KeyCardScreen() {
                 <p className="text-hotel-text text-2xl font-light">
                   Room {selectedRoom?.roomNumber || '---'}
                 </p>
-                <p className="text-hotel-text-dim text-xs">
-                  Floor {selectedRoom?.floor || '-'} · {selectedRoom?.type || '---'}
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-hotel-text-dim text-xs">
+                    Floor {selectedRoom?.floor || '-'} · {selectedRoom?.type || '---'}
+                  </p>
+                  {reservation?.confirmationCode && (
+                    <p className="text-hotel-accent/70 text-xs font-mono">
+                      {reservation.confirmationCode}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
