@@ -131,7 +131,20 @@ export function useCheckin() {
     if (!store.reservation || !store.selectedRoom) return;
 
     try {
-      await completeCheckin(store.reservation.id, store.selectedRoom.id);
+      await completeCheckin({
+        reservationId: store.reservation.id,
+        roomId: store.selectedRoom.id,
+        guestEmail: store.guest?.email,
+        guestName: store.guest
+          ? `${store.guest.firstName} ${store.guest.lastName}`
+          : undefined,
+        roomNumber: store.selectedRoom.roomNumber,
+        roomType: store.selectedRoom.type,
+        floor: store.selectedRoom.floor,
+        checkInDate: store.reservation.checkInDate,
+        checkOutDate: store.reservation.checkOutDate,
+        confirmationCode: store.reservation.confirmationCode,
+      });
       store.setStep('farewell');
     } catch (err) {
       console.error('Check-in completion failed:', err);

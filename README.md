@@ -15,6 +15,8 @@ A full-stack kiosk application featuring a **voice-interactive AI concierge** th
 - **🗣️ Hands-Free Voice Mode** — Voice Activity Detection (VAD) keeps the mic open and auto-detects speech. No button presses needed — just speak naturally, like ChatGPT voice mode.
 - **🌀 Holographic UI** — Animated hologram effects on the avatar display
 - **📋 AI-Driven Check-in Flow** — The AI avatar drives every screen transition: Welcome → Identify → Passport Scan → Reservation Confirm → Room Selection → Upgrades → Payment → Key Card. Guests confirm each step via voice or button — the AI acknowledges naturally and advances the UI.
+- **🔑 Digital Key Card** — Generates an Apple Wallet pass (`.pkpass`) on check-in completion and emails it to the guest. The pass includes room details, QR barcode, and hotel branding — guests can add it to Apple Wallet directly from the email. Modular wallet service architecture supports future Google Wallet integration.
+- **📧 Check-in Confirmation Email** — Sends a styled HTML email to the guest with room details, stay dates, and the wallet pass attached.
 - **💬 Post Check-in Conversation** — After check-in completes, the AI continues chatting as a personal concierge — sharing local tips, answering hotel questions, and making the guest feel welcome.
 - **🔌 Mock Hardware** — Simulated passport scanner & credit card reader (swappable for real hardware on Jetson)
 - **📊 Hotel Data Backend** — In-memory mock data with Supabase support for production
@@ -42,9 +44,13 @@ ai-checkin-robot/
 │   └── src/
 │       ├── routes/          # REST endpoints (chat, voice, hotel, checkin, avatar)
 │       ├── services/        # AI (with tool use), TTS, STT, avatar, hotel data
+│       │   ├── wallet/      # Digital key card generation (Apple Wallet, extensible)
+│       │   ├── templates/   # Email HTML templates
+│       │   └── emailService # SMTP email delivery (Nodemailer)
 │       ├── prompts/         # System prompts for the AI concierge
 │       ├── config/          # Environment config
 │       └── socket.ts        # Real-time voice pipeline via WebSocket
+│   └── certs/               # Apple Wallet certificates (.p12, WWDR) — gitignored
 ├── hardware/                # Jetson-specific config
 ├── supabase/                # DB schema & seed data
 ├── docker-compose.yml       # Local Docker setup
@@ -93,8 +99,20 @@ Edit `.env` and fill in your API keys:
 | `GEMINI_API_KEY` | Optional | Google Gemini as fallback LLM |
 | `SUPABASE_URL` | Optional | Supabase project URL (uses in-memory data if unset) |
 | `SUPABASE_ANON_KEY` | Optional | Supabase anon key |
+| `APPLE_PASS_TYPE_ID` | For digital key | Apple Pass Type Identifier (e.g. `pass.com.yourco.hotel`) |
+| `APPLE_TEAM_ID` | For digital key | Apple Developer Team ID |
+| `APPLE_PASS_P12_PATH` | For digital key | Path to your `.p12` certificate file |
+| `APPLE_PASS_P12_PASSWORD` | For digital key | Password for the `.p12` file |
+| `APPLE_WWDR_CERT_PATH` | For digital key | Path to Apple WWDR G4 certificate (PEM format) |
+| `SMTP_HOST` | For email | SMTP server host (e.g. `smtp.gmail.com`) |
+| `SMTP_PORT` | For email | SMTP port (default: `587`) |
+| `SMTP_USER` | For email | SMTP username / email address |
+| `SMTP_PASS` | For email | SMTP password (Gmail: use an [App Password](https://myaccount.google.com/apppasswords)) |
+| `SMTP_FROM` | For email | Sender name and address for emails |
 
 > **Note:** Variables prefixed with `VITE_` are exposed to the frontend. The Simli avatar runs entirely in the browser via WebRTC, so it needs client-side API access.
+>
+> The digital key card and email features degrade gracefully — if Apple Wallet or SMTP credentials are not set, those features are simply skipped and a warning is logged at startup.
 
 ### 4. Run the dev server
 
@@ -201,6 +219,26 @@ The app uses **in-memory mock data** by default — no database needed for devel
 3. Seed data: `supabase/seed.sql`
 4. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env`
 
+### Apple Wallet Digital Key Card (Optional)
+Generates a `.pkpass` file that guests can add to Apple Wallet. Requires an Apple Developer account.
+
+1. Create a **Pass Type ID** in your [Apple Developer account](https://developer.apple.com/account/resources/identifiers/list/passTypeId) (e.g. `pass.com.yourcompany.hotel`)
+2. Generate and download a certificate for that Pass Type ID, then export it as a `.p12` file from Keychain Access
+3. Download the [Apple WWDR G4 certificate](https://www.apple.com/certificateauthority/) and convert to PEM:
+   ```bash
+   openssl x509 -inform DER -in AppleWWDRCAG4.cer -out AppleWWDRCAG4.pem
+   ```
+4. Place both files in `backend/certs/` (this directory is gitignored)
+5. Set `APPLE_PASS_TYPE_ID`, `APPLE_TEAM_ID`, `APPLE_PASS_P12_PATH`, `APPLE_PASS_P12_PASSWORD`, and `APPLE_WWDR_CERT_PATH` in `.env`
+
+> **Tip:** You can add custom pass images (icon, logo) to `backend/src/services/wallet/pass-assets/`. Required sizes: `icon.png` (29x29), `icon@2x.png` (58x58), `logo.png` (160x50), `logo@2x.png` (320x100). Placeholder images are used if none are provided.
+
+### Email Notifications (Optional)
+Sends a branded check-in confirmation email with the wallet pass attached.
+
+1. For **Gmail**: enable 2-Step Verification, then generate an [App Password](https://myaccount.google.com/apppasswords)
+2. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` in `.env`
+
 ---
 
 ## 🏗️ Architecture
@@ -245,6 +283,13 @@ The app uses **in-memory mock data** by default — no database needed for devel
 │  │   Hotel Data (in-memory   │ │
 │  │   mock or Supabase)       │ │
 │  └────────────────────────────┘ │
+│                                   │
+│  On check-in complete:            │
+│  ┌──────────┐  ┌───────────────┐ │
+│  │  Wallet  │  │    Email      │ │
+│  │  Service │──│  (Nodemailer) │──► Guest inbox
+│  │  (.pkpass)│  └───────────────┘ │  + Apple Wallet
+│  └──────────┘                     │
 └───────────────────────────────────┘
 ```
 

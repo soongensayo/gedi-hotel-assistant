@@ -126,14 +126,23 @@ export async function processPayment(
   return data;
 }
 
+export interface CompleteCheckinParams {
+  reservationId: string;
+  roomId: string;
+  guestEmail?: string;
+  guestName?: string;
+  roomNumber?: string;
+  roomType?: string;
+  floor?: number;
+  checkInDate?: string;
+  checkOutDate?: string;
+  confirmationCode?: string;
+}
+
 export async function completeCheckin(
-  reservationId: string,
-  roomId: string
-): Promise<{ keyCardNumber: string; roomNumber: string }> {
-  const { data } = await api.post('/checkin/complete', {
-    reservationId,
-    roomId,
-  });
+  params: CompleteCheckinParams
+): Promise<{ keyCardNumber: string; roomNumber: string; digitalKeySent: boolean }> {
+  const { data } = await api.post('/checkin/complete', params);
   return data;
 }
 

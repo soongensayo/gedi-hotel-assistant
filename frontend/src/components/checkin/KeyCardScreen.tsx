@@ -27,7 +27,7 @@ export function KeyCardScreen() {
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 py-8 gap-8">
       <h2 className="text-2xl font-light text-hotel-text">
-        {isEncoding ? 'Preparing Your Key Card' : 'Key Card Ready'}
+        {isEncoding ? 'Preparing Your Digital Key' : 'Digital Key Sent'}
       </h2>
 
       {/* Key card visualization */}
@@ -55,7 +55,7 @@ export function KeyCardScreen() {
             {isEncoding ? (
               <div className="flex items-center gap-2">
                 <div className="animate-spin w-4 h-4 border-2 border-hotel-accent/30 border-t-hotel-accent rounded-full" />
-                <span className="text-hotel-accent text-sm animate-pulse">Encoding key card...</span>
+                <span className="text-hotel-accent text-sm animate-pulse">Generating digital key...</span>
               </div>
             ) : (
               <div>
@@ -86,11 +86,11 @@ export function KeyCardScreen() {
 
       {keyCardReady && (
         <div className="text-center space-y-3">
-          <p className="text-hotel-success text-sm">✓ Key card encoded successfully</p>
-          <p className="text-hotel-text-dim text-xs">Please take your key card</p>
+          <p className="text-hotel-success text-sm">✓ Digital key sent to your email</p>
+          <p className="text-hotel-text-dim text-xs">Check your inbox for the room key</p>
           <div className="mt-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10">
             <p className="text-hotel-text text-sm">
-              You can also access your <span className="text-hotel-accent font-medium">digital key</span> anytime via the guest portal
+              Open the email on your phone to add your <span className="text-hotel-accent font-medium">digital key</span> to Apple Wallet
             </p>
           </div>
         </div>

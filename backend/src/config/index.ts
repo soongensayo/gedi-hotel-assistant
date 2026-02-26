@@ -37,6 +37,20 @@ export const config = {
 
   // Hotel
   hotelName: process.env.HOTEL_NAME || 'The Grand Azure Hotel',
+
+  // Apple Wallet
+  applePassTypeId: process.env.APPLE_PASS_TYPE_ID || '',
+  appleTeamId: process.env.APPLE_TEAM_ID || '',
+  applePassP12Path: process.env.APPLE_PASS_P12_PATH || '',
+  applePassP12Password: process.env.APPLE_PASS_P12_PASSWORD || '',
+  appleWwdrCertPath: process.env.APPLE_WWDR_CERT_PATH || '',
+
+  // Email (SMTP)
+  smtpHost: process.env.SMTP_HOST || '',
+  smtpPort: parseInt(process.env.SMTP_PORT || '587', 10),
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: process.env.SMTP_PASS || '',
+  smtpFrom: process.env.SMTP_FROM || `"The Grand Azure Hotel" <${process.env.SMTP_USER || 'noreply@hotel.com'}>`,
 };
 
 /** Validate that critical API keys are set */
@@ -51,6 +65,12 @@ export function validateConfig(): string[] {
   }
   if (!config.simliApiKey && !config.didApiKey) {
     warnings.push('No avatar API key set. Avatar features will be disabled.');
+  }
+  if (!config.applePassTypeId || !config.appleTeamId || !config.applePassP12Path) {
+    warnings.push('Apple Wallet not configured. Digital key card passes will be disabled.');
+  }
+  if (!config.smtpHost || !config.smtpUser || !config.smtpPass) {
+    warnings.push('SMTP not configured. Check-in confirmation emails will be disabled.');
   }
 
   return warnings;

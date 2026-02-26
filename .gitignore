@@ -29,3 +29,6 @@ npm-debug.log*
 
 # Docker
 docker-compose.override.yml
+
+# Certificates (Apple Wallet, etc.)
+backend/certs/

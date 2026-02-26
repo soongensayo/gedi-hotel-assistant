@@ -4,6 +4,9 @@ import {
   lookupReservationByPassport,
   getGuestByPassport,
 } from '../services/hotelService';
+import { generateWalletPass, isWalletConfigured } from '../services/wallet';
+import { sendCheckinEmail, isEmailConfigured } from '../services/emailService';
+import { config } from '../config';
 
 const router = Router();
 
@@ -118,24 +121,83 @@ router.post('/process-payment', async (req: Request, res: Response) => {
 
 /**
  * POST /api/checkin/complete
- * Complete the check-in process and issue a key card.
+ * Complete the check-in process, issue a key card, generate wallet pass, and email guest.
  */
 router.post('/complete', async (req: Request, res: Response) => {
   try {
-    const { reservationId, roomId } = req.body;
+    const {
+      reservationId,
+      roomId,
+      guestEmail,
+      guestName,
+      roomNumber: clientRoomNumber,
+      roomType,
+      floor,
+      checkInDate,
+      checkOutDate,
+      confirmationCode,
+    } = req.body;
 
     // Simulate key card encoding delay
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // Generate mock key card number
     const keyCardNumber = `KC-${Date.now().toString(36).toUpperCase()}`;
 
-    // Find the room number from mock data
-    const roomNumber = roomId === 'room-1' ? '1204'
-      : roomId === 'room-2' ? '1508'
-      : roomId === 'room-3' ? '2001'
-      : roomId === 'room-4' ? '2501'
-      : '1204';
+    const roomNumber = clientRoomNumber
+      || (roomId === 'room-1' ? '1204'
+        : roomId === 'room-2' ? '1508'
+        : roomId === 'room-3' ? '2001'
+        : roomId === 'room-4' ? '2501'
+        : '1204');
+
+    const hotelName = config.hotelName;
+    let digitalKeySent = false;
+
+    // Fire-and-forget: generate wallet pass + send email
+    if (guestEmail && isEmailConfigured()) {
+      (async () => {
+        try {
+          let walletPass = undefined;
+
+          if (isWalletConfigured('apple')) {
+            try {
+              walletPass = await generateWalletPass('apple', {
+                guestName: guestName || 'Valued Guest',
+                guestEmail,
+                roomNumber,
+                roomType: roomType || 'standard',
+                floor: floor || 1,
+                checkInDate: checkInDate || new Date().toISOString(),
+                checkOutDate: checkOutDate || new Date().toISOString(),
+                confirmationCode: confirmationCode || 'N/A',
+                hotelName,
+                keyCardNumber,
+              });
+              console.log('[Checkin] Apple Wallet pass generated');
+            } catch (err) {
+              console.error('[Checkin] Wallet pass generation failed:', err);
+            }
+          }
+
+          await sendCheckinEmail({
+            to: guestEmail,
+            guestName: guestName || 'Valued Guest',
+            roomNumber,
+            roomType: roomType || 'standard',
+            floor: floor || 1,
+            checkInDate: checkInDate || new Date().toISOString(),
+            checkOutDate: checkOutDate || new Date().toISOString(),
+            confirmationCode: confirmationCode || 'N/A',
+            hotelName,
+            keyCardNumber,
+            walletPass,
+          });
+        } catch (err) {
+          console.error('[Checkin] Email sending failed:', err);
+        }
+      })();
+      digitalKeySent = true;
+    }
 
     res.json({
       success: true,
@@ -143,6 +205,7 @@ router.post('/complete', async (req: Request, res: Response) => {
       roomNumber,
       reservationId,
       checkedInAt: new Date().toISOString(),
+      digitalKeySent,
     });
   } catch (error) {
     console.error('[Checkin Route] Complete error:', error);
