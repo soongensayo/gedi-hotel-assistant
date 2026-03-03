@@ -97,6 +97,7 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
       const blob = new Blob([buffer], { type: 'audio/mpeg' });
       const audioUrl = URL.createObjectURL(blob);
       const audio = new Audio(audioUrl);
+      audio.volume = 1.0;
       audioRef.current = audio;
 
       audio.onended = () => {
