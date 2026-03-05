@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { config } from '../config';
-import fs from 'fs';
+import fs from 'fs/promises';
+import { createReadStream } from 'fs';
 import path from 'path';
 import os from 'os';
 
@@ -23,11 +24,11 @@ export async function speechToText(audioBuffer: Buffer, filename?: string): Prom
   const tmpFile = path.join(tmpDir, filename || `stt-${Date.now()}.webm`);
 
   try {
-    fs.writeFileSync(tmpFile, audioBuffer);
+    await fs.writeFile(tmpFile, audioBuffer);
 
     const transcription = await openai.audio.transcriptions.create({
       model: 'whisper-1',
-      file: fs.createReadStream(tmpFile),
+      file: createReadStream(tmpFile),
       language: 'en',
     });
 
@@ -38,7 +39,7 @@ export async function speechToText(audioBuffer: Buffer, filename?: string): Prom
   } finally {
     // Clean up temp file
     try {
-      fs.unlinkSync(tmpFile);
+      await fs.unlink(tmpFile);
     } catch {
       // Ignore cleanup errors
     }

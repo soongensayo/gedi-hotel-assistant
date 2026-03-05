@@ -3,6 +3,15 @@
  * Used to bridge TTS output (MP3) → Simli avatar input (PCM16).
  */
 
+let _pcmAudioContext: AudioContext | null = null;
+
+function getPCMAudioContext(sampleRate: number): AudioContext {
+  if (!_pcmAudioContext || _pcmAudioContext.state === 'closed') {
+    _pcmAudioContext = new AudioContext({ sampleRate });
+  }
+  return _pcmAudioContext;
+}
+
 /**
  * Split text into sentences for chunked TTS processing.
  * Keeps punctuation with each sentence.
@@ -29,29 +38,23 @@ export async function decodeToPCM16(
   audioArrayBuffer: ArrayBuffer,
   targetSampleRate = 16000
 ): Promise<Uint8Array> {
-  // Create an AudioContext at the target sample rate
-  // This makes the browser resample for us during decoding
-  const audioContext = new AudioContext({ sampleRate: targetSampleRate });
+  const audioContext = getPCMAudioContext(targetSampleRate);
 
-  try {
-    // Decode the compressed audio (MP3) to raw PCM samples
-    const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer.slice(0));
+  // Decode the compressed audio (MP3) to raw PCM samples
+  const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer.slice(0));
 
-    // Get mono channel data (Float32Array, values between -1.0 and 1.0)
-    const float32Data = audioBuffer.getChannelData(0);
+  // Get mono channel data (Float32Array, values between -1.0 and 1.0)
+  const float32Data = audioBuffer.getChannelData(0);
 
-    // Convert Float32 → Int16
-    const int16Data = new Int16Array(float32Data.length);
-    for (let i = 0; i < float32Data.length; i++) {
-      const sample = Math.max(-1, Math.min(1, float32Data[i]));
-      int16Data[i] = sample < 0 ? sample * 32768 : sample * 32767;
-    }
-
-    // Return as Uint8Array (the byte representation of Int16Array)
-    return new Uint8Array(int16Data.buffer);
-  } finally {
-    await audioContext.close();
+  // Convert Float32 → Int16
+  const int16Data = new Int16Array(float32Data.length);
+  for (let i = 0; i < float32Data.length; i++) {
+    const sample = Math.max(-1, Math.min(1, float32Data[i]));
+    int16Data[i] = sample < 0 ? sample * 32768 : sample * 32767;
   }
+
+  // Return as Uint8Array (the byte representation of Int16Array)
+  return new Uint8Array(int16Data.buffer);
 }
 
 /**
