@@ -35,6 +35,23 @@ export const config = {
   // Hardware
   hardwareMode: (process.env.HARDWARE_MODE || 'mock') as 'mock' | 'jetson',
 
+  // Passport Scanner
+  passportScannerMode: (process.env.PASSPORT_SCANNER_MODE || 'mock') as 'mock' | 'live',
+  passportScannerPython: process.env.PASSPORT_SCANNER_PYTHON || 'python3',
+  passportScannerScript: process.env.PASSPORT_SCANNER_SCRIPT || '',
+  passportScannerTimeout: parseInt(process.env.PASSPORT_SCANNER_TIMEOUT || '60000', 10),
+
+  // NFC Card Reader
+  nfcSharedSecretKey: process.env.NFC_SHARED_SECRET_KEY || '',
+  esp32WifiStartUrl: process.env.ESP32_WIFI_START_URL || '',
+  nfcUidToLast4: (() => {
+    try {
+      return JSON.parse(process.env.NFC_UID_TO_LAST4 || '{"09C9C802":"5264"}');
+    } catch {
+      return { '09C9C802': '5264' };
+    }
+  })() as Record<string, string>,
+
   // Hotel
   hotelName: process.env.HOTEL_NAME || 'The Grand Azure Hotel',
 

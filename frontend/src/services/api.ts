@@ -146,4 +146,25 @@ export async function completeCheckin(
   return data;
 }
 
+// --- NFC Card Reader ---
+
+export async function activateNfc(): Promise<{ success: boolean; error?: string }> {
+  const { data } = await api.post('/checkin/activate-nfc');
+  return data;
+}
+
+export async function pollNfcStatus(): Promise<{
+  detected: boolean;
+  nfcUid?: string;
+  last4?: string;
+  receivedAt?: number;
+}> {
+  const { data } = await api.get('/checkin/nfc-status');
+  return data;
+}
+
+export async function clearNfcStatus(): Promise<void> {
+  await api.post('/checkin/nfc-clear');
+}
+
 export default api;

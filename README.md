@@ -18,7 +18,8 @@ A full-stack kiosk application featuring a **voice-interactive AI concierge** th
 - **🔑 Digital Key Card** — Generates an Apple Wallet pass (`.pkpass`) on check-in completion and emails it to the guest. The pass includes room details, QR barcode, and hotel branding — guests can add it to Apple Wallet directly from the email. Modular wallet service architecture supports future Google Wallet integration.
 - **📧 Check-in Confirmation Email** — Sends a styled HTML email to the guest with room details, stay dates, and the wallet pass attached.
 - **💬 Post Check-in Conversation** — After check-in completes, the AI continues chatting as a personal concierge — sharing local tips, answering hotel questions, and making the guest feel welcome.
-- **🔌 Mock Hardware** — Simulated passport scanner & credit card reader (swappable for real hardware on Jetson)
+- **📷 Real Passport Scanner** — Camera-based passport OCR (EasyOCR + Tesseract MRZ pipeline) with automatic field extraction. Falls back to mock data or manual entry when hardware is unavailable.
+- **💳 NFC Card Reader** — ESP32 + PN532 contactless card reader for demo payments. AES-128-CBC encrypted communication. Falls back to on-screen tap simulation when hardware is unavailable.
 - **📊 Hotel Data Backend** — In-memory mock data with Supabase support for production
 
 ---
@@ -27,35 +28,28 @@ A full-stack kiosk application featuring a **voice-interactive AI concierge** th
 
 ```
 ai-checkin-robot/
-├── frontend/                # React + Vite + Tailwind CSS
-│   ├── src/
-│   │   ├── components/      # UI components
-│   │   │   ├── avatar/      # AvatarDisplay, HologramOverlay
-│   │   │   ├── checkin/     # Wizard screens (Welcome, Passport, Room, etc.)
-│   │   │   ├── conversation/# ChatPanel, VoiceButton, TranscriptDisplay
-│   │   │   ├── hardware/    # MockPassportScanner, MockCardReader
-│   │   │   └── ui/          # Shared UI components
-│   │   ├── hooks/           # useAvatar, useVoiceInput (VAD), useVoiceOutput, useCheckin
-│   │   ├── stores/          # Zustand state (conversation, checkin, avatar)
-│   │   ├── services/        # API client, Socket.IO, Supabase
-│   │   └── utils/           # Audio processing, hologram effects
-│   └── vite.config.ts
-├── backend/                 # Express + Socket.IO + TypeScript
+├── frontend/                  # React + Vite + Tailwind CSS
 │   └── src/
-│       ├── routes/          # REST endpoints (chat, voice, hotel, checkin, avatar)
-│       ├── services/        # AI (with tool use), TTS, STT, avatar, hotel data
-│       │   ├── wallet/      # Digital key card generation (Apple Wallet, extensible)
-│       │   ├── templates/   # Email HTML templates
-│       │   └── emailService # SMTP email delivery (Nodemailer)
-│       ├── prompts/         # System prompts for the AI concierge
-│       ├── config/          # Environment config
-│       └── socket.ts        # Real-time voice pipeline via WebSocket
-│   └── certs/               # Apple Wallet certificates (.p12, WWDR) — gitignored
-├── hardware/                # Jetson-specific config
-├── supabase/                # DB schema & seed data
-├── docker-compose.yml       # Local Docker setup
-├── docker-compose.jetson.yml# Jetson deployment
-└── .env.example             # Environment variable template
+│       ├── components/        # UI components (avatar, checkin, conversation, ui)
+│       ├── hooks/             # useAvatar, useVoiceInput (VAD), useVoiceOutput, useCheckin
+│       ├── stores/            # Zustand state (conversation, checkin, avatar)
+│       └── services/          # API client, Socket.IO
+├── backend/                   # Express + Socket.IO + TypeScript
+│   ├── src/
+│   │   ├── routes/            # REST endpoints (chat, voice, hotel, checkin, avatar)
+│   │   ├── services/          # AI (with tool use), TTS, STT, avatar, hotel data
+│   │   ├── utils/             # NFC crypto (AES-128-CBC)
+│   │   ├── prompts/           # System prompts for the AI concierge
+│   │   └── config/            # Environment config
+│   ├── scripts/               # Python bridge scripts (passport scanner)
+│   └── certs/                 # Apple Wallet certificates — gitignored
+├── camera-and-nfc/            # Hardware integration (passport OCR + NFC reader)
+│   └── Identification-and-payment-app/
+│       ├── core/              # Scanner (EasyOCR + Tesseract MRZ), validator, data model
+│       └── network/           # NFC serial/HTTP listener, ESP32 WiFi, Supabase transmitter
+├── scripts/                   # Setup scripts
+├── supabase/                  # DB schema & seed data
+└── .env.example               # Environment variable template
 ```
 
 ---
@@ -66,6 +60,7 @@ ai-checkin-robot/
 
 - **Node.js** ≥ 18 (recommended: 20+)
 - **npm** ≥ 9
+- **Python 3.8+** (only needed for live passport scanner mode)
 - API keys (see below)
 
 ### 1. Clone the repo
@@ -77,11 +72,21 @@ cd ai-checkin-robot
 
 ### 2. Install dependencies
 
+**Option A: Quick setup (installs both Node.js and Python deps)**
+```bash
+./scripts/setup.sh
+```
+
+**Option B: Node.js only (default mock mode, no hardware)**
 ```bash
 npm install
 ```
 
-This installs dependencies for the root, `frontend/`, and `backend/` workspaces automatically (npm workspaces).
+**Option C: Add Python deps later (for live hardware mode)**
+```bash
+npm install
+pip install -r camera-and-nfc/Identification-and-payment-app/requirements.txt
+```
 
 ### 3. Set up environment variables
 
@@ -109,6 +114,9 @@ Edit `.env` and fill in your API keys:
 | `SMTP_USER` | For email | SMTP username / email address |
 | `SMTP_PASS` | For email | SMTP password (Gmail: use an [App Password](https://myaccount.google.com/apppasswords)) |
 | `SMTP_FROM` | For email | Sender name and address for emails |
+| `PASSPORT_SCANNER_MODE` | Optional | `mock` (default) or `live` for real camera OCR |
+| `NFC_SHARED_SECRET_KEY` | For NFC | 16-char AES key shared with ESP32 |
+| `ESP32_WIFI_START_URL` | For NFC | ESP32 HTTP endpoint (e.g. `http://192.168.1.100/start`) |
 
 > **Note:** Variables prefixed with `VITE_` are exposed to the frontend. The Simli avatar runs entirely in the browser via WebRTC, so it needs client-side API access.
 >
@@ -194,6 +202,8 @@ After the key card is dispensed, the AI **continues the conversation** as a pers
 | `npm run dev:backend` | Start only the backend |
 | `npm run build` | Build both for production |
 | `npm run lint` | Lint both workspaces |
+| `./scripts/setup.sh` | Install all dependencies (Node.js + Python) |
+| `./scripts/setup.sh --python` | Install only Python deps (for live hardware) |
 
 ---
 
@@ -241,6 +251,89 @@ Sends a branded check-in confirmation email with the wallet pass attached.
 
 ---
 
+## 📷 Live Hardware Mode
+
+By default the app runs in **mock mode** — no camera, NFC reader, or ESP32 needed. To enable real hardware for demos:
+
+### Passport Scanner (Camera + OCR)
+
+**What it does:** The backend spawns a Python subprocess that captures a frame from the connected camera, runs a two-pass MRZ OCR pipeline (EasyOCR + Tesseract), and extracts the passport number and guest name.
+
+**Setup:**
+
+1. Install Python dependencies (if you haven't already):
+   ```bash
+   pip install -r camera-and-nfc/Identification-and-payment-app/requirements.txt
+   ```
+2. Connect a USB camera to the machine (or use the built-in webcam)
+3. Set in `.env`:
+   ```
+   PASSPORT_SCANNER_MODE=live
+   ```
+4. (Optional) If using a specific camera, set `CAMERA_INDEX=1` (or 2, etc.) in `camera-and-nfc/Identification-and-payment-app/.env`
+
+**How it works at runtime:**
+- When the AI advances to the passport scan step, the scan starts automatically -- no button tap required
+- The UI shows a scanning overlay with a progress animation and an "Enter Manually Instead" bypass button
+- Backend spawns `python3 backend/scripts/scan_passport.py`
+- The script opens the camera, shows an alignment box on the backend machine's display, captures frames, and runs OCR
+- Returns JSON `{passport_id, guest_name, passport_image_base64}` to the backend
+- Backend looks up the reservation by passport number and advances the flow
+- If the scan fails or times out (60s default), the overlay shows a "Try Again" button and the **"Enter Manually"** bypass to type a name or confirmation code instead
+
+**Things to note:**
+- First run takes longer (~10-20s) because EasyOCR loads its models into memory. Subsequent scans are faster.
+- The EasyOCR model files (`craft_mlt_25k.pth`, `english_g2.pth`) are ~100MB total. Run `python3 camera-and-nfc/Identification-and-payment-app/download_easyocr_models.py` to pre-download them.
+- On Jetson, OpenCV and numpy are usually pre-installed via JetPack.
+- The camera preview (OpenCV `imshow` window) will appear on the machine running the backend, not in the browser. For a kiosk setup, the machine display shows the camera feed while the browser shows the UI.
+
+### NFC Card Reader (ESP32 + PN532)
+
+**What it does:** When the guest reaches the payment step, the backend sends an encrypted "ACTIVATE" command to the ESP32 over WiFi. The ESP32 starts its PN532 NFC reader and waits for a card tap. When tapped, it sends the encrypted card UID back to the backend. The frontend polls for the result and auto-advances.
+
+**Setup:**
+
+1. Flash the ESP32 with the NFC firmware (in `camera-and-nfc/Identification-and-payment-app/arduinofile.cpp`)
+2. Connect the PN532 NFC reader to the ESP32 (I2C: SDA=21, SCL=22)
+3. Put the ESP32 on the same WiFi network as the machine running the backend
+4. Set in `.env`:
+   ```
+   NFC_SHARED_SECRET_KEY=your16charkey!!
+   ESP32_WIFI_START_URL=http://192.168.x.x/start
+   ```
+   - `NFC_SHARED_SECRET_KEY` must be exactly 16 characters and must match what's in the ESP32 firmware
+   - `ESP32_WIFI_START_URL` is the ESP32's IP on your network followed by `/start`
+
+5. **Important:** The ESP32 needs to know where to send the NFC UID back. In the ESP32 firmware, set the callback URL to point at your backend:
+   ```
+   http://<your-backend-ip>:3001/api/checkin/nfc-uid
+   ```
+
+**How it works at runtime:**
+- Guest reaches the payment screen
+- Frontend calls `POST /api/checkin/activate-nfc` which sends encrypted "ACTIVATE" to ESP32
+- ESP32 turns on the NFC reader and its LED
+- Guest taps their NFC card
+- ESP32 reads the UID, encrypts it, and POSTs to `POST /api/checkin/nfc-uid`
+- Backend decrypts and stores the UID, maps it to a card last-4 via `NFC_UID_TO_LAST4`
+- Frontend polls `GET /api/checkin/nfc-status` every 1.5s and auto-advances when detected
+- If the ESP32 is unreachable or NFC fails, the guest can tap **"Skip — Pay Without Card Reader"** to proceed with simulated payment
+
+**Things to note:**
+- The NFC UID-to-card mapping is configured via `NFC_UID_TO_LAST4` in `.env` (default: `{"09C9C802":"5264"}`). Add your NFC card UIDs to this map.
+- All communication between backend and ESP32 is AES-128-CBC encrypted with a shared key.
+- The backend stores received UIDs in memory — they expire after 30 seconds.
+
+### Bypass Buttons
+
+Both hardware steps have UI bypass buttons that are always visible:
+- **Passport scan:** "Enter Manually Instead" button skips to the chat-based identification flow (visible during scanning and on failure)
+- **Payment:** "Skip — Pay Without Card Reader" button proceeds with simulated payment
+
+This ensures the demo never gets stuck if hardware isn't connected or malfunctions.
+
+---
+
 ## 🏗️ Architecture
 
 ```
@@ -265,31 +358,31 @@ Sends a branded check-in confirmation email with the wallet pass attached.
 │                                   │     │
 │  ┌─────────────────────────────┐ │     │
 │  │  AI Service (GPT-4)         │ │     │
-│  │  ┌─────────────────────┐   │ │     │
-│  │  │  Function Calling   │   │ │     │
-│  │  │  (tool use)         │   │ │     │
-│  │  └─────────┬───────────┘   │ │     │
-│  └────────────┼───────────────┘ │     │
+│  │  └── Function Calling ──┐  │ │     │
+│  │                          │  │ │     │
+│  └──────────────────────────┘ │     │
 │               ▼                  │     │
 │  ┌─────┐  ┌─────┐  ┌─────────┐ │     │
 │  │Hotel│  │ TTS │  │   STT   │ │     │
 │  │Svc  │  │     │  │ Whisper │ │     │
 │  └──┬──┘  └──┬──┘  └─────────┘ │     │
-│     │        │ MP3              │     │
 │     │        └─────────────────►┼─────┘
-│     │                           │ (decoded to PCM16
-│     ▼                           │  on frontend)
+│     ▼                           │
 │  ┌────────────────────────────┐ │
-│  │   Hotel Data (in-memory   │ │
-│  │   mock or Supabase)       │ │
+│  │ Hotel Data (mock/Supabase) │ │
 │  └────────────────────────────┘ │
+│                                   │
+│  Hardware Integration:            │
+│  ┌──────────────┐  ┌───────────┐ │    ┌──────────┐
+│  │ Passport Scan│  │ NFC Crypto│◄┼────│  ESP32   │
+│  │ (Python OCR) │  │ (AES-CBC) │ │    │ + PN532  │
+│  └──────────────┘  └───────────┘ │    └──────────┘
 │                                   │
 │  On check-in complete:            │
 │  ┌──────────┐  ┌───────────────┐ │
-│  │  Wallet  │  │    Email      │ │
-│  │  Service │──│  (Nodemailer) │──► Guest inbox
-│  │  (.pkpass)│  └───────────────┘ │  + Apple Wallet
-│  └──────────┘                     │
+│  │  Wallet  │──│    Email      │──► Guest inbox
+│  │  (.pkpass)│  │ (Nodemailer) │ │
+│  └──────────┘  └───────────────┘ │
 └───────────────────────────────────┘
 ```
 

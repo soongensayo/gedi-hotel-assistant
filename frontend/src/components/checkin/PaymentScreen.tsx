@@ -3,10 +3,11 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useCheckin } from '../../hooks/useCheckin';
 import { useCheckinStore } from '../../stores/checkinStore';
+import { activateNfc, pollNfcStatus, clearNfcStatus } from '../../services/api';
 
 type PaymentPhase = 'awaiting-tap' | 'processing' | 'done';
 
-const TAP_TIMEOUT_MS = 8_000;
+const NFC_POLL_INTERVAL_MS = 1_500;
 
 export function PaymentScreen() {
   const { handlePayment } = useCheckin();
@@ -78,10 +79,46 @@ export function PaymentScreen() {
 }
 
 function TapPhase({ onTap }: { onTap: () => void }) {
+  const [nfcActive, setNfcActive] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
-    const timer = setTimeout(onTap, TAP_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [onTap]);
+    let cancelled = false;
+
+    // Try to activate the NFC reader; if it fails, that's fine -- bypass still works
+    activateNfc()
+      .then((res) => {
+        if (!cancelled && res.success) {
+          setNfcActive(true);
+        }
+      })
+      .catch(() => {});
+
+    // Clear any stale NFC data from previous sessions
+    clearNfcStatus().catch(() => {});
+
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!nfcActive) return;
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const status = await pollNfcStatus();
+        if (status.detected) {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          onTap();
+        }
+      } catch {
+        // Polling failure is non-fatal; user can still use bypass
+      }
+    }, NFC_POLL_INTERVAL_MS);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [nfcActive, onTap]);
 
   return (
     <>
@@ -98,7 +135,7 @@ function TapPhase({ onTap }: { onTap: () => void }) {
         <div className="absolute inset-0 rounded-full border border-hotel-accent/15" style={{ animation: 'radar-ping 2s ease-out infinite 0.5s' }} />
         <div className="absolute inset-0 rounded-full border border-hotel-accent/10" style={{ animation: 'radar-ping 2s ease-out infinite 1s' }} />
 
-        {/* Center icon — contactless symbol */}
+        {/* Center icon -- contactless symbol */}
         <div className="relative w-20 h-20 rounded-full bg-hotel-accent/10 border border-hotel-accent/30 flex items-center justify-center shadow-[0_0_30px_rgba(196,162,101,0.15)]">
           <svg className="w-10 h-10 text-hotel-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0" />
@@ -107,12 +144,16 @@ function TapPhase({ onTap }: { onTap: () => void }) {
       </div>
 
       <p className="text-hotel-text-dim text-sm text-center">
-        Please tap or insert your card on the reader
+        {nfcActive
+          ? 'NFC reader active — please tap your card on the reader'
+          : 'Please tap or insert your card on the reader'}
       </p>
 
-      <Button onClick={onTap}>
-        Simulate Card Tap
-      </Button>
+      <div className="flex flex-col items-center gap-2">
+        <Button onClick={onTap}>
+          Skip — Pay Without Card Reader
+        </Button>
+      </div>
     </>
   );
 }

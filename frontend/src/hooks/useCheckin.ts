@@ -11,23 +11,13 @@ import {
 } from '../services/api';
 import type { CheckinStep } from '../types';
 
-/** Mock passport scan delay — simulates hardware scanning (10 seconds) */
-const MOCK_SCAN_DELAY_MS = 10_000;
-
 export function useCheckin() {
   const store = useCheckinStore();
   const addMessage = useConversationStore((s) => s.addMessage);
 
-  const handlePassportScan = useCallback(async () => {
+  /** Runs the passport scan and reservation lookup. Returns true on success. */
+  const handlePassportScan = useCallback(async (): Promise<boolean> => {
     try {
-      addMessage({
-        role: 'assistant',
-        content: 'Please place your passport on the scanner. I\'ll read it automatically.',
-      });
-
-      // In mock mode, wait ~10 seconds then auto-approve
-      await new Promise((resolve) => setTimeout(resolve, MOCK_SCAN_DELAY_MS));
-
       const result = await scanPassport();
       store.setPassportScan(result);
 
@@ -37,7 +27,6 @@ export function useCheckin() {
           content: `Thank you, ${result.data.firstName}. I've scanned your passport successfully. Let me look up your reservation.`,
         });
 
-        // Auto-lookup reservation by passport
         const reservation = await lookupReservationByPassport(result.data.passportNumber);
         if (reservation) {
           store.setReservation(reservation);
@@ -45,21 +34,30 @@ export function useCheckin() {
             store.setGuest(reservation.guest);
           }
           store.setStep('reservation-found');
-        } else {
-          addMessage({
-            role: 'assistant',
-            content: `I couldn't find a reservation with your passport details. Could you provide your confirmation code?`,
-          });
-          store.setStep('identify');
+          return true;
         }
+
+        addMessage({
+          role: 'assistant',
+          content: `I couldn't find a reservation with your passport details. Could you provide your confirmation code?`,
+        });
+        store.setStep('identify');
+        return true;
       }
+
+      return false;
     } catch (err) {
       console.error('Passport scan failed:', err);
-      addMessage({
-        role: 'assistant',
-        content: 'I had trouble scanning your passport. Let me try another way to find your reservation.',
-      });
+      return false;
     }
+  }, [store, addMessage]);
+
+  const handlePassportBypass = useCallback(() => {
+    addMessage({
+      role: 'assistant',
+      content: 'No problem! Could you please tell me your name or provide your confirmation code? I\'ll look up your reservation that way.',
+    });
+    store.setStep('identify');
   }, [store, addMessage]);
 
   const handleReservationLookup = useCallback(async (query: string) => {
@@ -158,6 +156,7 @@ export function useCheckin() {
   return {
     ...store,
     handlePassportScan,
+    handlePassportBypass,
     handleReservationLookup,
     handleRoomSelection,
     handlePayment,

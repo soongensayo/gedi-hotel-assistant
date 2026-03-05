@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { execFile } from 'child_process';
+import path from 'path';
 import {
   lookupReservation,
   lookupReservationByPassport,
@@ -6,9 +8,13 @@ import {
 } from '../services/hotelService';
 import { generateWalletPass, isWalletConfigured } from '../services/wallet';
 import { sendCheckinEmail, isEmailConfigured } from '../services/emailService';
+import { encryptToHex, decryptFromHex, normalizeUid, isNfcConfigured } from '../utils/nfcCrypto';
 import { config } from '../config';
 
 const router = Router();
+
+// In-memory store for NFC UIDs received from ESP32, keyed by timestamp
+const nfcUidStore: { uid: string; last4: string; receivedAt: number }[] = [];
 
 /**
  * GET /api/checkin/lookup
@@ -50,15 +56,56 @@ router.get('/lookup-passport', async (req: Request, res: Response) => {
 
 /**
  * POST /api/checkin/scan-passport
- * Simulate passport scanning (mock mode).
- * Returns mock passport data for the selected test guest.
+ * In live mode, spawns the Python OCR pipeline to capture + read a passport.
+ * In mock mode, returns hardcoded test data.
  */
 router.post('/scan-passport', async (_req: Request, res: Response) => {
   try {
-    // In mock mode, simulate a scan with a random delay
-    await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
+    if (config.passportScannerMode === 'live') {
+      const scriptPath = config.passportScannerScript
+        || path.resolve(__dirname, '../../../scripts/scan_passport.py');
+      const pythonBin = config.passportScannerPython;
+      const timeout = config.passportScannerTimeout;
 
-    // Return the first mock guest as the scanned passport
+      const result = await new Promise<{ success: boolean; data?: Record<string, string>; error?: string }>((resolve) => {
+        execFile(pythonBin, [scriptPath], { timeout }, (err, stdout, stderr) => {
+          if (err) {
+            console.error('[Checkin Route] Passport scanner error:', err.message);
+            if (stderr) console.error('[Checkin Route] Scanner stderr:', stderr);
+            resolve({ success: false, error: err.killed ? 'Scanner timed out' : 'Scanner failed' });
+            return;
+          }
+          try {
+            const parsed = JSON.parse(stdout.trim());
+            if (parsed.error) {
+              resolve({ success: false, error: parsed.error });
+              return;
+            }
+            const nameParts = (parsed.guest_name || '').trim().split(/\s+/);
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || firstName;
+            resolve({
+              success: true,
+              data: {
+                firstName,
+                lastName,
+                passportNumber: parsed.passport_id || '',
+                passportImageBase64: parsed.passport_image_base64 || '',
+              },
+            });
+          } catch {
+            console.error('[Checkin Route] Failed to parse scanner output:', stdout);
+            resolve({ success: false, error: 'Failed to parse scanner output' });
+          }
+        });
+      });
+
+      res.json(result);
+      return;
+    }
+
+    // Mock mode: simulate a scan with a random delay
+    await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
     const guest = await getGuestByPassport('E1234567A');
     if (guest) {
       res.json({
@@ -211,6 +258,132 @@ router.post('/complete', async (req: Request, res: Response) => {
     console.error('[Checkin Route] Complete error:', error);
     res.status(500).json({ error: 'Failed to complete check-in' });
   }
+});
+
+// =============================================================================
+// NFC Card Reader Endpoints
+// =============================================================================
+
+/**
+ * POST /api/checkin/activate-nfc
+ * Send encrypted "ACTIVATE" command to ESP32 to start the NFC reader.
+ */
+router.post('/activate-nfc', async (_req: Request, res: Response) => {
+  try {
+    const esp32Url = config.esp32WifiStartUrl;
+    if (!esp32Url) {
+      res.json({ success: false, error: 'ESP32_WIFI_START_URL not configured' });
+      return;
+    }
+    if (!isNfcConfigured()) {
+      res.json({ success: false, error: 'NFC_SHARED_SECRET_KEY not configured' });
+      return;
+    }
+
+    const cipherHex = encryptToHex('ACTIVATE');
+    if (!cipherHex) {
+      res.json({ success: false, error: 'Encryption failed' });
+      return;
+    }
+
+    const resp = await fetch(esp32Url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: cipherHex,
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (resp.ok) {
+      console.log('[NFC] ACTIVATE sent to ESP32 successfully');
+      res.json({ success: true });
+    } else {
+      console.warn('[NFC] ESP32 responded with status', resp.status);
+      res.json({ success: false, error: `ESP32 responded ${resp.status}` });
+    }
+  } catch (error) {
+    console.error('[NFC] Failed to activate ESP32:', error);
+    res.json({ success: false, error: 'Failed to reach ESP32' });
+  }
+});
+
+/**
+ * POST /api/checkin/nfc-uid
+ * Receives encrypted NFC UID from ESP32.
+ * The ESP32 POSTs the AES-128-CBC ciphertext as hex in the request body.
+ */
+router.post('/nfc-uid', async (req: Request, res: Response) => {
+  try {
+    let bodyText = '';
+    if (typeof req.body === 'string') {
+      bodyText = req.body;
+    } else if (Buffer.isBuffer(req.body)) {
+      bodyText = req.body.toString('ascii');
+    } else if (req.body && typeof req.body === 'object') {
+      bodyText = req.body.uid || req.body.data || JSON.stringify(req.body);
+    }
+    bodyText = bodyText.trim();
+
+    if (!bodyText) {
+      res.status(400).json({ error: 'Empty body' });
+      return;
+    }
+
+    const plaintext = decryptFromHex(bodyText);
+    if (!plaintext) {
+      console.warn('[NFC] Failed to decrypt UID from ESP32');
+      res.status(400).json({ error: 'Decryption failed' });
+      return;
+    }
+
+    const uid = normalizeUid(plaintext);
+    if (!uid) {
+      console.warn('[NFC] Invalid UID after decryption:', plaintext);
+      res.status(400).json({ error: 'Invalid UID' });
+      return;
+    }
+
+    const last4 = config.nfcUidToLast4[uid] || '';
+    console.log(`[NFC] Received UID: ${uid}, card last4: ${last4 || 'unknown'}`);
+
+    nfcUidStore.push({ uid, last4, receivedAt: Date.now() });
+    // Keep only the last 20 entries
+    while (nfcUidStore.length > 20) nfcUidStore.shift();
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[NFC] Error processing NFC UID:', error);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+/**
+ * GET /api/checkin/nfc-status
+ * Frontend polls this to check if an NFC card has been tapped.
+ * Returns the most recent NFC tap within the last 30 seconds.
+ */
+router.get('/nfc-status', (_req: Request, res: Response) => {
+  const cutoff = Date.now() - 30_000;
+  const recent = nfcUidStore.filter((e) => e.receivedAt > cutoff);
+  if (recent.length > 0) {
+    const latest = recent[recent.length - 1];
+    res.json({
+      detected: true,
+      nfcUid: latest.uid,
+      last4: latest.last4,
+      receivedAt: latest.receivedAt,
+    });
+  } else {
+    res.json({ detected: false });
+  }
+});
+
+/**
+ * POST /api/checkin/nfc-clear
+ * Clears the NFC UID store (called after payment is processed).
+ */
+router.post('/nfc-clear', (_req: Request, res: Response) => {
+  nfcUidStore.length = 0;
+  res.json({ success: true });
 });
 
 export default router;
