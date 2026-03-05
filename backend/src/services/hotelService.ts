@@ -540,3 +540,94 @@ export async function getGuestByPassport(passportNumber: string) {
   }
   return MOCK_GUESTS.find((g) => g.passportNumber === passportNumber) || null;
 }
+
+const PASSPORT_STORAGE_BUCKET = 'passports';
+
+/**
+ * Upload a passport image to the private Supabase Storage bucket.
+ * Mirrors the friend's Python upload_passport_image(): stores as <passportNumber>/<uuid>.png.
+ * Returns the storage object path on success, or null on failure.
+ */
+async function uploadPassportImage(
+  passportNumber: string,
+  imageBase64: string
+): Promise<string | null> {
+  if (!supabase || !passportNumber || !imageBase64) return null;
+
+  try {
+    const imageBuffer = Buffer.from(imageBase64, 'base64');
+    const uid = Math.random().toString(36).slice(2, 14);
+    const filePath = `${passportNumber}/${uid}.png`;
+
+    const { error } = await supabase.storage
+      .from(PASSPORT_STORAGE_BUCKET)
+      .upload(filePath, imageBuffer, {
+        contentType: 'image/png',
+        upsert: false,
+      });
+
+    if (error) {
+      console.error('[Hotel Service] Passport image upload failed:', error.message);
+      return null;
+    }
+    console.log(`[Hotel Service] Passport image uploaded to ${PASSPORT_STORAGE_BUCKET}/${filePath}`);
+    return filePath;
+  } catch (err) {
+    console.error('[Hotel Service] Passport image upload error:', err);
+    return null;
+  }
+}
+
+/**
+ * Persist scanned passport data to the guest record.
+ * Uploads the image to Supabase Storage and saves only the path in the guests table.
+ * For mock data: updates the in-memory guest object (transient).
+ */
+export async function updateGuestPassportData(
+  guestId: string,
+  passportData: {
+    passportName: string;
+    passportNumber: string;
+    passportImageBase64?: string;
+  }
+): Promise<boolean> {
+  if (supabase) {
+    // Upload image to Storage first (if provided)
+    let passportPath: string | null = null;
+    if (passportData.passportImageBase64) {
+      passportPath = await uploadPassportImage(
+        passportData.passportNumber,
+        passportData.passportImageBase64
+      );
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      passport_number: passportData.passportNumber,
+    };
+    if (passportPath) {
+      updatePayload.passport_path = passportPath;
+    }
+
+    const { error } = await supabase
+      .from('guests')
+      .update(updatePayload)
+      .eq('id', guestId);
+
+    if (error) {
+      console.error('[Hotel Service] Failed to update guest passport data:', error);
+      return false;
+    }
+    console.log(`[Hotel Service] Guest ${guestId} updated — passport_path: ${passportPath || '(no image)'}`);
+    return true;
+  }
+
+  // Mock: update in-memory guest
+  const guest = MOCK_GUESTS.find((g) => g.id === guestId);
+  if (guest) {
+    guest.passportNumber = passportData.passportNumber;
+    (guest as Record<string, unknown>).passportPath = `mock/${passportData.passportNumber}/scan.png`;
+    console.log(`[Hotel Service] Updated mock guest ${guestId} with passport data`);
+    return true;
+  }
+  return false;
+}

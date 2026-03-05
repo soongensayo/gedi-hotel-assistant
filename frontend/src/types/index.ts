@@ -98,12 +98,13 @@ export interface PassportScanResult {
   data?: {
     firstName: string;
     lastName: string;
-    nationality: string;
+    nationality?: string;
     passportNumber: string;
-    dateOfBirth: string;
-    expiryDate: string;
-    gender: string;
+    dateOfBirth?: string;
+    expiryDate?: string;
+    gender?: string;
     photoUrl?: string;
+    passportImageBase64?: string;
   };
   error?: string;
 }

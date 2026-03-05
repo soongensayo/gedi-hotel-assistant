@@ -3,8 +3,8 @@ import { useCheckinStore } from '../stores/checkinStore';
 import { useConversationStore } from '../stores/conversationStore';
 import {
   lookupReservation,
-  lookupReservationByPassport,
   scanPassport,
+  savePassportData,
   processPayment,
   completeCheckin,
   getRoomUpgrades,
@@ -15,33 +15,31 @@ export function useCheckin() {
   const store = useCheckinStore();
   const addMessage = useConversationStore((s) => s.addMessage);
 
-  /** Runs the passport scan and reservation lookup. Returns true on success. */
+  /** Runs the passport scan. Returns true if fields were extracted successfully. */
   const handlePassportScan = useCallback(async (): Promise<boolean> => {
     try {
       const result = await scanPassport();
       store.setPassportScan(result);
 
       if (result.success && result.data) {
-        addMessage({
-          role: 'assistant',
-          content: `Thank you, ${result.data.firstName}. I've scanned your passport successfully. Let me look up your reservation.`,
-        });
+        const { firstName, lastName, passportNumber, passportImageBase64 } = result.data;
 
-        const reservation = await lookupReservationByPassport(result.data.passportNumber);
-        if (reservation) {
-          store.setReservation(reservation);
-          if (reservation.guest) {
-            store.setGuest(reservation.guest);
-          }
-          store.setStep('reservation-found');
-          return true;
+        // Persist passport data to the guest record (fire-and-forget for the UI)
+        const guestId = store.guest?.id;
+        if (guestId) {
+          savePassportData(
+            guestId,
+            `${firstName} ${lastName}`,
+            passportNumber,
+            passportImageBase64
+          ).catch((err) => console.error('Failed to save passport data:', err));
         }
 
-        addMessage({
-          role: 'assistant',
-          content: `I couldn't find a reservation with your passport details. Could you provide your confirmation code?`,
-        });
-        store.setStep('identify');
+        // For demo: as long as we extracted passport fields, treat it as verified.
+        // The reservation was already found by name earlier in the flow.
+        store.setPendingMessage(
+          `Passport scanned successfully. Name on passport: ${firstName} ${lastName}. Passport number: ${passportNumber}. Please confirm the reservation details.`
+        );
         return true;
       }
 
@@ -50,7 +48,7 @@ export function useCheckin() {
       console.error('Passport scan failed:', err);
       return false;
     }
-  }, [store, addMessage]);
+  }, [store]);
 
   const handlePassportBypass = useCallback(() => {
     addMessage({

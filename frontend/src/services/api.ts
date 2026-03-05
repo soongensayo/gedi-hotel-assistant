@@ -113,6 +113,21 @@ export async function scanPassport(): Promise<PassportScanResult> {
   return data;
 }
 
+export async function savePassportData(
+  guestId: string,
+  passportName: string,
+  passportNumber: string,
+  passportImageBase64?: string
+): Promise<{ success: boolean }> {
+  const { data } = await api.post('/checkin/save-passport-data', {
+    guestId,
+    passportName,
+    passportNumber,
+    passportImageBase64,
+  });
+  return data;
+}
+
 export async function processPayment(
   reservationId: string,
   amount: number,

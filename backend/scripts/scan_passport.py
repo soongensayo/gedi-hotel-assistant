@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-project_root = Path(__file__).resolve().parent.parent
+project_root = Path(__file__).resolve().parent.parent.parent
 scanner_root = project_root / "camera-and-nfc" / "Identification-and-payment-app"
 
 if str(scanner_root) not in sys.path:

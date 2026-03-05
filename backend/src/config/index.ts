@@ -39,7 +39,7 @@ export const config = {
   passportScannerMode: (process.env.PASSPORT_SCANNER_MODE || 'mock') as 'mock' | 'live',
   passportScannerPython: process.env.PASSPORT_SCANNER_PYTHON || 'python3',
   passportScannerScript: process.env.PASSPORT_SCANNER_SCRIPT || '',
-  passportScannerTimeout: parseInt(process.env.PASSPORT_SCANNER_TIMEOUT || '60000', 10),
+  passportScannerTimeout: parseInt(process.env.PASSPORT_SCANNER_TIMEOUT || '120000', 10),
 
   // NFC Card Reader
   nfcSharedSecretKey: process.env.NFC_SHARED_SECRET_KEY || '',

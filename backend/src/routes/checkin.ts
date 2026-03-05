@@ -5,6 +5,7 @@ import {
   lookupReservation,
   lookupReservationByPassport,
   getGuestByPassport,
+  updateGuestPassportData,
 } from '../services/hotelService';
 import { generateWalletPass, isWalletConfigured } from '../services/wallet';
 import { sendCheckinEmail, isEmailConfigured } from '../services/emailService';
@@ -63,7 +64,7 @@ router.post('/scan-passport', async (_req: Request, res: Response) => {
   try {
     if (config.passportScannerMode === 'live') {
       const scriptPath = config.passportScannerScript
-        || path.resolve(__dirname, '../../../scripts/scan_passport.py');
+        || path.resolve(process.cwd(), 'scripts/scan_passport.py');
       const pythonBin = config.passportScannerPython;
       const timeout = config.passportScannerTimeout;
 
@@ -137,6 +138,36 @@ router.post('/scan-passport', async (_req: Request, res: Response) => {
   } catch (error) {
     console.error('[Checkin Route] Scan error:', error);
     res.json({ success: false, error: 'Scanner error' });
+  }
+});
+
+/**
+ * POST /api/checkin/save-passport-data
+ * Persist the scanned passport fields to the guest record.
+ * Called by the frontend after a successful passport scan.
+ */
+router.post('/save-passport-data', async (req: Request, res: Response) => {
+  try {
+    const { guestId, passportName, passportNumber, passportImageBase64 } = req.body;
+    if (!guestId) {
+      res.status(400).json({ success: false, error: 'guestId is required' });
+      return;
+    }
+
+    const saved = await updateGuestPassportData(guestId, {
+      passportName: passportName || '',
+      passportNumber: passportNumber || '',
+      passportImageBase64: passportImageBase64 || undefined,
+    });
+
+    if (saved) {
+      console.log(`[Checkin Route] Passport data saved for guest ${guestId}`);
+    }
+
+    res.json({ success: saved });
+  } catch (error) {
+    console.error('[Checkin Route] Save passport data error:', error);
+    res.status(500).json({ success: false, error: 'Failed to save passport data' });
   }
 });
 
