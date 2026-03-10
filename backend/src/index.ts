@@ -59,7 +59,7 @@ server.listen(config.port, () => {
   console.log(`  🤖 AI provider: ${config.aiProvider}`);
   console.log(`  🎭 Avatar provider: ${config.avatarProvider}`);
   console.log(`  📷 Passport scanner: ${config.passportScannerMode}`);
-  console.log(`  💳 NFC reader: ${config.nfcSharedSecretKey ? 'configured' : 'not configured'}`);
+  console.log(`  💳 NFC reader: ${config.nfcMode} mode${config.nfcMode === 'serial' ? ` (${config.nfcSerialPort})` : config.nfcSharedSecretKey ? ' (key set)' : ' (not configured)'}`);
   console.log('==========================================================');
 
   // Validate configuration and print warnings

@@ -42,6 +42,10 @@ export const config = {
   passportScannerTimeout: parseInt(process.env.PASSPORT_SCANNER_TIMEOUT || '120000', 10),
 
   // NFC Card Reader
+  nfcMode: (process.env.NFC_MODE || 'serial') as 'serial' | 'wifi',
+  nfcSerialPort: process.env.NFC_SERIAL_PORT || '/dev/ttyUSB0',
+  nfcSerialBaud: parseInt(process.env.NFC_SERIAL_BAUD || '115200', 10),
+  // Legacy WiFi mode settings (only used when NFC_MODE=wifi)
   nfcSharedSecretKey: process.env.NFC_SHARED_SECRET_KEY || '',
   esp32WifiStartUrl: process.env.ESP32_WIFI_START_URL || '',
   nfcUidToLast4: (() => {

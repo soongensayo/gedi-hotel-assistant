@@ -64,16 +64,15 @@ export function PaymentScreen() {
 
       {phase === 'processing' && (
         <ProcessingPhase
-          onDone={() => setPhase('done')}
+          onDone={() => {
+            setPhase('done');
+            setPendingMessage("Payment is done, let's continue.");
+          }}
           handlePayment={handlePayment}
         />
       )}
 
-      {phase === 'done' && (
-        <DonePhase
-          onContinue={() => setPendingMessage("Payment is done, let's continue.")}
-        />
-      )}
+      {phase === 'done' && <DonePhase />}
     </div>
   );
 }
@@ -180,15 +179,7 @@ function ProcessingPhase({ onDone, handlePayment }: { onDone: () => void; handle
   );
 }
 
-function DonePhase({ onContinue }: { onContinue: () => void }) {
-  const firedRef = useRef(false);
-
-  const handleContinue = useCallback(() => {
-    if (firedRef.current) return;
-    firedRef.current = true;
-    onContinue();
-  }, [onContinue]);
-
+function DonePhase() {
   return (
     <>
       <div className="relative w-44 h-44 flex items-center justify-center">
@@ -199,9 +190,6 @@ function DonePhase({ onContinue }: { onContinue: () => void }) {
         </div>
       </div>
       <p className="text-hotel-success text-sm font-medium">Payment successful</p>
-      <Button onClick={handleContinue}>
-        Continue
-      </Button>
     </>
   );
 }

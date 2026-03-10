@@ -10,6 +10,7 @@ import {
 import { generateWalletPass, isWalletConfigured } from '../services/wallet';
 import { sendCheckinEmail, isEmailConfigured } from '../services/emailService';
 import { encryptToHex, decryptFromHex, normalizeUid, isNfcConfigured } from '../utils/nfcCrypto';
+import { startNfcSerialListener, stopNfcSerialListener } from '../services/nfcSerial';
 import { config } from '../config';
 
 const router = Router();
@@ -297,10 +298,31 @@ router.post('/complete', async (req: Request, res: Response) => {
 
 /**
  * POST /api/checkin/activate-nfc
- * Send encrypted "ACTIVATE" command to ESP32 to start the NFC reader.
+ * Serial mode: open USB serial port to listen for NFC UIDs from ESP32.
+ * WiFi mode (legacy): send encrypted "ACTIVATE" command to ESP32 over WiFi.
  */
 router.post('/activate-nfc', async (_req: Request, res: Response) => {
   try {
+    if (config.nfcMode === 'serial') {
+      const onUid = (uid: string) => {
+        const last4 = config.nfcUidToLast4[uid] || '';
+        console.log(`[NFC] Serial UID detected: ${uid}, card last4: ${last4 || 'unknown'}`);
+        nfcUidStore.push({ uid, last4, receivedAt: Date.now() });
+        while (nfcUidStore.length > 20) nfcUidStore.shift();
+        // One tap is enough — stop listening to avoid log spam from repeated reads
+        stopNfcSerialListener();
+      };
+
+      const ok = startNfcSerialListener(config.nfcSerialPort, config.nfcSerialBaud, onUid);
+      if (!ok) {
+        res.json({ success: false, error: `Failed to open serial port ${config.nfcSerialPort}` });
+        return;
+      }
+      res.json({ success: true });
+      return;
+    }
+
+    // Legacy WiFi mode
     const esp32Url = config.esp32WifiStartUrl;
     if (!esp32Url) {
       res.json({ success: false, error: 'ESP32_WIFI_START_URL not configured' });
@@ -332,43 +354,53 @@ router.post('/activate-nfc', async (_req: Request, res: Response) => {
       res.json({ success: false, error: `ESP32 responded ${resp.status}` });
     }
   } catch (error) {
-    console.error('[NFC] Failed to activate ESP32:', error);
-    res.json({ success: false, error: 'Failed to reach ESP32' });
+    console.error('[NFC] Failed to activate NFC reader:', error);
+    res.json({ success: false, error: 'Failed to activate NFC reader' });
   }
 });
 
 /**
  * POST /api/checkin/nfc-uid
- * Receives encrypted NFC UID from ESP32.
- * The ESP32 POSTs the AES-128-CBC ciphertext as hex in the request body.
+ * Accepts NFC UID in two formats:
+ *   - JSON body with { uid: "09C9C802" } (plain text, used in serial mode)
+ *   - text/plain body with AES-128-CBC ciphertext hex (legacy WiFi mode)
  */
 router.post('/nfc-uid', async (req: Request, res: Response) => {
   try {
-    let bodyText = '';
-    if (typeof req.body === 'string') {
-      bodyText = req.body;
-    } else if (Buffer.isBuffer(req.body)) {
-      bodyText = req.body.toString('ascii');
-    } else if (req.body && typeof req.body === 'object') {
-      bodyText = req.body.uid || req.body.data || JSON.stringify(req.body);
-    }
-    bodyText = bodyText.trim();
+    let uid = '';
 
-    if (!bodyText) {
-      res.status(400).json({ error: 'Empty body' });
-      return;
+    // Try plain JSON body first (serial mode / direct POST)
+    if (req.body && typeof req.body === 'object' && req.body.uid) {
+      uid = normalizeUid(req.body.uid);
     }
 
-    const plaintext = decryptFromHex(bodyText);
-    if (!plaintext) {
-      console.warn('[NFC] Failed to decrypt UID from ESP32');
-      res.status(400).json({ error: 'Decryption failed' });
-      return;
-    }
-
-    const uid = normalizeUid(plaintext);
+    // Fall back to legacy encrypted path
     if (!uid) {
-      console.warn('[NFC] Invalid UID after decryption:', plaintext);
+      let bodyText = '';
+      if (typeof req.body === 'string') {
+        bodyText = req.body;
+      } else if (Buffer.isBuffer(req.body)) {
+        bodyText = req.body.toString('ascii');
+      }
+      bodyText = bodyText.trim();
+
+      if (!bodyText) {
+        res.status(400).json({ error: 'Empty body' });
+        return;
+      }
+
+      // Try as plain hex UID first, then as encrypted ciphertext
+      uid = normalizeUid(bodyText);
+      if (!uid) {
+        const plaintext = decryptFromHex(bodyText);
+        if (plaintext) {
+          uid = normalizeUid(plaintext);
+        }
+      }
+    }
+
+    if (!uid) {
+      console.warn('[NFC] Could not extract valid UID from request');
       res.status(400).json({ error: 'Invalid UID' });
       return;
     }
@@ -377,7 +409,6 @@ router.post('/nfc-uid', async (req: Request, res: Response) => {
     console.log(`[NFC] Received UID: ${uid}, card last4: ${last4 || 'unknown'}`);
 
     nfcUidStore.push({ uid, last4, receivedAt: Date.now() });
-    // Keep only the last 20 entries
     while (nfcUidStore.length > 20) nfcUidStore.shift();
 
     res.json({ success: true });
@@ -410,7 +441,8 @@ router.get('/nfc-status', (_req: Request, res: Response) => {
 
 /**
  * POST /api/checkin/nfc-clear
- * Clears the NFC UID store (called after payment is processed).
+ * Clears the NFC UID store (called by frontend to clear stale data).
+ * Does NOT stop the serial listener — that auto-stops after the first UID.
  */
 router.post('/nfc-clear', (_req: Request, res: Response) => {
   nfcUidStore.length = 0;

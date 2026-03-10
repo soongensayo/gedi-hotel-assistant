@@ -6,8 +6,8 @@ import { useConversationStore } from '../stores/conversationStore';
 // These thresholds work well for a quiet hotel kiosk environment.
 // Adjust SPEECH_THRESHOLD up if there's ambient noise (e.g. lobby music).
 const VAD_CONFIG = {
-  SPEECH_THRESHOLD: 0.012,    // RMS level that counts as "someone is talking"
-  SILENCE_THRESHOLD: 0.008,   // RMS level that counts as "silence"
+  SPEECH_THRESHOLD: 0.04,    // RMS level that counts as "someone is talking"
+  SILENCE_THRESHOLD: 0.03,   // RMS level that counts as "silence"
   SPEECH_START_MS: 100,       // Sustained speech before we mark a segment
   SILENCE_DURATION_MS: 1000,  // Sustained silence before we stop recording
   MIN_RECORDING_MS: 600,      // Minimum recording length to bother transcribing
