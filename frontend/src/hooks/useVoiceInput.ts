@@ -12,6 +12,8 @@ const VAD_CONFIG = {
   SILENCE_DURATION_MS: 1000,  // Sustained silence before we stop recording
   MIN_RECORDING_MS: 600,      // Minimum recording length to bother transcribing
   VAD_INTERVAL_MS: 50,        // How often we sample audio levels (20 fps)
+  // Barge-in: higher threshold when AI is speaking to reduce echo false triggers
+  INTERRUPT_SPEECH_THRESHOLD: 0.08, // ~2× normal — user must speak clearly to interrupt
 };
 
 interface UseVoiceInputReturn {
@@ -29,6 +31,12 @@ interface UseVoiceInputReturn {
   stopListening: () => void;
 }
 
+interface UseVoiceInputOptions {
+  onTranscript: (text: string) => void;
+  /** Called when user speaks during AI output — stops TTS so we can capture the interruption */
+  onInterrupt?: () => void;
+}
+
 /**
  * Hands-free voice input with Voice Activity Detection.
  *
@@ -38,15 +46,17 @@ interface UseVoiceInputReturn {
  * container with proper headers. When the user stops talking (silence for
  * ~1.5s), the recorder is stopped and the audio sent to Whisper.
  *
- * Detection is automatically **paused** while the AI is speaking or loading
- * to prevent echo / feedback loops.
+ * When AI is speaking: if user speaks clearly (higher threshold to reduce echo),
+ * onInterrupt is called to stop the AI, then we immediately start recording
+ * the user's utterance for transcription.
  *
- * @param onTranscript — Called with the transcribed text when an utterance completes.
- *                       Kept in a ref so the latest closure is always used.
+ * @param options — onTranscript (required), onInterrupt (optional for barge-in)
  */
 export function useVoiceInput(
-  onTranscript: (text: string) => void
+  options: UseVoiceInputOptions | ((text: string) => void)
 ): UseVoiceInputReturn {
+  const { onTranscript, onInterrupt } =
+    typeof options === 'function' ? { onTranscript: options, onInterrupt: undefined } : options;
   // ── React state (drives UI) ───────────────────────────────────────
   const [isListening, setIsListening] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -69,11 +79,16 @@ export function useVoiceInput(
   const isRecordingRef = useRef(false);
   const isProcessingRef = useRef(false);
 
-  // Keep the callback ref always in sync with the latest closure
+  // Keep the callback refs always in sync with the latest closures
   const onTranscriptRef = useRef(onTranscript);
+  const onInterruptRef = useRef(onInterrupt);
+  const interruptSpeechStartRef = useRef<number | null>(null);
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
   }, [onTranscript]);
+  useEffect(() => {
+    onInterruptRef.current = onInterrupt;
+  }, [onInterrupt]);
 
   const setError = useConversationStore((s) => s.setError);
 
@@ -205,6 +220,28 @@ export function useVoiceInput(
 
         // ── Pause detection when AI is active ───────────────────────
         const { isSpeaking, isLoading } = useConversationStore.getState();
+
+        // Barge-in: when AI is speaking (not loading), allow user to interrupt
+        if (
+          isSpeaking &&
+          !isLoading &&
+          !isProcessingRef.current &&
+          onInterruptRef.current &&
+          rms > VAD_CONFIG.INTERRUPT_SPEECH_THRESHOLD
+        ) {
+          if (!interruptSpeechStartRef.current) {
+            interruptSpeechStartRef.current = now;
+          } else if (now - interruptSpeechStartRef.current >= VAD_CONFIG.SPEECH_START_MS) {
+            console.log('[VAD] Barge-in: user interrupting, stopping AI and capturing');
+            interruptSpeechStartRef.current = null;
+            onInterruptRef.current();
+            startSegmentRecording();
+            return;
+          }
+        } else {
+          interruptSpeechStartRef.current = null;
+        }
+
         if (isSpeaking || isLoading || isProcessingRef.current) {
           speechStartTimeRef.current = null;
           silenceStartTimeRef.current = null;
@@ -287,6 +324,7 @@ export function useVoiceInput(
     // Reset all state
     speechStartTimeRef.current = null;
     silenceStartTimeRef.current = null;
+    interruptSpeechStartRef.current = null;
     recordingStartTimeRef.current = null;
     isRecordingRef.current = false;
     isProcessingRef.current = false;

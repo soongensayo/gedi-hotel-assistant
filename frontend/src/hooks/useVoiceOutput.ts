@@ -25,9 +25,17 @@ interface UseVoiceOutputReturn {
 export function useVoiceOutput(): UseVoiceOutputReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speakAbortRef = useRef<AbortController | null>(null);
+  const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setSpeaking = useConversationStore((s) => s.setSpeaking);
 
   const speak = useCallback(async (text: string) => {
+    // Abort any in-flight speak
+    speakAbortRef.current?.abort();
+    const controller = new AbortController();
+    speakAbortRef.current = controller;
+    const signal = controller.signal;
+
     try {
       setIsSpeaking(true);
       setSpeaking(true);
@@ -49,13 +57,18 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
         let totalPCMBytes = 0;
 
         // Await results **in order** so Simli receives audio sequentially.
-        // Because requests were fired in parallel, sentence 2 may already
-        // be resolved by the time sentence 1 finishes decoding.
+        // Check abort before each send — stop() will abort so we exit cleanly.
         for (let i = 0; i < ttsPromises.length; i++) {
+          if (signal.aborted) {
+            console.log(`[VoiceOutput] Interrupted, stopping after sentence ${i}`);
+            return;
+          }
           try {
             const audioBlob = await ttsPromises[i];
+            if (signal.aborted) return;
             const arrayBuffer = await audioBlob.arrayBuffer();
             const pcm16Data = await decodeToPCM16(arrayBuffer, 16000);
+            if (signal.aborted) return;
 
             sendPCM16ToSimli(client, pcm16Data);
             totalPCMBytes += pcm16Data.length;
@@ -65,15 +78,18 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
               `(${pcm16Data.length} bytes)`
             );
           } catch (err) {
+            if (signal.aborted) return;
             console.warn(`[VoiceOutput] Sentence ${i + 1} failed, skipping:`, err);
           }
         }
 
+        if (signal.aborted) return;
+
         // Estimate remaining playback duration from total PCM sent
         // PCM16 @ 16 kHz = 32 000 bytes / sec
         const durationMs = (totalPCMBytes / 32000) * 1000;
-
-        setTimeout(() => {
+        speakTimeoutRef.current = setTimeout(() => {
+          speakTimeoutRef.current = null;
           setIsSpeaking(false);
           setSpeaking(false);
         }, durationMs + 500);
@@ -84,10 +100,13 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
         // ────────────────────────────────────────────────────
         console.log('[VoiceOutput] Avatar not connected — playing audio locally');
         const audioBlob = await synthesizeSpeech(text);
+        if (signal.aborted) return;
         const arrayBuffer = await audioBlob.arrayBuffer();
+        if (signal.aborted) return;
         playLocalAudio(arrayBuffer);
       }
     } catch (err) {
+      if (signal.aborted) return;
       console.error('[VoiceOutput] TTS failed:', err);
       setIsSpeaking(false);
       setSpeaking(false);
@@ -120,6 +139,12 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
   }, [setSpeaking]);
 
   const stop = useCallback(() => {
+    speakAbortRef.current?.abort();
+    speakAbortRef.current = null;
+    if (speakTimeoutRef.current) {
+      clearTimeout(speakTimeoutRef.current);
+      speakTimeoutRef.current = null;
+    }
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;

@@ -66,7 +66,7 @@ function useActionProcessor() {
 export function ChatPanel() {
   const [textInput, setTextInput] = useState('');
   const { isLoading, addMessage, setLoading, setError } = useConversationStore();
-  const { speak } = useVoiceOutput();
+  const { speak, stop: stopVoiceOutput } = useVoiceOutput();
   const sessionId = useCheckinStore((s) => s.sessionId);
   const currentStep = useCheckinStore((s) => s.currentStep);
   const reservation = useCheckinStore((s) => s.reservation);
@@ -156,7 +156,7 @@ export function ChatPanel() {
             disabled={isLoading}
           />
         </form>
-        <VoiceButton onTranscript={handleSendMessage} />
+        <VoiceButton onTranscript={handleSendMessage} onInterrupt={stopVoiceOutput} />
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import { useConversationStore } from '../../stores/conversationStore';
 interface VoiceButtonProps {
   /** Called with transcribed text when the user finishes speaking. */
   onTranscript: (text: string) => void;
+  /** Called when user speaks during AI output — stops TTS so we can capture the interruption (barge-in). */
+  onInterrupt?: () => void;
 }
 
 /**
@@ -17,9 +19,9 @@ interface VoiceButtonProps {
  *   - Recording:  Red glow + active ping (speech detected, capturing audio)
  *   - Processing: Spinner (transcribing with Whisper)
  */
-export function VoiceButton({ onTranscript }: VoiceButtonProps) {
+export function VoiceButton({ onTranscript, onInterrupt }: VoiceButtonProps) {
   const { isListening, isRecording, isProcessing, audioLevel, startListening, stopListening } =
-    useVoiceInput(onTranscript);
+    useVoiceInput({ onTranscript, onInterrupt });
   const { isLoading, isSpeaking } = useConversationStore();
 
   const handleToggle = useCallback(() => {
@@ -61,7 +63,7 @@ export function VoiceButton({ onTranscript }: VoiceButtonProps) {
             ? 'Processing your speech...'
             : isListening
               ? isPaused
-                ? 'Waiting for AI... (tap to stop)'
+                ? 'Waiting for AI... (speak to interrupt, or tap to stop)'
                 : 'Voice mode on — just speak (tap to stop)'
               : 'Tap to start voice mode'
       }
