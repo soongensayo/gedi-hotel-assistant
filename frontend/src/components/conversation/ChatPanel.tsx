@@ -3,7 +3,7 @@ import { TranscriptDisplay } from './TranscriptDisplay';
 import { VoiceButton } from './VoiceButton';
 import { useConversationStore } from '../../stores/conversationStore';
 import { useCheckinStore } from '../../stores/checkinStore';
-import { sendChatMessage } from '../../services/api';
+import { sendChatMessage, stopPassportScan } from '../../services/api';
 import type { AIAction } from '../../services/api';
 import { useVoiceOutput } from '../../hooks/useVoiceOutput';
 import type { CheckinStep } from '../../types';
@@ -30,8 +30,6 @@ function useActionProcessor() {
             break;
           }
           case 'store_reservation': {
-            // Store reservation + guest data from AI lookup into the checkin store
-            // so it's available as context for future messages
             if (action.payload) {
               setReservation(action.payload as unknown as import('../../types').Reservation);
               const guest = action.payload.guest as import('../../types').Guest | undefined;
@@ -43,6 +41,10 @@ function useActionProcessor() {
           }
           case 'show_passport_scanner':
             setStep('passport-scan');
+            break;
+          case 'skip_passport_scanner':
+            stopPassportScan().catch(() => {});
+            setStep('identify');
             break;
           case 'show_payment':
             setStep('payment');

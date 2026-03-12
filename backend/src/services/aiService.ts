@@ -20,6 +20,7 @@ export interface AIAction {
   type:
     | 'set_step'
     | 'show_passport_scanner'
+    | 'skip_passport_scanner'
     | 'show_payment'
     | 'show_key_card'
     | 'store_reservation';
@@ -166,6 +167,15 @@ const CONCIERGE_TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'skip_passport_scan',
+      description:
+        'Skip or cancel the passport scanning step. Call this when the guest wants to bypass the passport scanner (e.g. they say "just proceed", "skip scanning", "I already scanned", etc.).',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'trigger_payment',
       description:
         'Show the payment / credit card UI so the guest can complete payment. Call this when the reservation details are confirmed and you are ready to collect payment.',
@@ -287,6 +297,11 @@ async function executeToolCall(
       return {
         result: { success: true, message: 'Passport scanner UI is now displayed. STOP calling tools — respond to the guest and wait for them to confirm they have scanned.' },
         action: { type: 'show_passport_scanner' },
+      };
+    case 'skip_passport_scan':
+      return {
+        result: { success: true, message: 'Passport scanning skipped. Ask the guest for their name or confirmation code to look up the reservation manually.' },
+        action: { type: 'skip_passport_scanner' },
       };
     case 'trigger_payment':
       return {

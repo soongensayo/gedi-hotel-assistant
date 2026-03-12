@@ -15,6 +15,7 @@ export interface AIAction {
   type:
     | 'set_step'
     | 'show_passport_scanner'
+    | 'skip_passport_scanner'
     | 'show_payment'
     | 'show_key_card'
     | 'store_reservation';
@@ -110,6 +111,36 @@ export async function lookupReservationByPassport(
 
 export async function scanPassport(): Promise<PassportScanResult> {
   const { data } = await api.post('/checkin/scan-passport');
+  return data;
+}
+
+// --- Async passport scanning (polling architecture) ---
+
+export interface PassportScanStatus {
+  status: 'idle' | 'scanning' | 'success' | 'failed';
+  data?: {
+    firstName: string;
+    lastName: string;
+    passportNumber: string;
+    passportImageBase64?: string;
+  };
+  error?: string;
+  attempts: number;
+  elapsed: number;
+}
+
+export async function startPassportScan(): Promise<{ status: string }> {
+  const { data } = await api.post('/checkin/start-passport-scan');
+  return data;
+}
+
+export async function getPassportScanStatus(): Promise<PassportScanStatus> {
+  const { data } = await api.get('/checkin/passport-scan-status');
+  return data;
+}
+
+export async function stopPassportScan(): Promise<{ success: boolean }> {
+  const { data } = await api.post('/checkin/stop-passport-scan');
   return data;
 }
 

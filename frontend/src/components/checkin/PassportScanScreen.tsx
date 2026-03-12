@@ -1,38 +1,101 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '../ui/Button';
 import { useCheckin } from '../../hooks/useCheckin';
+import {
+  startPassportScan,
+  getPassportScanStatus,
+  stopPassportScan,
+} from '../../services/api';
+import type { PassportScanStatus } from '../../services/api';
 
-type ScanPhase = 'scanning' | 'failed';
+type ScanPhase = 'scanning' | 'success' | 'failed';
+
+const POLL_INTERVAL_MS = 1500;
+const SUCCESS_DISPLAY_MS = 1800;
 
 export function PassportScanScreen() {
-  const { handlePassportScan, handlePassportBypass } = useCheckin();
+  const { handlePassportScanResult, handlePassportBypass } = useCheckin();
+
   const [phase, setPhase] = useState<ScanPhase>('scanning');
-  const firedRef = useRef(false);
+  const [attempts, setAttempts] = useState(0);
+  const [scanData, setScanData] = useState<PassportScanStatus['data'] | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
 
-  const runScan = useCallback(async () => {
-    setPhase('scanning');
-    const ok = await handlePassportScan();
-    if (!ok) {
-      setPhase('failed');
+  // Keep a ref to handlePassportScanResult so the polling closure always
+  // calls the latest version without being a useEffect dependency.
+  const resultHandlerRef = useRef(handlePassportScanResult);
+  resultHandlerRef.current = handlePassportScanResult;
+
+  const clearPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
-  }, [handlePassportScan]);
+  }, []);
 
+  const doStart = useCallback(async () => {
+    setPhase('scanning');
+    setAttempts(0);
+    setScanData(null);
+
+    try {
+      await startPassportScan();
+    } catch {
+      setPhase('failed');
+      return;
+    }
+
+    pollRef.current = setInterval(async () => {
+      if (!mountedRef.current) return;
+      try {
+        const status = await getPassportScanStatus();
+        if (!mountedRef.current) return;
+
+        setAttempts(status.attempts || 0);
+
+        if (status.status === 'success') {
+          clearPolling();
+          setScanData(status.data ?? null);
+          setPhase('success');
+          setTimeout(() => {
+            if (mountedRef.current) {
+              resultHandlerRef.current(status);
+            }
+          }, SUCCESS_DISPLAY_MS);
+        } else if (status.status === 'failed') {
+          clearPolling();
+          setPhase('failed');
+        }
+      } catch {
+        // Network blip -- keep polling
+      }
+    }, POLL_INTERVAL_MS);
+  }, [clearPolling]);
+
+  // Run exactly once on mount; clean up on unmount only.
   useEffect(() => {
-    if (firedRef.current) return;
-    firedRef.current = true;
-    runScan();
-  }, [runScan]);
+    mountedRef.current = true;
+    doStart();
+    return () => {
+      mountedRef.current = false;
+      clearPolling();
+      stopPassportScan().catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRetry = useCallback(() => {
-    firedRef.current = false;
-    runScan();
-  }, [runScan]);
+    clearPolling();
+    doStart();
+  }, [doStart, clearPolling]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 py-8 gap-6">
       <h2 className="text-2xl font-light text-hotel-text">Passport Scanner</h2>
 
-      {phase === 'scanning' && <ScanningIndicator />}
+      {phase === 'scanning' && <ScanningIndicator attempts={attempts} />}
+      {phase === 'success' && <SuccessIndicator data={scanData} />}
 
       {phase === 'failed' && (
         <>
@@ -57,7 +120,7 @@ export function PassportScanScreen() {
   );
 }
 
-function ScanningIndicator() {
+function ScanningIndicator({ attempts }: { attempts: number }) {
   return (
     <>
       <div className="relative w-80 h-52 rounded-2xl border-2 border-dashed border-hotel-accent/30 bg-hotel-accent/5 flex items-center justify-center overflow-hidden">
@@ -83,6 +146,36 @@ function ScanningIndicator() {
       <p className="text-hotel-text-dim text-sm text-center max-w-sm">
         Please place your passport face-down on the scanner. It will be read automatically.
       </p>
+      {attempts > 0 && (
+        <p className="text-hotel-text-dim/50 text-xs tabular-nums">
+          Scan attempt {attempts}
+        </p>
+      )}
+    </>
+  );
+}
+
+function SuccessIndicator({ data }: { data?: PassportScanStatus['data'] | null }) {
+  const displayName = data
+    ? `${data.firstName} ${data.lastName}`.trim()
+    : '';
+
+  return (
+    <>
+      <div className="relative w-80 h-52 rounded-2xl border-2 border-emerald-400/40 bg-emerald-400/5 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <svg className="w-14 h-14 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-emerald-400 text-sm font-medium">Passport detected</p>
+          {displayName && (
+            <p className="text-hotel-text text-base font-medium">{displayName}</p>
+          )}
+          {data?.passportNumber && (
+            <p className="text-hotel-text-dim text-xs tracking-wider">{data.passportNumber}</p>
+          )}
+        </div>
+      </div>
     </>
   );
 }

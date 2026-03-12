@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { execFile } from 'child_process';
+import { execFile, ChildProcess, spawn } from 'child_process';
 import path from 'path';
 import {
   lookupReservation,
@@ -17,6 +17,42 @@ const router = Router();
 
 // In-memory store for NFC UIDs received from ESP32, keyed by timestamp
 const nfcUidStore: { uid: string; last4: string; receivedAt: number }[] = [];
+
+// ---------------------------------------------------------------------------
+// Async passport scanner state
+// ---------------------------------------------------------------------------
+
+interface PassportScanData {
+  firstName: string;
+  lastName: string;
+  passportNumber: string;
+  passportImageBase64: string;
+}
+
+interface ScannerState {
+  process: ChildProcess | null;
+  status: 'idle' | 'scanning' | 'success' | 'failed';
+  data?: PassportScanData;
+  error?: string;
+  attempts: number;
+  startedAt?: number;
+}
+
+const scannerState: ScannerState = { process: null, status: 'idle', attempts: 0 };
+let scanSession = 0;
+
+function resetScannerState() {
+  scanSession++;
+  if (scannerState.process) {
+    try { scannerState.process.kill('SIGTERM'); } catch { /* already dead */ }
+  }
+  scannerState.process = null;
+  scannerState.status = 'idle';
+  scannerState.data = undefined;
+  scannerState.error = undefined;
+  scannerState.attempts = 0;
+  scannerState.startedAt = undefined;
+}
 
 /**
  * GET /api/checkin/lookup
@@ -140,6 +176,187 @@ router.post('/scan-passport', async (_req: Request, res: Response) => {
     console.error('[Checkin Route] Scan error:', error);
     res.json({ success: false, error: 'Scanner error' });
   }
+});
+
+// =============================================================================
+// Async Passport Scanner (polling architecture)
+// =============================================================================
+
+/**
+ * POST /api/checkin/start-passport-scan
+ * Spawn the polling Python scanner as a background child process.
+ * In mock mode, immediately resolves with simulated data after a delay.
+ */
+router.post('/start-passport-scan', async (_req: Request, res: Response) => {
+  try {
+    // If already scanning, stop the old process first
+    if (scannerState.process) {
+      resetScannerState();
+    }
+
+    if (config.passportScannerMode === 'mock') {
+      console.log('[Passport Scanner] Starting scan (mock mode)');
+      scannerState.status = 'scanning';
+      scannerState.startedAt = Date.now();
+      scannerState.attempts = 0;
+      scannerState.process = null;
+
+      const delay = 3000 + Math.random() * 2000;
+      setTimeout(async () => {
+        if (scannerState.status !== 'scanning') return;
+
+        const guest = await getGuestByPassport('E1234567A');
+        scannerState.attempts = Math.floor(delay / 1000);
+        scannerState.status = 'success';
+        scannerState.data = {
+          firstName: guest?.firstName || 'James',
+          lastName: guest?.lastName || 'Chen',
+          passportNumber: guest?.passportNumber || 'E1234567A',
+          passportImageBase64: '',
+        };
+        console.log('[Passport Scanner] Mock scan complete:', scannerState.data.firstName, scannerState.data.lastName);
+      }, delay);
+
+      res.json({ status: 'scanning' });
+      return;
+    }
+
+    // Live mode: spawn the polling Python script
+    const scriptPath = path.resolve(__dirname, '../../scripts/scan_passport_poll.py');
+    const pythonBin = config.passportScannerPython;
+    const timeout = Math.floor(config.passportScannerTimeout / 1000);
+
+    const mySession = ++scanSession;
+    console.log(`[Passport Scanner] Starting live scan (session ${mySession}): ${pythonBin} ${scriptPath} --timeout ${timeout}`);
+
+    scannerState.status = 'scanning';
+    scannerState.startedAt = Date.now();
+    scannerState.attempts = 0;
+    scannerState.data = undefined;
+    scannerState.error = undefined;
+
+    const child = spawn(pythonBin, [scriptPath, '--timeout', String(timeout)], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    scannerState.process = child;
+    let stdoutData = '';
+
+    child.stdout!.on('data', (chunk: Buffer) => {
+      stdoutData += chunk.toString();
+    });
+
+    child.stderr!.on('data', (chunk: Buffer) => {
+      if (mySession !== scanSession) return;
+      const lines = chunk.toString().trim().split('\n');
+      for (const line of lines) {
+        try {
+          const progress = JSON.parse(line);
+          if (progress.attempt) {
+            scannerState.attempts = progress.attempt;
+            if (progress.attempt % 5 === 1) {
+              console.log(`[Passport Scanner] Attempt ${progress.attempt} (${progress.elapsed}s elapsed)`);
+            }
+          }
+        } catch {
+          if (line.trim()) console.log(`[Passport Scanner] stderr: ${line.trim()}`);
+        }
+      }
+    });
+
+    child.on('close', (code) => {
+      if (mySession !== scanSession) {
+        console.log(`[Passport Scanner] Stale process (session ${mySession}) exited, ignoring (current: ${scanSession})`);
+        return;
+      }
+
+      scannerState.process = null;
+
+      try {
+        const parsed = JSON.parse(stdoutData.trim());
+        if (code === 0 && !parsed.error) {
+          const nameParts = (parsed.guest_name || '').trim().split(/\s+/);
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || firstName;
+          scannerState.status = 'success';
+          scannerState.data = {
+            firstName,
+            lastName,
+            passportNumber: parsed.passport_id || '',
+            passportImageBase64: parsed.passport_image_base64 || '',
+          };
+          console.log(`[Passport Scanner] Success: ${firstName} ${lastName}, passport ${scannerState.data.passportNumber}`);
+        } else {
+          scannerState.status = 'failed';
+          scannerState.error = parsed.error || 'Scanner failed';
+          console.log(`[Passport Scanner] Failed: ${scannerState.error}`);
+        }
+      } catch {
+        scannerState.status = 'failed';
+        scannerState.error = 'Failed to parse scanner output';
+        console.log(`[Passport Scanner] Failed to parse output: ${stdoutData.substring(0, 200)}`);
+      }
+    });
+
+    child.on('error', (err) => {
+      if (mySession !== scanSession) return;
+      console.error(`[Passport Scanner] Process error: ${err.message}`);
+      scannerState.process = null;
+      scannerState.status = 'failed';
+      scannerState.error = `Scanner process error: ${err.message}`;
+    });
+
+    res.json({ status: 'scanning' });
+  } catch (error) {
+    console.error('[Checkin Route] Start passport scan error:', error);
+    scannerState.status = 'failed';
+    scannerState.error = 'Failed to start scanner';
+    res.json({ status: 'failed', error: 'Failed to start scanner' });
+  }
+});
+
+/**
+ * GET /api/checkin/passport-scan-status
+ * Frontend polls this to check the state of the async passport scan.
+ */
+router.get('/passport-scan-status', (_req: Request, res: Response) => {
+  const elapsed = scannerState.startedAt ? Date.now() - scannerState.startedAt : 0;
+
+  if (scannerState.status === 'success' && scannerState.data) {
+    res.json({
+      status: 'success',
+      data: scannerState.data,
+      attempts: scannerState.attempts,
+      elapsed,
+    });
+    return;
+  }
+
+  if (scannerState.status === 'failed') {
+    res.json({
+      status: 'failed',
+      error: scannerState.error || 'Unknown error',
+      attempts: scannerState.attempts,
+      elapsed,
+    });
+    return;
+  }
+
+  res.json({
+    status: scannerState.status, // 'idle' or 'scanning'
+    attempts: scannerState.attempts,
+    elapsed,
+  });
+});
+
+/**
+ * POST /api/checkin/stop-passport-scan
+ * Kill the running scanner process and reset state. Used for bypass/cancel.
+ */
+router.post('/stop-passport-scan', (_req: Request, res: Response) => {
+  console.log(`[Passport Scanner] Stopping scan (was: ${scannerState.status})`);
+  resetScannerState();
+  res.json({ success: true });
 });
 
 /**
