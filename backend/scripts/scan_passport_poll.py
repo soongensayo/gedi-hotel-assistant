@@ -300,7 +300,10 @@ def _image_to_base64(image: np.ndarray) -> str:
 
 def _open_camera() -> Optional[cv2.VideoCapture]:
     global _camera
-    cap = cv2.VideoCapture(CAMERA_INDEX)
+    # Try V4L2 backend first (required on Jetson where GStreamer fails for UVC cameras)
+    cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_V4L2)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
         return None
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
