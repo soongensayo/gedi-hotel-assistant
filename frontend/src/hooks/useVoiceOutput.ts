@@ -47,22 +47,24 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
         // ────────────────────────────────────────────────────
         // OPTIMISED AVATAR PATH
         // Split into sentences → parallel TTS → stream to Simli in order
+        // Falls back to local audio if Simli streaming fails
         // ────────────────────────────────────────────────────
         const sentences = splitIntoSentences(text);
         console.log(`[VoiceOutput] Parallel TTS for ${sentences.length} sentence(s)`);
 
-        // Fire ALL TTS requests at once — shorter sentences return sooner
         const ttsPromises = sentences.map((sentence) => synthesizeSpeech(sentence));
 
         let totalPCMBytes = 0;
+        let simliFailed = false;
 
-        // Await results **in order** so Simli receives audio sequentially.
-        // Check abort before each send — stop() will abort so we exit cleanly.
         for (let i = 0; i < ttsPromises.length; i++) {
           if (signal.aborted) {
             console.log(`[VoiceOutput] Interrupted, stopping after sentence ${i}`);
             return;
           }
+
+          if (simliFailed) break;
+
           try {
             const audioBlob = await ttsPromises[i];
             if (signal.aborted) return;
@@ -79,13 +81,23 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
             );
           } catch (err) {
             if (signal.aborted) return;
-            console.warn(`[VoiceOutput] Sentence ${i + 1} failed, skipping:`, err);
+            console.warn(`[VoiceOutput] Simli send failed at sentence ${i + 1}, falling back to local audio`);
+            simliFailed = true;
           }
         }
 
         if (signal.aborted) return;
 
-        // Estimate remaining playback duration from total PCM sent
+        if (simliFailed) {
+          console.log('[VoiceOutput] Simli unavailable — replaying full text via local audio');
+          const audioBlob = await synthesizeSpeech(text);
+          if (signal.aborted) return;
+          const arrayBuffer = await audioBlob.arrayBuffer();
+          if (signal.aborted) return;
+          playLocalAudio(arrayBuffer);
+          return;
+        }
+
         // PCM16 @ 16 kHz = 32 000 bytes / sec
         const durationMs = (totalPCMBytes / 32000) * 1000;
         speakTimeoutRef.current = setTimeout(() => {
