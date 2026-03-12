@@ -1,0 +1,19 @@
+# Local env file with secrets - never commit
+.env
+
+# EasyOCR models (large; run download_easyocr_models.py once, then copy folder when deploying to edge)
+easyocr_models/
+
+# Test images (binary, not needed in git)
+test_images/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.log
+
+# Debug output
+debug/

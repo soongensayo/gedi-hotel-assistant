@@ -1,0 +1,36 @@
+# Core dependencies
+# Note: Some packages may need to be installed separately on Jetson devices
+
+# For camera and image processing (laptop/Jetson)
+opencv-python>=4.5.0
+numpy>=1.19.0
+Pillow>=9.0.0  # For tkinter camera preview when cv2.imshow unavailable
+
+# For OCR (choose based on your environment)
+pytesseract>=0.3.8
+easyocr>=1.6.0
+
+# For Jetson GPIO (only on Jetson devices)
+# Jetson.GPIO>=2.0.0
+
+# For HTTPS requests
+requests>=2.31.0
+
+# Load SUPABASE_* from .env file (optional)
+python-dotenv>=1.0.0
+
+# Supabase client (NFC linking and payment)
+supabase>=2.0.0
+
+# Serial port for ESP32 NFC UID (raw hex over USB)
+pyserial>=3.5
+
+# AES encryption for secure NFC handshake
+pycryptodome>=3.10.0
+
+# Standard library modules used (no installation needed):
+# - logging
+# - json
+# - re
+# - dataclasses
+# - typing
