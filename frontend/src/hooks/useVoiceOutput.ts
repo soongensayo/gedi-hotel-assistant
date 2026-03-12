@@ -128,25 +128,31 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
       const blob = new Blob([buffer], { type: 'audio/mpeg' });
       const audioUrl = URL.createObjectURL(blob);
       const audio = new Audio(audioUrl);
-      audio.volume = 1.0;
       audioRef.current = audio;
 
-      audio.onended = () => {
+      const cleanup = () => {
         setIsSpeaking(false);
         setSpeaking(false);
         URL.revokeObjectURL(audioUrl);
       };
 
-      audio.onerror = () => {
-        setIsSpeaking(false);
-        setSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-      };
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
 
-      audio.play().catch(() => {
-        setIsSpeaking(false);
-        setSpeaking(false);
-      });
+      // Route through Web Audio GainNode so we can amplify beyond 1.0.
+      // HTMLAudioElement.volume caps at 1.0 which isn't loud enough for
+      // OpenAI tts-1 output compared to typical media.
+      try {
+        const ctx = new AudioContext();
+        const source = ctx.createMediaElementSource(audio);
+        const gain = ctx.createGain();
+        gain.gain.value = 2.0;
+        source.connect(gain).connect(ctx.destination);
+      } catch {
+        audio.volume = 1.0;
+      }
+
+      audio.play().catch(cleanup);
     }
   }, [setSpeaking]);
 

@@ -27,6 +27,14 @@ export function splitIntoSentences(text: string): string[] {
 }
 
 /**
+ * Gain multiplier applied to TTS audio before sending to Simli.
+ * OpenAI tts-1 output is ~6-10 dB quieter than loudness-normalised
+ * media (YouTube etc.). 2.0× ≈ +6 dB brings it close to parity.
+ * Adjust up/down if needed; clipping is prevented by the clamp below.
+ */
+const TTS_GAIN = 2.0;
+
+/**
  * Decode an MP3/audio ArrayBuffer into raw PCM16 (Int16) samples.
  * Simli expects PCM16 as Uint8Array via sendAudioData().
  *
@@ -40,20 +48,16 @@ export async function decodeToPCM16(
 ): Promise<Uint8Array> {
   const audioContext = getPCMAudioContext(targetSampleRate);
 
-  // Decode the compressed audio (MP3) to raw PCM samples
   const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer.slice(0));
-
-  // Get mono channel data (Float32Array, values between -1.0 and 1.0)
   const float32Data = audioBuffer.getChannelData(0);
 
-  // Convert Float32 → Int16
   const int16Data = new Int16Array(float32Data.length);
   for (let i = 0; i < float32Data.length; i++) {
-    const sample = Math.max(-1, Math.min(1, float32Data[i]));
+    const amplified = float32Data[i] * TTS_GAIN;
+    const sample = Math.max(-1, Math.min(1, amplified));
     int16Data[i] = sample < 0 ? sample * 32768 : sample * 32767;
   }
 
-  // Return as Uint8Array (the byte representation of Int16Array)
   return new Uint8Array(int16Data.buffer);
 }
 
