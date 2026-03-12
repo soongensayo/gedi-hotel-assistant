@@ -100,8 +100,10 @@ router.get('/lookup-passport', async (req: Request, res: Response) => {
 router.post('/scan-passport', async (_req: Request, res: Response) => {
   try {
     if (config.passportScannerMode === 'live') {
-      const scriptPath = config.passportScannerScript
-        || path.resolve(process.cwd(), 'scripts/scan_passport.py');
+      const defaultScript = config.passportScannerEngine === 'easyocr'
+        ? path.resolve(process.cwd(), 'scripts/scan_passport.py')
+        : path.resolve(process.cwd(), 'scripts/scan_passport_poll.py');
+      const scriptPath = config.passportScannerScript || defaultScript;
       const pythonBin = config.passportScannerPython;
       const timeout = config.passportScannerTimeout;
 
@@ -221,8 +223,10 @@ router.post('/start-passport-scan', async (_req: Request, res: Response) => {
       return;
     }
 
-    // Live mode: spawn the polling Python script
-    const scriptPath = path.resolve(__dirname, '../../scripts/scan_passport_poll.py');
+    // Live mode: spawn the polling Python script (engine selects EasyOCR or Tesseract)
+    const scriptPath = config.passportScannerEngine === 'easyocr'
+      ? path.resolve(__dirname, '../../scripts/scan_passport_easyocr_poll.py')
+      : path.resolve(__dirname, '../../scripts/scan_passport_poll.py');
     const pythonBin = config.passportScannerPython;
     const timeout = Math.floor(config.passportScannerTimeout / 1000);
 

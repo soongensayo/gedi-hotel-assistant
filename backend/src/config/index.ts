@@ -37,6 +37,7 @@ export const config = {
 
   // Passport Scanner
   passportScannerMode: (process.env.PASSPORT_SCANNER_MODE || 'mock') as 'mock' | 'live',
+  passportScannerEngine: (process.env.PASSPORT_SCANNER_ENGINE || 'tesseract') as 'tesseract' | 'easyocr',
   passportScannerPython: process.env.PASSPORT_SCANNER_PYTHON || 'python3',
   passportScannerScript: process.env.PASSPORT_SCANNER_SCRIPT || '',
   passportScannerTimeout: parseInt(process.env.PASSPORT_SCANNER_TIMEOUT || '120000', 10),
