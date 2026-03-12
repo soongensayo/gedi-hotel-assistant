@@ -68,7 +68,6 @@ def _mrz_check_digit(field: str) -> int:
         total += _MRZ_CHAR_VALUE.get(ch, 0) * _MRZ_WEIGHTS[i % 3]
     return total % 10
 
-
 # Common OCR misreads at digit positions
 _OCR_CORRECTIONS: Dict[str, str] = {
     "O": "0", "D": "0", "Q": "0",
