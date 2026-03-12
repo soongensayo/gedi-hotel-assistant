@@ -19,7 +19,7 @@ A full-stack kiosk application featuring a **voice-interactive AI concierge** th
 - **📧 Check-in Confirmation Email** — Sends a styled HTML email to the guest with room details, stay dates, and the wallet pass attached.
 - **💬 Post Check-in Conversation** — After check-in completes, the AI continues chatting as a personal concierge — sharing local tips, answering hotel questions, and making the guest feel welcome.
 - **📷 Real Passport Scanner** — Camera-based passport OCR (EasyOCR + Tesseract MRZ pipeline) with automatic field extraction. Falls back to mock data or manual entry when hardware is unavailable.
-- **💳 NFC Card Reader** — ESP32 + PN532 contactless card reader for demo payments. AES-128-CBC encrypted communication. Falls back to on-screen tap simulation when hardware is unavailable.
+- **💳 NFC Card Reader** — ESP32 + PN532 contactless card reader for demo payments. Simple USB serial communication. Falls back to on-screen tap simulation when hardware is unavailable.
 - **📊 Hotel Data Backend** — In-memory mock data with Supabase support for production
 
 ---
@@ -46,7 +46,7 @@ ai-checkin-robot/
 ├── camera-and-nfc/            # Hardware integration (passport OCR + NFC reader)
 │   └── Identification-and-payment-app/
 │       ├── core/              # Scanner (EasyOCR + Tesseract MRZ), validator, data model
-│       └── network/           # NFC serial/HTTP listener, ESP32 WiFi, Supabase transmitter
+│       └── network/           # NFC serial listener, legacy WiFi modules, Supabase transmitter
 ├── scripts/                   # Setup scripts
 ├── supabase/                  # DB schema & seed data
 └── .env.example               # Environment variable template
@@ -115,8 +115,8 @@ Edit `.env` and fill in your API keys:
 | `SMTP_PASS` | For email | SMTP password (Gmail: use an [App Password](https://myaccount.google.com/apppasswords)) |
 | `SMTP_FROM` | For email | Sender name and address for emails |
 | `PASSPORT_SCANNER_MODE` | Optional | `mock` (default) or `live` for real camera OCR |
-| `NFC_SHARED_SECRET_KEY` | For NFC | 16-char AES key shared with ESP32 |
-| `ESP32_WIFI_START_URL` | For NFC | ESP32 HTTP endpoint (e.g. `http://192.168.1.100/start`) |
+| `NFC_MODE` | For NFC | `serial` (default) or `wifi` (legacy) |
+| `NFC_SERIAL_PORT` | For NFC | USB serial port (e.g. `/dev/ttyUSB0`, `/dev/cu.usbserial-*`) |
 
 > **Note:** Variables prefixed with `VITE_` are exposed to the frontend. The Simli avatar runs entirely in the browser via WebRTC, so it needs client-side API access.
 >
@@ -289,40 +289,37 @@ By default the app runs in **mock mode** — no camera, NFC reader, or ESP32 nee
 
 ### NFC Card Reader (ESP32 + PN532)
 
-**What it does:** When the guest reaches the payment step, the backend sends an encrypted "ACTIVATE" command to the ESP32 over WiFi. The ESP32 starts its PN532 NFC reader and waits for a card tap. When tapped, it sends the encrypted card UID back to the backend. The frontend polls for the result and auto-advances.
+**What it does:** When the guest reaches the payment step, the ESP32 (connected via USB) continuously reads for card taps and prints the UID to serial. The Node.js backend reads the serial port directly and auto-advances the payment flow.
 
 **Setup:**
 
-1. Flash the ESP32 with the NFC firmware (in `camera-and-nfc/Identification-and-payment-app/arduinofile.cpp`)
-2. Connect the PN532 NFC reader to the ESP32 (I2C: SDA=21, SCL=22)
-3. Put the ESP32 on the same WiFi network as the machine running the backend
+1. Flash the ESP32 with the simplified NFC firmware (in `camera-and-nfc/Identification-and-payment-app/arduinofile.cpp`)
+2. Connect the PN532 NFC reader to the ESP32 (I2C: SDA=21, SCL=22, RST=18, LED=2)
+3. Connect the ESP32 to your machine via USB
 4. Set in `.env`:
    ```
-   NFC_SHARED_SECRET_KEY=your16charkey!!
-   ESP32_WIFI_START_URL=http://192.168.x.x/start
+   NFC_MODE=serial
+   NFC_SERIAL_PORT=/dev/ttyUSB0
    ```
-   - `NFC_SHARED_SECRET_KEY` must be exactly 16 characters and must match what's in the ESP32 firmware
-   - `ESP32_WIFI_START_URL` is the ESP32's IP on your network followed by `/start`
-
-5. **Important:** The ESP32 needs to know where to send the NFC UID back. In the ESP32 firmware, set the callback URL to point at your backend:
-   ```
-   http://<your-backend-ip>:3001/api/checkin/nfc-uid
-   ```
+   - On Mac: use `/dev/cu.usbserial-*` or `/dev/cu.SLAB_USBtoUART`
+   - On Jetson/Linux: use `/dev/ttyUSB0`
+   - Find the exact port in Arduino IDE under Tools → Port
 
 **How it works at runtime:**
+- ESP32 boots up, initializes PN532, turns LED on (always ready)
 - Guest reaches the payment screen
-- Frontend calls `POST /api/checkin/activate-nfc` which sends encrypted "ACTIVATE" to ESP32
-- ESP32 turns on the NFC reader and its LED
+- Frontend calls `POST /api/checkin/activate-nfc` which opens the serial port
 - Guest taps their NFC card
-- ESP32 reads the UID, encrypts it, and POSTs to `POST /api/checkin/nfc-uid`
-- Backend decrypts and stores the UID, maps it to a card last-4 via `NFC_UID_TO_LAST4`
+- ESP32 prints the UID as hex (e.g. `09C9C802`) to Serial
+- Backend reads the UID, maps it to a card last-4 via `NFC_UID_TO_LAST4`, and closes the serial port
 - Frontend polls `GET /api/checkin/nfc-status` every 1.5s and auto-advances when detected
 - If the ESP32 is unreachable or NFC fails, the guest can tap **"Skip — Pay Without Card Reader"** to proceed with simulated payment
 
 **Things to note:**
 - The NFC UID-to-card mapping is configured via `NFC_UID_TO_LAST4` in `.env` (default: `{"09C9C802":"5264"}`). Add your NFC card UIDs to this map.
-- All communication between backend and ESP32 is AES-128-CBC encrypted with a shared key.
+- No WiFi, HTTP, or encryption needed — just USB serial communication.
 - The backend stores received UIDs in memory — they expire after 30 seconds.
+- **Legacy WiFi mode:** Set `NFC_MODE=wifi` to use the old encrypted WiFi handshake (requires `NFC_SHARED_SECRET_KEY` and `ESP32_WIFI_START_URL`).
 
 ### Bypass Buttons
 
@@ -374,8 +371,8 @@ This ensures the demo never gets stuck if hardware isn't connected or malfunctio
 │                                   │
 │  Hardware Integration:            │
 │  ┌──────────────┐  ┌───────────┐ │    ┌──────────┐
-│  │ Passport Scan│  │ NFC Crypto│◄┼────│  ESP32   │
-│  │ (Python OCR) │  │ (AES-CBC) │ │    │ + PN532  │
+│  │ Passport Scan│  │NFC Serial │◄┼────│  ESP32   │
+│  │ (Python OCR) │  │(USB Port) │ │    │ + PN532  │
 │  └──────────────┘  └───────────┘ │    └──────────┘
 │                                   │
 │  On check-in complete:            │
