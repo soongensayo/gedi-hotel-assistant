@@ -73,9 +73,8 @@ export async function decodeToPCM16(
 export function sendPCM16ToSimli(
   client: { sendAudioData: (data: Uint8Array) => void },
   pcm16Data: Uint8Array,
-  chunkSize = 6000
+  chunkSize = 32000
 ): void {
-  // Send in chunks for smoother streaming
   for (let offset = 0; offset < pcm16Data.length; offset += chunkSize) {
     const end = Math.min(offset + chunkSize, pcm16Data.length);
     const chunk = pcm16Data.slice(offset, end);

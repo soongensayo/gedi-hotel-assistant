@@ -45,51 +45,61 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
 
       if (client && isConnected) {
         // ────────────────────────────────────────────────────
-        // OPTIMISED AVATAR PATH
-        // Split into sentences → parallel TTS → stream to Simli in order
-        // Falls back to local audio if Simli streaming fails
+        // AVATAR PATH
+        // Parallel TTS fetch → decode all → concatenate into one
+        // continuous PCM buffer → send to Simli as a single stream.
+        // This avoids inter-sentence gaps that cause SPEAK/SILENT stutter.
+        // Falls back to local audio if Simli streaming fails.
         // ────────────────────────────────────────────────────
         const sentences = splitIntoSentences(text);
         console.log(`[VoiceOutput] Parallel TTS for ${sentences.length} sentence(s)`);
 
-        const ttsPromises = sentences.map((sentence) => synthesizeSpeech(sentence));
-
-        let totalPCMBytes = 0;
-        let simliFailed = false;
+        const ttsPromises = sentences.map((s) => synthesizeSpeech(s));
+        const pcmChunks: Uint8Array[] = [];
 
         for (let i = 0; i < ttsPromises.length; i++) {
-          if (signal.aborted) {
-            console.log(`[VoiceOutput] Interrupted, stopping after sentence ${i}`);
-            return;
-          }
-
-          if (simliFailed) break;
-
+          if (signal.aborted) return;
           try {
             const audioBlob = await ttsPromises[i];
             if (signal.aborted) return;
             const arrayBuffer = await audioBlob.arrayBuffer();
             const pcm16Data = await decodeToPCM16(arrayBuffer, 16000);
-            if (signal.aborted) return;
-
-            sendPCM16ToSimli(client, pcm16Data);
-            totalPCMBytes += pcm16Data.length;
-
+            pcmChunks.push(pcm16Data);
             console.log(
-              `[VoiceOutput] ✓ Sentence ${i + 1}/${sentences.length} sent ` +
+              `[VoiceOutput] ✓ Decoded sentence ${i + 1}/${sentences.length} ` +
               `(${pcm16Data.length} bytes)`
             );
           } catch (err) {
             if (signal.aborted) return;
-            console.warn(`[VoiceOutput] Simli send failed at sentence ${i + 1}, falling back to local audio`);
-            simliFailed = true;
+            console.warn(`[VoiceOutput] Decode failed for sentence ${i + 1}, skipping`);
           }
         }
 
         if (signal.aborted) return;
 
-        if (simliFailed) {
-          console.log('[VoiceOutput] Simli unavailable — replaying full text via local audio');
+        if (pcmChunks.length === 0) {
+          console.log('[VoiceOutput] All decodes failed — falling back to local audio');
+          const audioBlob = await synthesizeSpeech(text);
+          if (signal.aborted) return;
+          const arrayBuffer = await audioBlob.arrayBuffer();
+          if (signal.aborted) return;
+          playLocalAudio(arrayBuffer);
+          return;
+        }
+
+        const totalLen = pcmChunks.reduce((sum, c) => sum + c.length, 0);
+        const combined = new Uint8Array(totalLen);
+        let offset = 0;
+        for (const chunk of pcmChunks) {
+          combined.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        console.log(`[VoiceOutput] Sending ${totalLen} bytes as one continuous stream`);
+        try {
+          sendPCM16ToSimli(client, combined);
+        } catch (err) {
+          console.warn('[VoiceOutput] Simli send failed — falling back to local audio');
           const audioBlob = await synthesizeSpeech(text);
           if (signal.aborted) return;
           const arrayBuffer = await audioBlob.arrayBuffer();
@@ -99,7 +109,7 @@ export function useVoiceOutput(): UseVoiceOutputReturn {
         }
 
         // PCM16 @ 16 kHz = 32 000 bytes / sec
-        const durationMs = (totalPCMBytes / 32000) * 1000;
+        const durationMs = (totalLen / 32000) * 1000;
         speakTimeoutRef.current = setTimeout(() => {
           speakTimeoutRef.current = null;
           setIsSpeaking(false);
