@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAvatar } from '../../hooks/useAvatar';
+import { useConversationStore } from '../../stores/conversationStore';
 import { HologramOverlay } from './HologramOverlay';
 
 interface AvatarDisplayProps {
@@ -15,6 +16,21 @@ interface AvatarDisplayProps {
  */
 export function AvatarDisplay({ className = '' }: AvatarDisplayProps) {
   const { isConnected, isSpeaking, isLoading, videoRef, audioRef, startAvatar, error } = useAvatar();
+  const isFetchingReply = useConversationStore((s) => s.isLoading);
+
+  const [showThinking, setShowThinking] = useState(false);
+
+  useEffect(() => {
+    if (isFetchingReply) {
+      setShowThinking(true);
+    }
+  }, [isFetchingReply]);
+
+  useEffect(() => {
+    if (isSpeaking) {
+      setShowThinking(false);
+    }
+  }, [isSpeaking]);
 
   // Auto-start the avatar when the component mounts and refs are attached
   useEffect(() => {
@@ -99,6 +115,27 @@ export function AvatarDisplay({ className = '' }: AvatarDisplayProps) {
                 }}
               />
             ))}
+          </div>
+        )}
+
+        {/* Thinking indicator — shown while waiting for AI response */}
+        {showThinking && !isSpeaking && (
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2.5">
+            <span className="text-hotel-accent text-sm font-light tracking-[0.2em] uppercase animate-pulse">
+              One moment please
+            </span>
+            <div className="flex items-center gap-2">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="w-1.5 h-1.5 rounded-full bg-hotel-accent"
+                  style={{
+                    animation: 'thinking-dot 1.4s ease-in-out infinite',
+                    animationDelay: `${i * 0.2}s`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
