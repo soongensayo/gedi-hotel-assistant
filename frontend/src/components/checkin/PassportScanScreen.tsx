@@ -6,7 +6,6 @@ import {
   getPassportScanStatus,
   stopPassportScan,
 } from '../../services/api';
-import type { PassportScanStatus } from '../../services/api';
 
 type ScanPhase = 'scanning' | 'success' | 'failed';
 
@@ -18,7 +17,6 @@ export function PassportScanScreen() {
 
   const [phase, setPhase] = useState<ScanPhase>('scanning');
   const [attempts, setAttempts] = useState(0);
-  const [scanData, setScanData] = useState<PassportScanStatus['data'] | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
 
@@ -37,8 +35,6 @@ export function PassportScanScreen() {
   const doStart = useCallback(async () => {
     setPhase('scanning');
     setAttempts(0);
-    setScanData(null);
-
     try {
       await startPassportScan();
     } catch {
@@ -56,7 +52,6 @@ export function PassportScanScreen() {
 
         if (status.status === 'success') {
           clearPolling();
-          setScanData(status.data ?? null);
           setPhase('success');
           setTimeout(() => {
             if (mountedRef.current) {
@@ -95,7 +90,7 @@ export function PassportScanScreen() {
       <h2 className="text-2xl font-light text-hotel-text">Passport Scanner</h2>
 
       {phase === 'scanning' && <ScanningIndicator attempts={attempts} />}
-      {phase === 'success' && <SuccessIndicator data={scanData} />}
+      {phase === 'success' && <SuccessIndicator />}
 
       {phase === 'failed' && (
         <>
@@ -155,11 +150,7 @@ function ScanningIndicator({ attempts }: { attempts: number }) {
   );
 }
 
-function SuccessIndicator({ data }: { data?: PassportScanStatus['data'] | null }) {
-  const displayName = data
-    ? `${data.firstName} ${data.lastName}`.trim()
-    : '';
-
+function SuccessIndicator() {
   return (
     <>
       <div className="relative w-80 h-52 rounded-2xl border-2 border-emerald-400/40 bg-emerald-400/5 flex items-center justify-center">
@@ -168,12 +159,7 @@ function SuccessIndicator({ data }: { data?: PassportScanStatus['data'] | null }
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p className="text-emerald-400 text-sm font-medium">Passport detected</p>
-          {displayName && (
-            <p className="text-hotel-text text-base font-medium">{displayName}</p>
-          )}
-          {data?.passportNumber && (
-            <p className="text-hotel-text-dim text-xs tracking-wider">{data.passportNumber}</p>
-          )}
+          <p className="text-hotel-text-dim text-xs">Thank you — processing your details...</p>
         </div>
       </div>
     </>

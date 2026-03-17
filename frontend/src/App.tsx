@@ -57,7 +57,7 @@ function App() {
 
             {/* Floating overlay for wizard step content */}
             {showOverlay && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-30 p-4">
+              <div className="absolute inset-0 flex items-center justify-center z-30 p-4">
                 <div className="glass-panel w-full max-w-2xl max-h-[75vh] overflow-y-auto">
                   <CheckinOverlayContent />
                 </div>
