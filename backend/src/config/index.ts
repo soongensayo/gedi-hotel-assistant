@@ -57,6 +57,9 @@ export const config = {
     }
   })() as Record<string, string>,
 
+  // Sesto Robot
+  sestoApiUrl: process.env.SESTO_API_URL || '',
+
   // Hotel
   hotelName: process.env.HOTEL_NAME || 'The Grand Azure Hotel',
 

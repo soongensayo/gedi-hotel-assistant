@@ -9,7 +9,9 @@ import {
   lookupReservation,
   lookupReservationByPassport,
   lookupReservationByName,
+  getRoomWaypointId,
 } from './hotelService';
+import { navigateToWaypoint } from './sestoService';
 
 // =============================================================================
 // Types
@@ -23,7 +25,8 @@ export interface AIAction {
     | 'skip_passport_scanner'
     | 'show_payment'
     | 'show_key_card'
-    | 'store_reservation';
+    | 'store_reservation'
+    | 'move_to_room';
   /** Optional payload — e.g. the step name for set_step, or reservation data */
   payload?: Record<string, unknown>;
 }
@@ -194,6 +197,24 @@ const CONCIERGE_TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'move_to_room',
+      description:
+        'Start navigating the robot to escort the guest to their room. Call this ONLY when the guest explicitly agrees to be escorted after check-in is complete.',
+      parameters: {
+        type: 'object',
+        properties: {
+          roomId: {
+            type: 'string',
+            description: 'The room ID from the guest\'s reservation.',
+          },
+        },
+        required: ['roomId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'set_checkin_step',
       description:
         'Update the check-in progress bar to a specific step. Use this to keep the UI in sync with the conversation flow.',
@@ -313,6 +334,27 @@ async function executeToolCall(
         result: { success: true, message: 'Key card screen displayed to guest.' },
         action: { type: 'show_key_card' },
       };
+    case 'move_to_room': {
+      const waypointId = await getRoomWaypointId(args.roomId as string);
+      if (!waypointId) {
+        return {
+          result: { success: false, message: 'Could not find a robot waypoint for this room. Apologize and offer to give directions instead.' },
+        };
+      }
+      const navResult = await navigateToWaypoint(waypointId);
+      return {
+        result: {
+          success: navResult.success,
+          message: navResult.success
+            ? 'Robot is now moving to the guest\'s room. Let the guest know you\'re on your way and keep chatting naturally.'
+            : `Navigation failed: ${navResult.message}. Apologize and offer to give directions instead.`,
+          waypointId,
+        },
+        action: navResult.success
+          ? { type: 'move_to_room', payload: { roomId: args.roomId, waypointId } }
+          : undefined,
+      };
+    }
     case 'set_checkin_step':
       return {
         result: { success: true, message: `Check-in step set to: ${args.step}` },

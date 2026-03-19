@@ -20,6 +20,9 @@ interface CheckinState {
   
   // Payment
   paymentResult: PaymentResult | null;
+
+  // Robot escort
+  isEscorting: boolean;
   
   // AI-driven flow: pending message to send to AI on behalf of the user
   pendingMessage: string | null;
@@ -40,6 +43,7 @@ interface CheckinState {
   setAvailableUpgrades: (upgrades: RoomUpgrade[]) => void;
   setSelectedUpgrade: (upgrade: RoomUpgrade | null) => void;
   setPaymentResult: (result: PaymentResult) => void;
+  setIsEscorting: (val: boolean) => void;
   setPendingMessage: (msg: string | null) => void;
   resetSession: () => void;
 }
@@ -68,6 +72,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   availableUpgrades: [],
   selectedUpgrade: null,
   paymentResult: null,
+  isEscorting: false,
   pendingMessage: null,
   sessionId: generateSessionId(),
   sessionStartTime: null,
@@ -101,6 +106,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   setAvailableUpgrades: (upgrades) => set({ availableUpgrades: upgrades }),
   setSelectedUpgrade: (upgrade) => set({ selectedUpgrade: upgrade }),
   setPaymentResult: (result) => set({ paymentResult: result }),
+  setIsEscorting: (val) => set({ isEscorting: val }),
   setPendingMessage: (msg) => set({ pendingMessage: msg }),
 
   resetSession: () => set({
@@ -113,6 +119,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     availableUpgrades: [],
     selectedUpgrade: null,
     paymentResult: null,
+    isEscorting: false,
     pendingMessage: null,
     sessionId: generateSessionId(),
     sessionStartTime: null,

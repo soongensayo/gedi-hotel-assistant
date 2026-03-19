@@ -39,6 +39,7 @@ export interface Room {
   imageUrl?: string;
   isAvailable: boolean;
   description: string;
+  roomForRobot?: string;
 }
 
 export interface RoomUpgrade {

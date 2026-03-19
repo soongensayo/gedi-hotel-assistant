@@ -52,6 +52,9 @@ function useActionProcessor() {
           case 'show_key_card':
             setStep('key-card');
             break;
+          case 'move_to_room':
+            useCheckinStore.getState().setIsEscorting(true);
+            break;
         }
       }
     },
