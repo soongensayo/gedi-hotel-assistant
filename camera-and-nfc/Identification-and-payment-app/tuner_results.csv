@@ -1,0 +1,13 @@
+rank,index,total,overall_score,name_score,passport_score,elapsed_s,returncode,timed_out,passport_id,guest_name,line1,line2,output_path,output_excerpt,SCAN_GAMMA,SCAN_CONTRAST,SCAN_PRE_SHARPNESS,SCAN_CLAHE_CLIP,SCAN_VARIANT_SHARPNESS,SCAN_MRZ_LAB_POOL_WEIGHT
+1,1,1,0.4799,0.7931,0.1667,18.45,0,0,AOCAN9OO8,AARTINK SADAH,PPCANAARTINK<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<,AOCAN9OO8010F330T1<<6<06<P123456AAOCAN9OO8O1,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Given names       : -
+  Guest name (MRZ)  : AARTINK SADAH
+  Passport number   : AOCAN9OO8  (check digit 0 (OK))
+  -> passport_id used : AOCAN9OO8
+  -> guest_name used  : AARTINK SADAH
+--- Passport ID consensus ---
+  1. AOCAN9OO8 (score=0.11, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  2. AAOCAR900 (score=0.01, 2 vote(s), 2 check-digit pass(es))
+  -> Selected Passport ID: AOCAN9OO8 (score=0.11, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  1. AARTINK SADAH (score=0.12, 3 vote(s)) [SELECTED]
+  -> Selected Guest Name: AARTINK SADAH (score=0.12, 3 vote(s))",0.90,145,0,1.60,30,0.05

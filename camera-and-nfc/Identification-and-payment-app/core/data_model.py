@@ -25,7 +25,8 @@ class CheckInData:
     passport_id: Optional[str] = None  # e.g. "AB1234567"
     # Dict[str, Any] = a dictionary with string keys and any type of values
     card_details: Optional[Dict[str, Any]] = None  # e.g. {"card_no": "1234...", "expiry": "12/25", ...}
-    # Deskewed passport image as base64 (for hotel records); set when passport is scanned, sent on confirm
+    # Passport alignment crop as base64 PNG (gamma/contrast preprocessed; not globally deskewed).
+    # MRZ deskew applies only to the combined MRZ strip during OCR. Set when passport is scanned, sent on confirm.
     passport_image_base64: Optional[str] = None
     # NFC UID linked to this guest's card (from NFC reader)
     nfc_uid: Optional[str] = None

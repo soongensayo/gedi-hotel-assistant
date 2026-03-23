@@ -10,7 +10,6 @@ Hotel guest check-in: passport scan (MRZ), stay lookup, credit card capture, and
    ```bash
    pip install -r requirements.txt
    ```
-   Also install Tesseract (see Tesseract Setup section in [DEPLOYMENT.md](DEPLOYMENT.md)).
 
 2. **EasyOCR models (required for passport/card OCR)**  
    Run once with internet:
@@ -20,7 +19,7 @@ Hotel guest check-in: passport scan (MRZ), stay lookup, credit card capture, and
    See [DEPLOYMENT.md](DEPLOYMENT.md) for Windows SSL/Unicode tips and edge deployment.
 
 3. **Config**  
-Copy `.env.example` to `.env` and set `SUPABASE_URL`, `SUPABASE_ANON_KEY` (and optional `CAMERA_INDEX`, `EASYOCR_MODULE_PATH`, `OCR_TIMING`, `DEBUG_ACTIVATE`, `DESKEW_ENABLE`). See [DEPLOYMENT.md](DEPLOYMENT.md) for all variables.
+Copy `.env.example` to `.env` and set `SUPABASE_URL`, `SUPABASE_ANON_KEY` (and optional `CAMERA_INDEX`, `EASYOCR_MODULE_PATH`, `OCR_TIMING`, `DEBUG_ACTIVATE`, `DESKEW_ENABLE`, `DESKEW_CACHE_ANGLE`). Passport MRZ **strip** deskew (and card full-crop deskew) is **on** by default; see [DEPLOYMENT.md](DEPLOYMENT.md) for all variables.
 
 4. **Run**
    ```bash

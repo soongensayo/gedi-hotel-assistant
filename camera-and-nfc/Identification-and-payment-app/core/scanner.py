@@ -1,11 +1,12 @@
 """Camera OCR and Passport/Card scanning functionality.
 
-Architecture: Two-Pass "Straighten-then-Search". Pass 1 uses EasyOCR only to get
-median text tilt and rotate the crop to a level Base Image; no boxes from Pass 1
-are used for recognition. Pass 2 runs a dedicated EasyOCR detection on the straightened
-image for document-specific targets (MRZ lines in bottom 40% for passport; PAN + MM/YY
-for card). Only Pass 2 coordinates, expanded by 10px vertical and 95% width, feed the
-6-variant shotgun OCR and the debug/variants/ visuals.
+**Passport:** Preprocessed alignment crop → Pass 2 EasyOCR MRZ line hunt (full crop, may be tilted) →
+union of MRZ boxes → **deskew only the combined MRZ strip** → 5-variant shotgun OCR on that strip.
+
+**Card:** Pass 1 text-based deskew on the full alignment crop, then Pass 2 EasyOCR for PAN / MM/YY /
+name. Pass 2 coordinates (expanded) feed the 5-variant shotgun OCR
+(v5 = gray→BGR then LAB+CLAHE on L; v6 = BGR sharp only → LAB+CLAHE on L → BGR, no gray step)
+and debug/variants/ visuals.
 """
 
 import base64
@@ -82,7 +83,7 @@ CARD_ZONES = {
     "card_type": (0.58, 0.70, 0.96, 0.96),     # bottom-right (Visa, Mastercard, etc.)
 }
 
-# MRZ zone: fractional (x1, y1, x2, y2) on deskewed passport; bottom strip with two 44-char lines.
+# MRZ zone: fractional (x1, y1, x2, y2) on passport alignment crop; bottom strip with two 44-char lines (legacy / tuning).
 MRZ_ZONE = (0.0, 0.72, 1.0, 1.0)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -112,27 +113,6 @@ try:
 except (ImportError, RuntimeError):
     HAS_JETSON_GPIO = False
     logger.warning("Jetson GPIO not available - will use mock mode")
-
-try:
-    import pytesseract  # Wrapper for Tesseract OCR engine
-    HAS_TESSERACT = True
-
-    # On Windows, pytesseract needs the path to tesseract.exe if it's not in PATH
-    if sys.platform == "win32":
-        _tesseract_paths = [
-            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
-            os.path.expandvars(r"%USERPROFILE%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"),
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        ]
-        for _path in _tesseract_paths:
-            if os.path.isfile(_path):
-                pytesseract.pytesseract.tesseract_cmd = _path
-                logger.info("Using Tesseract at: %s", _path)
-                break
-except ImportError:
-    HAS_TESSERACT = False
-    logger.warning("pytesseract not available - OCR will be limited")
 
 import importlib.util
 
@@ -172,7 +152,7 @@ def _get_easyocr_reader():
 
     Uses EASYOCR_MODULE_PATH or project easyocr_models/ if present (offline/edge); otherwise
     default EasyOCR path (may download on first run; requires network and valid SSL).
-    Set DISABLE_EASYOCR=1 to force-disable EasyOCR and use Tesseract-only fallback.
+    Set DISABLE_EASYOCR=1 to force-disable EasyOCR entirely.
     """
     global OCR_READER, HAS_EASYOCR
     if OCR_READER is not None:
@@ -266,6 +246,303 @@ def _capture_best_frames(
     return [f for _, f in scored[:top_k]]
 
 
+def _capture_selection_config(doc_type: str) -> Tuple[int, int]:
+    """Return (num_frames_to_grab, top_k_to_keep) for the document capture flow."""
+    if doc_type.strip().lower() == "card":
+        return 3, 2
+    # Passport: grab 3 quick samples and keep only the single sharpest frame.
+    return 3, 1
+
+
+# ---------------------------------------------------------------------------
+# Dark-environment tuning — all configurable via .env
+# ---------------------------------------------------------------------------
+# Gamma < 1.0 brightens dark frames (e.g. 0.5 is aggressive, 0.7 is moderate).
+# Set SCAN_GAMMA=1.0 to disable (default). Applied to the raw crop before deskew.
+_SCAN_GAMMA = float(os.environ.get("SCAN_GAMMA", "0.7").strip())
+
+# Global tone after gamma (passport + card alignment crops, before deskew).
+# Set in .env (first non-empty wins for each):
+#   Brightness: SCAN_GLOBAL_BRIGHTNESS, SCAN_BRIGHTNESS, or ADJUST_BRIGHTNESS
+#   Contrast:   SCAN_GLOBAL_CONTRAST, SCAN_CONTRAST, or ADJUST_CONTRAST
+# Brightness: 0–255; 128 = no offset (beta = value − 128 per channel). Default 125.
+# Contrast: 50–200 = multiply by (value / 100); 100 = 1.0. Default 160.
+def _read_int_env(name: str, default: int, lo: int, hi: int) -> int:
+    try:
+        v = int(float(os.environ.get(name, str(default)).strip()))
+    except ValueError:
+        v = default
+    return max(lo, min(hi, v))
+
+
+def _read_int_env_first(names: Tuple[str, ...], default: int, lo: int, hi: int) -> int:
+    """Parse first defined env var in ``names``; empty string skips to next."""
+    for name in names:
+        raw = os.environ.get(name)
+        if raw is None:
+            continue
+        s = str(raw).strip()
+        if s == "":
+            continue
+        try:
+            v = int(float(s))
+            return max(lo, min(hi, v))
+        except ValueError:
+            continue
+    return max(lo, min(hi, default))
+
+
+_SCAN_GLOBAL_BRIGHTNESS = _read_int_env_first(
+    ("SCAN_GLOBAL_BRIGHTNESS", "SCAN_BRIGHTNESS", "ADJUST_BRIGHTNESS"),
+    125,
+    0,
+    255,
+)
+_SCAN_GLOBAL_CONTRAST = _read_int_env_first(
+    ("SCAN_GLOBAL_CONTRAST", "SCAN_CONTRAST", "ADJUST_CONTRAST"),
+    160,
+    50,
+    200,
+)
+
+# When True, skip the fixed center-crop alignment box and pass the full camera frame
+# into the pipeline. Use this when the passport position is unpredictable (shifted/tilted).
+_SCAN_FULL_FRAME = os.environ.get("SCAN_FULL_FRAME", "").strip().lower() in ("1", "true", "yes")
+
+# CLAHE clip limit for OCR variants v5_lab_clahe / v6_lab_clahe (L channel in LAB).
+# Higher = more aggressive contrast stretching; useful in dim lighting.
+# Default 2.5; set SCAN_CLAHE_CLIP=1.2 to revert to the original subtle value.
+_SCAN_CLAHE_CLIP = float(os.environ.get("SCAN_CLAHE_CLIP", "2.5").strip())
+
+# CLAHE clip limit used for the EasyOCR detection master (deskew + MRZ hunt).
+# Default 3.0; set SCAN_CLAHE_MASTER_CLIP=2.0 to revert to original value.
+_SCAN_CLAHE_MASTER_CLIP = float(os.environ.get("SCAN_CLAHE_MASTER_CLIP", "3.0").strip())
+
+# After gamma + brightness + contrast on the alignment crop, before deskew (see .env.example).
+_SCAN_PRE_SATURATION = _read_int_env_first(
+    ("SCAN_PRE_SATURATION", "SCAN_SATURATION", "ADJUST_SATURATION"),
+    100,
+    0,
+    200,
+)
+_SCAN_PRE_DENOISE = _read_int_env_first(
+    ("SCAN_PRE_DENOISE", "SCAN_DENOISE", "ADJUST_DENOISE"),
+    0,
+    0,
+    50,
+)
+_SCAN_PRE_ERODE = _read_int_env_first(
+    ("SCAN_PRE_ERODE", "SCAN_ERODE"),
+    0,
+    0,
+    7,
+)
+_SCAN_PRE_DILATE = _read_int_env_first(
+    ("SCAN_PRE_DILATE", "SCAN_DILATE"),
+    0,
+    0,
+    7,
+)
+_SCAN_PRE_SHARPNESS = _read_int_env_first(
+    ("SCAN_PRE_SHARPNESS", "SCAN_PREPROCESS_SHARPNESS"),
+    50,
+    0,
+    100,
+)
+# Unsharp strength for OCR variants v2 / v3 (_sharpen_for_ocr). 0 = off; 50 ≈ mid.
+# Env is 0–125: value/100 → weight *a* in addWeighted, capped at *a*≤1.25 in _sharpen_for_ocr.
+# So SCAN_VARIANT_SHARPNESS=100 → a=1.0; 125 → a=1.25 (maximum sharpening in code).
+_SCAN_VARIANT_SHARPNESS = _read_int_env_first(
+    ("SCAN_VARIANT_SHARPNESS", "SCAN_SHARPNESS_VARIANT", "ADJUST_SHARPNESS"),
+    50,
+    0,
+    125,
+)
+# Second unsharp pass applied on top of each built variant **except** v1_orig (0–125; 0 = off).
+# Runs after v2/v3 sharp, v4 gray, v5/v6 LAB+CLAHE so OCR/debug PNGs all get the extra edge boost.
+_SCAN_VARIANT_SECOND_SHARPNESS = _read_int_env_first(
+    ("SCAN_VARIANT_SECOND_SHARPNESS", "SCAN_VARIANT_EXTRA_SHARPNESS"),
+    0,
+    0,
+    125,
+)
+# When true, card alignment crop also gets SCAN_GAMMA before brightness/contrast (default: card skips gamma).
+_SCAN_CARD_USE_GAMMA = os.environ.get("SCAN_CARD_USE_GAMMA", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+# EasyOCR on v5/v6 LAB+CLAHE often returns short, over-confident fragments that sorted-by-conf
+# ``top_l1`` / ``top_l2`` would place first and poison ``combined_l1`` / ``combined_l2``.
+try:
+    _SCAN_MRZ_LAB_POOL_WEIGHT = float(os.environ.get("SCAN_MRZ_LAB_POOL_WEIGHT", "0.5").strip())
+except ValueError:
+    _SCAN_MRZ_LAB_POOL_WEIGHT = 0.5
+_SCAN_MRZ_LAB_POOL_WEIGHT = max(0.05, min(1.5, _SCAN_MRZ_LAB_POOL_WEIGHT))
+
+
+def _mrz_pool_variant_conf_scale(variant_key: str) -> float:
+    """Scale OCR confidence for MRZ pool merge / gating (LAB variants fragment more)."""
+    vk = (variant_key or "").lower()
+    mult = 1.0
+    if "v5_lab_clahe" in vk or "v6_lab_clahe" in vk:
+        mult *= float(_SCAN_MRZ_LAB_POOL_WEIGHT)
+    # Unprocessed strip often reads Line 1 cleanest; slight boost so merge/combined_l1 is not
+    # dominated by sharpened variants that stitch Line 1 + Line 2 in one EasyOCR row.
+    if "v1_orig" in vk:
+        mult *= 1.12
+    return mult
+
+
+def _mrz_l1_loose_looks_merged_with_line2(loose: str) -> bool:
+    """True when a *line-1 pool* string clearly embeds Line-2-style digits (two lines in one read)."""
+    if not loose:
+        return False
+    u = loose.upper()
+    tail = u[5:] if len(u) > 5 else u
+    # Long digit runs belong on TD3 Line 2, not inside Line 1 name field.
+    if re.search(r"\d{5,}", tail):
+        return True
+    # MRZ Line 2 often contains YYMMDD + sex + YYMMDD patterns when concatenated.
+    if re.search(r"\d{6}[MF<]\d", u):
+        return True
+    if _has_td3_line1_prefix(u):
+        nd = sum(1 for c in u if c.isdigit())
+        if nd >= 8:
+            return True
+    return False
+
+
+def _mrz_l1_loose_merge_priority(loose: str, conf: float) -> float:
+    """Rank line-1 pool fragments for cross-entry merge: prefer long TD3-shaped MRZ, not raw conf."""
+    if not loose:
+        return 0.0
+    if _mrz_l1_loose_looks_merged_with_line2(loose):
+        return -5000.0 + float(conf)
+    score = 0.0
+    if _has_td3_line1_prefix(loose):
+        score += 400.0
+    score += min(len(loose), 55) * 4.0
+    score += loose.count("<") * 6.0
+    score += float(conf) * 25.0
+    return score
+
+
+def _mrz_l2_loose_looks_merged_with_line1(loose: str) -> bool:
+    """True when a *line-2 pool* string clearly embeds a second TD3 Line-1 (L2 + L1 in one read).
+
+    EasyOCR often returns one box spanning both MRZ rows, e.g. ``...<<00PpcanrartINGESaram...``.
+    Those strings score very high on length/digits/chevrons and poison ``combined_l2``.
+    """
+    if not loose or len(loose) < 20:
+        return False
+    u = loose.upper()
+    # TD3 Line 2 starts with document number; a *second* ``P<`` / ``PP`` / ``P[A-Z]`` deep in the
+    # string is almost always the start of Line 1 stitched onto Line 2.
+    for i in range(15, len(u) - 1):
+        if u[i] != "P":
+            continue
+        nxt = u[i + 1]
+        if nxt == "<" or ("A" <= nxt <= "Z"):
+            return True
+    return False
+
+
+def _mrz_l2_loose_merge_priority(loose: str, conf: float) -> float:
+    """Rank line-2 pool fragments: long, digit-heavy, chevron-heavy; de-prioritize TD3 line-1 headers."""
+    if not loose:
+        return 0.0
+    if _mrz_l2_loose_looks_merged_with_line1(loose):
+        return -5000.0 + float(conf)
+    digits = sum(1 for ch in loose if ch.isdigit())
+    score = min(len(loose), 55) * 2.0 + digits * 3.0 + loose.count("<") * 2.0
+    if _has_td3_line1_prefix(loose):
+        score -= 80.0
+    score += float(conf) * 20.0
+    return score
+
+
+def _apply_pre_alignment_extras(image: "np.ndarray") -> "np.ndarray":
+    """Saturation, denoise, morphology, unsharp on BGR crop (``SCAN_PRE_*``)."""
+    if not HAS_OPENCV or image is None or image.size == 0:
+        return image
+    try:
+        from camera_adjustment._tuner_preproc import (  # type: ignore[import-untyped]
+            apply_dilate,
+            apply_denoise_bilateral,
+            apply_erode,
+            apply_saturation_hsv,
+            apply_sharpen_unsharp,
+        )
+
+        out = apply_saturation_hsv(image.copy(), _SCAN_PRE_SATURATION)
+        out = apply_denoise_bilateral(out, _SCAN_PRE_DENOISE)
+        # Optional morphology can close broken MRZ strokes or thin noisy blobs before OCR.
+        out = apply_erode(out, _SCAN_PRE_ERODE)
+        out = apply_dilate(out, _SCAN_PRE_DILATE)
+        out = apply_sharpen_unsharp(out, _SCAN_PRE_SHARPNESS)
+        return out
+    except Exception:
+        return image
+
+
+def _gamma_correct(image: "np.ndarray", gamma: float = 0.7) -> "np.ndarray":
+    """Brighten a dark frame using a lookup-table gamma correction.
+
+    gamma < 1.0 → brightens (good for dark environments).
+    gamma = 1.0 → no change.
+    gamma > 1.0 → darkens.
+    """
+    if not HAS_OPENCV or image is None or image.size == 0 or abs(gamma - 1.0) < 0.01:
+        return image
+    try:
+        import numpy as np
+        inv_gamma = 1.0 / max(gamma, 0.01)
+        lut = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)], dtype=np.uint8)
+        return cv2.LUT(image, lut)
+    except Exception:
+        return image
+
+
+def _apply_global_brightness_contrast(image: "np.ndarray") -> "np.ndarray":
+    """Linear brightness offset then contrast gain (``SCAN_GLOBAL_BRIGHTNESS``, ``SCAN_GLOBAL_CONTRAST``)."""
+    if not HAS_OPENCV or image is None or image.size == 0:
+        return image
+    try:
+        out = image
+        beta = float(_SCAN_GLOBAL_BRIGHTNESS - 128)
+        if abs(beta) > 0.01:
+            out = cv2.convertScaleAbs(out, alpha=1.0, beta=beta)
+        c = max(0.1, min(2.5, _SCAN_GLOBAL_CONTRAST / 100.0))
+        if abs(c - 1.0) > 0.001:
+            if out.ndim == 2:
+                out = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
+            out = np.clip(out.astype(np.float32) * c, 0, 255).astype(np.uint8)
+        return out
+    except Exception:
+        return image
+
+
+def _preprocess_passport_alignment_crop(crop: "np.ndarray") -> "np.ndarray":
+    """Gamma, brightness/contrast, then pre-alignment sat/denoise/sharp before deskew."""
+    if crop is None or crop.size == 0:
+        return crop
+    out = _gamma_correct(crop, _SCAN_GAMMA)
+    out = _apply_global_brightness_contrast(out)
+    return _apply_pre_alignment_extras(out)
+
+
+def _preprocess_card_alignment_crop(crop: "np.ndarray") -> "np.ndarray":
+    """Optional gamma, brightness/contrast, pre-alignment extras (``SCAN_CARD_USE_GAMMA``)."""
+    if crop is None or crop.size == 0:
+        return crop
+    out = crop
+    if _SCAN_CARD_USE_GAMMA:
+        out = _gamma_correct(out, _SCAN_GAMMA)
+    out = _apply_global_brightness_contrast(out)
+    return _apply_pre_alignment_extras(out)
+
+
 def _apply_clahe_bgr(image: "np.ndarray", clip_limit: float = 2.0, grid_size: int = 8) -> "np.ndarray":
     """Apply CLAHE on the L channel (LAB) to improve contrast without changing color balance."""
     if not HAS_OPENCV or image is None or image.size == 0 or image.ndim != 3:
@@ -281,20 +558,28 @@ def _apply_clahe_bgr(image: "np.ndarray", clip_limit: float = 2.0, grid_size: in
         return image
 
 
-def _sharpen_for_ocr(image: "np.ndarray") -> "np.ndarray":
-    """Light sharpen for OCR variant images. Clipped to avoid artifacts."""
+def _unsharp_median_for_ocr(image: "np.ndarray", strength_0_125: int) -> "np.ndarray":
+    """Median-based unsharp mask; *strength_0_125* uses same scale as ``SCAN_VARIANT_SHARPNESS`` (capped *a*≤1.25)."""
     if not HAS_OPENCV or image is None or image.size == 0:
         return image
     try:
+        a = min(1.25, max(0.0, float(strength_0_125) / 100.0))
+        if a <= 0.001:
+            return image
         blurred = cv2.medianBlur(image, 5)
-        sharpened = cv2.addWeighted(image, 1.5, blurred, -0.5, 0)
+        sharpened = cv2.addWeighted(image, 1.0 + a, blurred, -a, 0)
         return np.clip(sharpened, 0, 255).astype(np.uint8)
     except Exception:
         return image
 
 
+def _sharpen_for_ocr(image: "np.ndarray") -> "np.ndarray":
+    """Unsharp for OCR variant v2/v3; strength from ``SCAN_VARIANT_SHARPNESS`` (0–125, see module constant)."""
+    return _unsharp_median_for_ocr(image, _SCAN_VARIANT_SHARPNESS)
+
+
 def _capture_frame_via_tkinter(cap: "cv2.VideoCapture", doc_type: str = "passport") -> List["np.ndarray"]:
-    """Tkinter camera preview. Returns top-2 raw (unenhanced) frames on capture.
+    """Tkinter camera preview. Returns the configured best raw frame(s) on capture.
     doc_type: 'passport' or 'card' to show the correct alignment box."""
     if not HAS_TKINTER_PREVIEW or not HAS_OPENCV:
         return []
@@ -341,7 +626,8 @@ def _capture_frame_via_tkinter(cap: "cv2.VideoCapture", doc_type: str = "passpor
         lbl.configure(text="Hold steady... capturing frames.")
         root.update()
         time.sleep(0.6)
-        captured_frames = _capture_best_frames(cap, num_frames=10, interval_ms=75, top_k=2)
+        num_frames, top_k = _capture_selection_config(doc_type)
+        captured_frames = _capture_best_frames(cap, num_frames=num_frames, interval_ms=75, top_k=top_k)
         root.quit()
         root.destroy()
 
@@ -362,18 +648,6 @@ def _capture_frame_via_tkinter(cap: "cv2.VideoCapture", doc_type: str = "passpor
         if not ret:
             after_id[0] = root.after(30, update_frame)
             return
-        height, width = frame.shape[:2]
-        if use_card_rect:
-            rect_w = min(RECT_W, width - 20)
-            rect_h = min(RECT_H, height - 20)
-        else:
-            rect_w = min(PASSPORT_RECT_W, width - 20)
-            rect_h = min(PASSPORT_RECT_H, height - 20)
-        x1 = (width - rect_w) // 2
-        y1 = (height - rect_h) // 2
-        x2 = x1 + rect_w
-        y2 = y1 + rect_h
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(rgb)
         img = ImageTk.PhotoImage(img)
@@ -388,10 +662,11 @@ def _capture_frame_via_tkinter(cap: "cv2.VideoCapture", doc_type: str = "passpor
 
 
 def _capture_frames_from_camera(doc_type: str = "passport") -> List["np.ndarray"]:
-    """Open camera, show live preview (OpenCV window; fallback to tkinter), and capture top-2 sharpest frames.
+    """Open camera, show live preview (OpenCV window; fallback to tkinter), and capture the configured sharpest frame(s).
     doc_type: 'passport' uses PASSPORT_RECT_*, 'card' uses RECT_* (card crop).
 
-    Returns a list of up to 2 raw frames (best-first), or empty list on failure / cancel.
+    Passport keeps the sharpest 1 of 3 frames; card keeps the sharpest 2 of 3.
+    Returns raw frames best-first, or empty list on failure / cancel.
     """
     if not HAS_OPENCV:
         logger.warning("OpenCV not available - cannot open camera")
@@ -417,29 +692,17 @@ def _capture_frames_from_camera(doc_type: str = "passport") -> List["np.ndarray"
                     logger.error("Failed to read frame from camera")
                     break
 
-                height, width = frame.shape[:2]
-                if use_card_rect:
-                    rect_w = min(RECT_W, width - 20)
-                    rect_h = min(RECT_H, height - 20)
-                else:
-                    rect_w = min(PASSPORT_RECT_W, width - 20)
-                    rect_h = min(PASSPORT_RECT_H, height - 20)
-                x1 = (width - rect_w) // 2
-                y1 = (height - rect_h) // 2
-                x2 = x1 + rect_w
-                y2 = y1 + rect_h
-
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 cv2.imshow(window_name, frame)
                 key = cv2.waitKey(1) & 0xFF
 
                 # Space or Enter to capture
                 if key in (32, 13):
                     time.sleep(0.5)
-                    top2 = _capture_best_frames(cap, num_frames=10, interval_ms=75, top_k=2)
+                    num_frames, top_k = _capture_selection_config(doc_type)
+                    picked = _capture_best_frames(cap, num_frames=num_frames, interval_ms=75, top_k=top_k)
                     cap.release()
                     cv2.destroyWindow(window_name)
-                    return top2
+                    return picked
                 # Esc to cancel
                 if key == 27:
                     break
@@ -459,13 +722,14 @@ def _capture_frames_from_camera(doc_type: str = "passport") -> List["np.ndarray"
             print("Take your time. Press Enter when you are ready to capture.")
             input()
             print("Capturing now...")
-            top2 = _capture_best_frames(cap, num_frames=10, interval_ms=75, top_k=2)
+            num_frames, top_k = _capture_selection_config(doc_type)
+            picked = _capture_best_frames(cap, num_frames=num_frames, interval_ms=75, top_k=top_k)
             cap.release()
             try:
                 cv2.destroyAllWindows()
             except Exception:
                 pass
-            return top2
+            return picked
 
     except Exception as exc:
         logger.error("Error during camera capture: %s", exc, exc_info=True)
@@ -587,7 +851,14 @@ def _crop_to_alignment_region(frame: "np.ndarray") -> "np.ndarray":
 
 
 def _crop_passport_alignment_region(frame: "np.ndarray") -> "np.ndarray":
-    """Crop frame to the center PASSPORT_RECT_W x PASSPORT_RECT_H region (passport data page)."""
+    """Crop frame to the center PASSPORT_RECT_W x PASSPORT_RECT_H region (passport data page).
+
+    When SCAN_FULL_FRAME=1 is set in .env the full camera frame is returned without
+    cropping, allowing detection of passports that are shifted or tilted out of the
+    standard alignment box.
+    """
+    if _SCAN_FULL_FRAME:
+        return frame
     height, width = frame.shape[:2]
     rect_w = min(PASSPORT_RECT_W, width - 20)
     rect_h = min(PASSPORT_RECT_H, height - 20)
@@ -607,17 +878,6 @@ def _show_capture_for_verification(frame: "np.ndarray", doc_type: str = "passpor
     else:
         display = _crop_passport_alignment_region(frame)
     try:
-        height, width = display.shape[:2]
-        max_side = 800
-        if width > 0 and height > 0:
-            scale = max_side / max(width, height)
-            new_w = int(width * scale)
-            new_h = int(height * scale)
-            if scale > 1.0:
-                interp = cv2.INTER_LANCZOS4 if hasattr(cv2, "INTER_LANCZOS4") else cv2.INTER_CUBIC
-            else:
-                interp = cv2.INTER_AREA
-            display = cv2.resize(display, (new_w, new_h), interpolation=interp)
         rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
     except Exception:
         rgb = display if display.ndim == 3 else cv2.cvtColor(display, cv2.COLOR_GRAY2RGB)
@@ -680,29 +940,45 @@ def _show_capture_for_verification(frame: "np.ndarray", doc_type: str = "passpor
 
 # ---------------------------------------------------------------------------
 # debug_activate: when True, save all debug images to debug/variants/.
-# When False, no deskew_debug_zone, crop_debug_region, deskew_debug_passport,
-# variants (v1–v6) images are written. Set in .env as DEBUG_ACTIVATE.
+# When False, no deskew_debug_zone, deskew_debug_passport,
+# Variant debug images (v1–v5 for OCR pipeline) are written. Set in .env as DEBUG_ACTIVATE.
 # ---------------------------------------------------------------------------
 DEBUG_ACTIVATE = os.environ.get("DEBUG_ACTIVATE", "").strip().lower() in ("1", "true", "yes")
 _DEBUG_VARIANTS_BASE = _PROJECT_ROOT / "debug" / "variants"
 # Backward compat: flat dir used when doc_type is unknown; prefer _get_debug_variants_dir().
 _DEBUG_VARIANTS_DIR = _DEBUG_VARIANTS_BASE
 
-# When True, compute tilt from detection boxes and rotate the crop; when False, no angle or rotation (image used as-is). Set in .env as DESKEW_ENABLE.
-DESKEW_ENABLE = os.environ.get("DESKEW_ENABLE", "").strip().lower() in ("1", "true", "yes")
+# When True, compute tilt from detection boxes and rotate the crop; when False, no angle or rotation (image used as-is).
+# Default ON when unset; set DESKEW_ENABLE=0 / false / no / off to disable.
+_deskew_on = os.environ.get("DESKEW_ENABLE", "1").strip().lower()
+DESKEW_ENABLE = _deskew_on not in ("0", "false", "no", "off")
 
-TESSERACT_DEFAULT_CONFIDENCE = 0.5
+# After the first full deskew (EasyOCR + angle) per label in a batch, reuse the measured tilt and only
+# apply cv2.warpAffine — skips the deskew readtext() call. Reset at the start of each multi-frame scan.
+_deskew_cache_on = os.environ.get("DESKEW_CACHE_ANGLE", "1").strip().lower()
+DESKEW_CACHE_ANGLE = _deskew_cache_on not in ("0", "false", "no", "off")
+
+# Passport only: after coarse Hough/box tilt, search ±few degrees on MRZ band to maximize row-projection
+# sharpness (straighter horizontal text). Set DESKEW_REFINE_PASSPORT=0 to skip.
+_deskew_refine_p = os.environ.get("DESKEW_REFINE_PASSPORT", "1").strip().lower()
+DESKEW_REFINE_PASSPORT = _deskew_refine_p not in ("0", "false", "no", "off")
+
+# label -> estimated text tilt (degrees), same convention as rotation_angle returned by _text_based_deskew.
+_deskew_cached_tilt_degrees: Dict[str, float] = {}
+
 DEBUG_SAVE_VARIANTS = True
-# One save per doc type per scan session: first frame with a detected ROI for that type.
-_debug_variants_saved_passport = False
+# Card only: one save per scan session for full-frame boxed variant PNGs (passport uses strip-only ``_save_debug_variants_plain``).
 _debug_variants_saved_card = False
-# Legacy single flag for callers that don't pass doc_type (treat as passport).
-_debug_variants_saved_this_session = False
+# Extra debug: save MRZ variant images from whichever ROI/band actually runs OCR,
+# even when MRZ line detection fails and/or later TD3/check-digit gating rejects
+# the candidates. Track by tag so we can save line-1 + line-2 variants, but not
+# spam duplicate saves for every ROI tag.
+_debug_mrz_plain_variants_saved_tags = set()
 
 # Master key for OCR timing logs: set OCR_TIMING=true in .env to log duration of heavy OCR steps; false = no timing logs.
 _OCR_TIMING = os.environ.get("OCR_TIMING", "").strip().lower() in ("1", "true", "yes")
 
-# Set OCR_USE_V3_BASE=1 to build v4/v5/v6 from v3 (clean sharp); default uses v2 (sharp) as base. See docs/OCR_VARIANTS.md.
+# Set OCR_USE_V3_BASE=1 to build v4/v5 from v3 (clean sharp); default uses v2 (sharp) as base. See docs/OCR_VARIANTS.md.
 _USE_V3_BASE_FOR_DERIVED = os.environ.get("OCR_USE_V3_BASE", "").strip().lower() in ("1", "true", "yes")
 
 # ---------------------------------------------------------------------------
@@ -710,12 +986,11 @@ _USE_V3_BASE_FOR_DERIVED = os.environ.get("OCR_USE_V3_BASE", "").strip().lower()
 # 1. EasyOCR model load at import: Reader(["en"]) loads PyTorch + detection + recognition
 #    models once; on CPU this can take 30–90+ seconds (first run may download).
 # 2. Many EasyOCR readtext() calls: each is a neural net forward pass. Per passport frame:
-#    deskew (1 full crop) + MRZ detect (1 bottom crop) + 2 MRZ lines × 6 variants = 14 EasyOCR
-#    calls. Per card frame: deskew (1) + ROI detect (1) + 4 ROIs × 6 variants = 26 EasyOCR.
-#    run_test_image uses 3 passport + 3 card frames → ~120 EasyOCR calls total.
-# 3. Tesseract: 2 PSM runs per variant (PSM 6 and 7). ~24 Tesseract calls per passport frame,
-#    ~48 per card frame; faster than EasyOCR but still significant.
-# 4. All of the above run on CPU unless CUDA/MPS is available; GPU greatly reduces EasyOCR time.
+#    deskew (1 full-crop readtext on 1st frame; cached tilt skips deskew readtext on later frames
+#    when DESKEW_CACHE_ANGLE) + MRZ detect + combined MRZ strip × 5 variants. Per card frame:
+#    deskew + ROI detect + ROIs × variants (2nd card frame skips deskew readtext if cache on).
+#    run_test_image uses 3 passport + 3 card frames → fewer passport-side calls than the old per-line path.
+# 3. All of the above run on CPU unless CUDA/MPS is available; GPU greatly reduces EasyOCR time.
 # ---------------------------------------------------------------------------
 
 
@@ -727,90 +1002,180 @@ def _get_debug_variants_dir(doc_type: str) -> Path:
     return _DEBUG_VARIANTS_BASE / doc
 
 
-def _build_six_variants(base_roi: "np.ndarray") -> List["np.ndarray"]:
-    """Build 6 image variants from a single ROI crop (always .copy() to avoid aliasing).
+def _clahe_lab_bgr(image: "np.ndarray", *, color_only: bool = False) -> "np.ndarray":
+    """Apply CLAHE to LAB L channel only; return BGR.
 
-    v1_orig:       Raw baseline crop.
-    v2_sharp:      v1 + sharpen.
-    v3_clean_sharp: v1 -> medianBlur(k=5) -> sharpen.
-    v4_gray:       Grayscale of v2 or v3 (per OCR_USE_V3_BASE; default v2). v5 and v6 are derived from v4.
-    v5_clahe:      CLAHE (clipLimit=1.2) applied to v4.
-    v6_thresh:     Otsu threshold of v5 (CLAHE before Otsu; v6 built from v5).
+    Default (``color_only=False``): 2D images are promoted with GRAY2BGR (e.g. v5 after gray lift).
+
+    ``color_only=True`` (v6): **No grayscale step** — only true BGR input is processed:
+    BGR → LAB → CLAHE(L) → LAB→BGR. If the image is not 3-channel BGR, returns a copy unchanged
+    (no GRAY2BGR).
+    """
+    if image is None or image.size == 0:
+        return image
+    img = image.copy()
+    if color_only:
+        if img.ndim != 3 or img.shape[2] < 3:
+            return img
+        if img.shape[2] > 3:
+            img = img[:, :, :3]
+    elif img.ndim == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    try:
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l_ch, a_ch, b_ch = cv2.split(lab)
+        clahe_obj = cv2.createCLAHE(clipLimit=_SCAN_CLAHE_CLIP, tileGridSize=(8, 8))
+        l2 = clahe_obj.apply(l_ch)
+        lab2 = cv2.merge([l2, a_ch, b_ch])
+        return cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+    except Exception:
+        return img
+
+
+def _build_six_variants(base_roi: "np.ndarray") -> List["np.ndarray"]:
+    """Build **five** OCR variant images from a single ROI crop (function name kept for imports).
+
+    v1_orig:         Raw baseline crop.
+    v2_or_v3_sharp:  v1 + sharpen (v2) or medianBlur+sharpen (v3) per ``OCR_USE_V3_BASE``.
+    v4_gray:         Grayscale of the selected sharp base.
+    v5_lab_clahe:    Grayscale promoted to BGR, then LAB + CLAHE on L (``SCAN_CLAHE_CLIP``).
+    v6_lab_clahe:    v2/v3 **BGR** sharp → LAB → CLAHE(L) → BGR only (never BGR2GRAY / GRAY2BGR).
     """
     if base_roi is None or base_roi.size == 0:
         return []
     v1_orig = base_roi.copy()
     v2_sharp = _sharpen_for_ocr(v1_orig.copy())
-    v3_clean_sharp = _sharpen_for_ocr(cv2.medianBlur(v1_orig.copy(), 5))
-    base_for_gray = v3_clean_sharp if _USE_V3_BASE_FOR_DERIVED else v2_sharp
+    v3_clean_sharp = _sharpen_for_ocr(cv2.medianBlur(v1_orig.copy(), 3))
+    use_v3 = _USE_V3_BASE_FOR_DERIVED
+    sharp = v3_clean_sharp if use_v3 else v2_sharp
+    base_for_gray = sharp
     try:
         v4_gray = cv2.cvtColor(base_for_gray, cv2.COLOR_BGR2GRAY) if base_for_gray.ndim == 3 else base_for_gray.copy()
     except Exception:
         v4_gray = base_for_gray.copy()
     try:
-        clahe_obj = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(8, 8))
-        v5_clahe = clahe_obj.apply(v4_gray.copy())
+        gray_as_bgr = cv2.cvtColor(v4_gray.copy(), cv2.COLOR_GRAY2BGR)
+        v5_lab_clahe = _clahe_lab_bgr(gray_as_bgr)
     except Exception:
-        v5_clahe = v4_gray.copy()
+        try:
+            v5_lab_clahe = cv2.cvtColor(v4_gray.copy(), cv2.COLOR_GRAY2BGR)
+        except Exception:
+            v5_lab_clahe = sharp.copy()
     try:
-        _, v6_thresh = cv2.threshold(v5_clahe.copy(), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        v6_lab_clahe = _clahe_lab_bgr(sharp.copy(), color_only=True)
     except Exception:
-        v6_thresh = v5_clahe.copy()
-    return [v1_orig, v2_sharp, v3_clean_sharp, v4_gray, v5_clahe, v6_thresh]
+        v6_lab_clahe = sharp.copy()
+
+    out = [v1_orig, sharp, v4_gray, v5_lab_clahe, v6_lab_clahe]
+    # Optional second sharpening layer on every variant except the raw baseline (v1_orig).
+    if _SCAN_VARIANT_SECOND_SHARPNESS > 0:
+        for i in range(1, len(out)):
+            out[i] = _unsharp_median_for_ocr(out[i].copy(), _SCAN_VARIANT_SECOND_SHARPNESS)
+    return out
 
 
-_VARIANT_LABELS = ["v1_orig", "v2_sharp", "v3_clean_sharp", "v4_gray", "v5_clahe", "v6_thresh"]
+_VARIANT_LABELS = ["v1_orig", "v2_or_v3_sharp", "v4_gray", "v5_lab_clahe", "v6_lab_clahe"]
 
 
-def _save_debug_variants(variants: List["np.ndarray"], frame_index: int, doc_type: str = "passport") -> None:
-    """Save 6 full-frame variants with Pass 2 bounding boxes drawn to debug/variants/{doc_type}/.
+def _save_debug_variants(variants: List["np.ndarray"], frame_index: int, doc_type: str = "card") -> None:
+    """Save full **card** alignment variants with zone boxes drawn to ``debug/variants/card/``.
 
-    Boxes are from the second-pass (targeted) detection only. Colors: Line 1 (PAN/MRZ top) = light
-    green BGR (144,238,144), Line 2 (Expiry/MRZ bottom) = dark green BGR (0,128,0). Saves at most
-    once per doc type per scan session. Files: f{N}_v1_orig.png ... f{N}_v6_thresh.png.
+    Passport MRZ uses only the combined strip; variant PNGs are ``f*_mrzroi_*`` via
+    :func:`_save_debug_variants_plain`, not this function.
+
+    Saves at most once per card scan session. Files: ``f{N}_v1_orig.png`` … (labels in ``_VARIANT_LABELS``).
     """
-    global _debug_variants_saved_passport, _debug_variants_saved_card, _debug_variants_saved_this_session
-    doc = (doc_type or "passport").strip().lower()
-    if doc not in ("passport", "card"):
-        doc = "passport"
-    saved = _debug_variants_saved_passport if doc == "passport" else _debug_variants_saved_card
-    if not DEBUG_ACTIVATE or not DEBUG_SAVE_VARIANTS or not HAS_OPENCV or saved:
+    global _debug_variants_saved_card
+    doc = (doc_type or "card").strip().lower()
+    if doc != "card":
         return
-    if len(variants) != 6:
+    if not DEBUG_ACTIVATE or not DEBUG_SAVE_VARIANTS or not HAS_OPENCV or _debug_variants_saved_card:
+        return
+    # Expect exactly 5 variants; otherwise skip saving.
+    if len(variants) != 5:
         return
     try:
-        ddir = _get_debug_variants_dir(doc)
+        ddir = _get_debug_variants_dir("card")
         ddir.mkdir(parents=True, exist_ok=True)
         for name, img in zip(_VARIANT_LABELS, variants):
             path = ddir / f"f{frame_index}_{name}.png"
             cv2.imwrite(str(path.resolve()), img)
-        if doc == "passport":
-            _debug_variants_saved_passport = True
-            _debug_variants_saved_this_session = True
-        else:
-            _debug_variants_saved_card = True
-        logger.debug("Saved 6 variant debug images (frame %d) to %s", frame_index, ddir)
+        _debug_variants_saved_card = True
+        logger.debug("Saved %d variant debug images (frame %d) to %s", len(variants), frame_index, ddir)
     except Exception as e:
         logger.debug("Could not save debug variants: %s", e)
 
 
-def _shotgun_ocr(image: "np.ndarray") -> List[Tuple[str, float]]:
-    """Run Tesseract (PSM 6 + 7) and EasyOCR on a single image variant.
+def _save_debug_variants_plain(
+    variants: List["np.ndarray"],
+    frame_index: int,
+    *,
+    doc_type: str = "passport",
+    tag: str = "mrz",
+) -> None:
+    """Save variant images without any rectangles/boxes.
 
-    Returns list of (raw_text, confidence). Tesseract gets fixed 0.5 confidence;
-    EasyOCR uses the engine's real confidence score.
+    This is intended for "debug activate" so you can see what the OCR
+    variants looked like on the ROI/band used for OCR, even when:
+    - MRZ line detection fails
+    - or later TD3/check-digit gating rejects the candidates
+    """
+    global _debug_mrz_plain_variants_saved_tags
+    doc = (doc_type or "passport").strip().lower()
+    if doc not in ("passport", "card"):
+        doc = "passport"
+    if not DEBUG_ACTIVATE or not DEBUG_SAVE_VARIANTS or not HAS_OPENCV:
+        return
+    # One save per (doc, tag, frame_index) so f1_mrzroi_* matches deskew_debug_*_frame_1 (not deduped across frames).
+    save_key = f"{doc}:{tag}:f{frame_index}".strip()
+    if save_key in _debug_mrz_plain_variants_saved_tags:
+        return
+
+    try:
+        ddir = _get_debug_variants_dir(doc)
+        ddir.mkdir(parents=True, exist_ok=True)
+
+        if len(variants) == len(_VARIANT_LABELS):
+            names = _VARIANT_LABELS
+        else:
+            names = [f"v{i+1}" for i in range(len(variants))]
+
+        for name, img in zip(names, variants):
+            path = ddir / f"f{frame_index}_{tag}_{name}.png"
+            cv2.imwrite(str(path.resolve()), img)
+
+        _debug_mrz_plain_variants_saved_tags.add(save_key)
+    except Exception as e:
+        logger.debug("Could not save plain debug variants: %s", e)
+
+
+def _save_debug_passport_original_frame(frame: "np.ndarray", frame_index: Optional[int]) -> None:
+    """Save the untouched passport camera frame for visual debugging."""
+    if (
+        frame is None
+        or frame.size == 0
+        or frame_index is None
+        or not DEBUG_ACTIVATE
+        or not HAS_OPENCV
+    ):
+        return
+    try:
+        ddir = _get_debug_variants_dir("passport")
+        ddir.mkdir(parents=True, exist_ok=True)
+        path = ddir / f"original_passport_frame_{frame_index}.png"
+        cv2.imwrite(str(path.resolve()), frame)
+    except Exception as e:
+        logger.debug("Could not save original passport frame: %s", e)
+
+
+def _shotgun_ocr(image: "np.ndarray") -> List[Tuple[str, float]]:
+    """Run EasyOCR on a single image variant.
+
+    Returns list of (raw_text, confidence) using EasyOCR's real confidence score.
     """
     results: List[Tuple[str, float]] = []
     if image is None or image.size == 0:
         return results
-    if HAS_TESSERACT:
-        for psm in (6, 7):
-            try:
-                t = pytesseract.image_to_string(image, config=f"--oem 3 --psm {psm}")
-                if t.strip():
-                    results.append((t.strip(), TESSERACT_DEFAULT_CONFIDENCE))
-            except Exception:
-                pass
     reader = _get_easyocr_reader()
     if reader is not None:
         try:
@@ -823,25 +1188,19 @@ def _shotgun_ocr(image: "np.ndarray") -> List[Tuple[str, float]]:
     return results
 
 
-def _shotgun_ocr_mrz(image: "np.ndarray") -> List[Tuple[str, float]]:
+def _shotgun_ocr_mrz(image: "np.ndarray") -> List[Tuple[str, float, float]]:
     """OCR tuned for MRZ stitching.
 
     Same engines as _shotgun_ocr, but for EasyOCR also returns stitched line(s)
     by concatenating detections on the same visual line (sorted left→right).
+
+    Each entry is (raw_text, confidence, mid_y) where *mid_y* is the vertical center
+    of the detection or stitched row in **image pixel coordinates** (used to route
+    fragments to TD3 Line 1 vs Line 2 pools on the combined MRZ strip).
     """
-    results: List[Tuple[str, float]] = []
+    results: List[Tuple[str, float, float]] = []
     if image is None or image.size == 0:
         return results
-
-    # Tesseract: keep raw multi-line string (useful for later normalization/windowing)
-    if HAS_TESSERACT:
-        for psm in (6, 7):
-            try:
-                t = pytesseract.image_to_string(image, config=f"--oem 3 --psm {psm}")
-                if t and t.strip():
-                    results.append((t.strip(), TESSERACT_DEFAULT_CONFIDENCE))
-            except Exception:
-                pass
 
     reader = _get_easyocr_reader()
     if reader is None:
@@ -863,20 +1222,21 @@ def _shotgun_ocr_mrz(image: "np.ndarray") -> List[Tuple[str, float]]:
             y1, y2 = float(min(ys)), float(max(ys))
         except Exception:
             x1 = x2 = y1 = y2 = 0.0
+        mid_y = (y1 + y2) / 2.0
         blocks.append(
             {
                 "x1": x1,
                 "x2": x2,
                 "y1": y1,
                 "y2": y2,
-                "mid_y": (y1 + y2) / 2.0,
+                "mid_y": mid_y,
                 "h": max(1.0, y2 - y1),
                 "text": str(txt).strip(),
                 "conf": float(conf) if conf is not None else 0.0,
             }
         )
         # Keep the original detection too.
-        results.append((str(txt).strip(), float(conf) if conf is not None else 0.0))
+        results.append((str(txt).strip(), float(conf) if conf is not None else 0.0, mid_y))
 
     if not blocks:
         return results
@@ -920,9 +1280,9 @@ def _shotgun_ocr_mrz(image: "np.ndarray") -> List[Tuple[str, float]]:
         stitched = "".join(parts).strip()
         if stitched:
             avg_conf = sum(confs) / max(len(confs), 1)
-            results.append((stitched, avg_conf))
-            mid_y = sum(b["mid_y"] for b in line) / max(len(line), 1)
-            stitched_lines.append((mid_y, stitched, avg_conf))
+            row_mid_y = sum(b["mid_y"] for b in line) / max(len(line), 1)
+            results.append((stitched, avg_conf, row_mid_y))
+            stitched_lines.append((row_mid_y, stitched, avg_conf))
 
     # Special MRZ case: Line 1 can be split into two "rows" in EasyOCR output (y jitter),
     # e.g. "P<NGA...<<ADEBOYE" and "USMAN<<<<<", or "PPCAN...<<SARAH" and fragment.
@@ -955,34 +1315,217 @@ def _shotgun_ocr_mrz(image: "np.ndarray") -> List[Tuple[str, float]]:
                 _, other_txt, other_conf = best_other
                 merged = (p_txt.rstrip() + "<" + other_txt.lstrip()).strip()
                 if merged:
-                    results.append((merged, (p_conf + other_conf) / 2.0))
+                    # Anchor routing on the P< row so the merged string goes to the Line 1 pool.
+                    results.append((merged, (p_conf + other_conf) / 2.0, p_my))
     except Exception:
         pass
 
     return results
 
 
-def _shotgun_ocr_on_mrz_roi(roi: "np.ndarray", frame_index: int = 0) -> List[Tuple[str, float]]:
-    """MRZ-only ROI OCR: 6 variants + MRZ-tuned EasyOCR stitching."""
+def _mrz_combined_roi_bands_y(
+    used_boxes: List[Tuple[int, int, int, int]],
+    cy1: int,
+    cy2: int,
+) -> Tuple[Optional[Tuple[float, float]], Optional[Tuple[float, float]]]:
+    """Map Pass-2 MRZ boxes to y-ranges inside the combined ROI (0 .. roi_h).
+
+    Boxes are sorted top-to-bottom. Band boundaries meet near the midpoint between
+    the bottom of the upper box and the top of the lower box so stitched-row *mid_y*
+    routes to TD3 Line 1 vs Line 2 on the **same** combined strip.
+    """
+    if not used_boxes:
+        return None, None
+    roi_h = float(max(0, cy2 - cy1))
+    if roi_h <= 0:
+        return None, None
+    sb = sorted(used_boxes, key=lambda b: (b[1], b[0]))
+    if len(sb) >= 2:
+        b0, b1 = sb[0], sb[1]
+        y1_top = float(b0[1] - cy1)
+        y1_bot = float(b0[3] - cy1)
+        y2_top = float(b1[1] - cy1)
+        y2_bot = float(b1[3] - cy1)
+        mid = (y1_bot + y2_top) / 2.0
+        slack = max(2.0, 0.02 * roi_h)
+        band1 = (max(0.0, y1_top - 2.0), min(roi_h, mid + slack))
+        band2 = (max(0.0, mid - slack), min(roi_h, y2_bot + 2.0))
+        return band1, band2
+    b = sb[0]
+    y0 = max(0.0, float(b[1] - cy1))
+    yb = min(roi_h, float(b[3] - cy1))
+    if yb <= y0 + 5.0:
+        return None, None
+    mid = (y0 + yb) / 2.0
+    slack = max(2.0, 0.02 * roi_h)
+    return (y0, mid + slack), (max(0.0, mid - slack), yb)
+
+
+def _mrz_clear_line2_only(text: str) -> bool:
+    """True when the fragment is almost certainly TD3 Line 2 (exclude from Line 1 pool)."""
+    loose = _normalize_mrz_text_loose(text or "")
+    if not loose:
+        return False
+    if _find_td3_line1_start(loose) >= 0:
+        return False
+    b2 = _best_td3_line2_candidate(loose)
+    if b2 is not None and b2[1] >= 2:
+        return True
+    digits = sum(1 for c in loose if c.isdigit())
+    if digits >= 14:
+        return True
+    if digits >= 11 and loose.count("<") < 6:
+        return True
+    return False
+
+
+def _mrz_clear_line1_only_fragment(text: str) -> bool:
+    """True for P< / name / chevron fragments that belong to Line 1, not Line 2."""
+    loose = _normalize_mrz_text_loose(text or "")
+    if not loose:
+        return False
+    if _find_td3_line1_start(loose) >= 0:
+        return True
+    digits = sum(1 for c in loose if c.isdigit())
+    if digits > 8:
+        return False
+    if re.search(r"[A-Z]", loose) and (loose.count("<") >= 2 or len(loose) >= 6):
+        return True
+    return False
+
+
+def _mrz_fragment_looks_line1(text: str) -> bool:
+    """Text gate: keep in Line 1 raw pool when geometry is ambiguous."""
+    loose = _normalize_mrz_text_loose(text or "")
+    if not loose:
+        return False
+    digits = sum(1 for c in loose if c.isdigit())
+    if _find_td3_line1_start(loose) >= 0:
+        return True
+    b2 = _best_td3_line2_candidate(loose)
+    if b2 is not None and b2[1] >= 3 and _find_td3_line1_start(loose) < 0:
+        return False
+    if digits >= 15 and _find_td3_line1_start(loose) < 0:
+        return False
+    if digits >= 10 and loose.count("<") < 4 and _find_td3_line1_start(loose) < 0:
+        return False
+    if re.search(r"[A-Z]", loose) and (loose.count("<") >= 3 or len(loose) >= 8):
+        if digits <= 8:
+            return True
+    return False
+
+
+def _mrz_fragment_looks_line2(text: str) -> bool:
+    """Text gate: keep in Line 2 raw pool when geometry is ambiguous."""
+    loose = _normalize_mrz_text_loose(text or "")
+    if not loose:
+        return False
+    digits = sum(1 for c in loose if c.isdigit())
+    if _best_td3_line2_candidate(loose) is not None:
+        return True
+    if digits >= 10 and len(loose) >= 15:
+        return True
+    if digits >= 8 and len(loose) >= 18 and _find_td3_line1_start(loose) < 0:
+        return True
+    return False
+
+
+def _route_mrz_strip_item_to_pools(
+    mid_y: float,
+    text: str,
+    band1: Optional[Tuple[float, float]],
+    band2: Optional[Tuple[float, float]],
+) -> Tuple[bool, bool]:
+    """Route one OCR item into Line 1 and/or Line 2 pools (combined MRZ strip)."""
+    c2_only = _mrz_clear_line2_only(text)
+    c1_frag = _mrz_clear_line1_only_fragment(text)
+    g1 = _mrz_fragment_looks_line1(text)
+    g2 = _mrz_fragment_looks_line2(text)
+
+    if band1 is None or band2 is None:
+        return g1, g2
+
+    in1 = band1[0] <= mid_y <= band1[1]
+    in2 = band2[0] <= mid_y <= band2[1]
+
+    if in1 and not in2:
+        return (not c2_only) and (g1 or c1_frag), False
+    if in2 and not in1:
+        l2 = (not (c1_frag and not g2)) or (c2_only and not c1_frag)
+        return False, l2
+    if in1 and in2:
+        return (not c2_only) and (g1 or c1_frag), (not (c1_frag and not g2)) or (c2_only and not c1_frag)
+    # Gap / outside both bands: text-only split
+    return g1, g2
+
+
+def _shotgun_ocr_mrz_on_variant_images(
+    variants: List["np.ndarray"],
+    *,
+    source_tag: str = "",
+    line1_band: Optional[Tuple[float, float]] = None,
+    line2_band: Optional[Tuple[float, float]] = None,
+) -> Tuple[List[Tuple[str, float, str]], List[Tuple[str, float, str]]]:
+    """Run MRZ-tuned EasyOCR on **pre-built** variant images (no detection, no re-crop).
+
+    Pass 2 must already have produced the combined MRZ strip and ``_build_six_variants``
+    must have been run **once** on that crop. This function only runs ``readtext`` per
+    variant image — it does **not** repeat MRZ line detection or recompute the ROI.
+
+    Returns ``(line1_pool, line2_pool)``: the same OCR run is **split** by vertical band
+    (Pass-2 boxes mapped into the combined ROI) plus TD3-shaped text gates so Line 1 and
+    Line 2 items are not duplicated across pools.
+    """
+    line1_pool: List[Tuple[str, float, str]] = []
+    line2_pool: List[Tuple[str, float, str]] = []
+    if not variants:
+        return line1_pool, line2_pool
+    t0 = time.perf_counter() if _OCR_TIMING else None
+    prefix = f"{source_tag}/" if (source_tag or "").strip() else ""
+    for label, v in zip(_VARIANT_LABELS, variants):
+        vkey = f"{prefix}{label}"
+        for txt, conf, mid_y in _shotgun_ocr_mrz(v):
+            add1, add2 = _route_mrz_strip_item_to_pools(
+                float(mid_y), txt, line1_band, line2_band
+            )
+            if add1:
+                line1_pool.append((txt, float(conf), vkey))
+            if add2:
+                line2_pool.append((txt, float(conf), vkey))
+    if _OCR_TIMING and t0 is not None:
+        logger.info("[OCR_TIMING] shotgun_ocr_mrz_on_variant_images (5 variants): %.2fs", time.perf_counter() - t0)
+    return line1_pool, line2_pool
+
+
+def _shotgun_ocr_on_mrz_roi(
+    roi: "np.ndarray",
+    frame_index: int = 0,
+    *,
+    source_tag: str = "",
+) -> List[Tuple[str, float, str]]:
+    """MRZ ROI OCR: build variants from *roi* then run :func:`_shotgun_ocr_mrz_on_variant_images`.
+
+    Prefer calling ``_build_six_variants`` once in the caller and
+    ``_shotgun_ocr_mrz_on_variant_images`` when the same variants are also needed for
+    debug saves (avoids building twice).
+
+    Each returned entry is (raw_text, confidence, variant_label) where *variant_label* is
+    ``"{source_tag}/{v#_name}"`` when *source_tag* is non-empty, else a label from
+    ``_VARIANT_LABELS``.
+    """
     if roi is None or roi.size == 0:
         return []
     variants = _build_six_variants(roi)
-    if not variants:
-        return []
-    pool: List[Tuple[str, float]] = []
-    t0 = time.perf_counter() if _OCR_TIMING else None
-    for v in variants:
-        pool.extend(_shotgun_ocr_mrz(v))
-    if _OCR_TIMING and t0 is not None:
-        logger.info("[OCR_TIMING] shotgun_ocr_on_mrz_roi (6 variants): %.2fs", time.perf_counter() - t0)
-    return pool
+    l1, l2 = _shotgun_ocr_mrz_on_variant_images(variants, source_tag=source_tag)
+    # Single ad-hoc ROI: no Pass-2 bands; merge text-gated Line 1 / Line 2 pools for callers.
+    return l1 + l2
 
 
 def _shotgun_ocr_on_roi(roi: "np.ndarray", frame_index: int = 0, save_debug: bool = False) -> List[Tuple[str, float]]:
-    """Build 6 variants from the ROI and run OCR on every variant (Tesseract PSM 6/7 + EasyOCR per variant).
+    """Build 5 variants from the ROI and run OCR on every variant (EasyOCR-only).
 
-    All 6 variants are OCR'd; combined pool = 6 variants × 3 engines = up to 18 results per ROI.
-    When save_debug is True, saves f{N}_v1_orig.png ... f{N}_v6_thresh.png once per doc type (first frame with a detected ROI).
+    All 5 variants are OCR'd; combined pool aggregates EasyOCR results per ROI.
+    When save_debug is True, saves f{N}_v1_orig.png ... f{N}_v6_lab_clahe.png once per doc type (first frame with a detected ROI).
     """
     if roi is None or roi.size == 0:
         return []
@@ -996,7 +1539,7 @@ def _shotgun_ocr_on_roi(roi: "np.ndarray", frame_index: int = 0, save_debug: boo
     for v in variants:
         pool.extend(_shotgun_ocr(v))
     if _OCR_TIMING and t0 is not None:
-        logger.info("[OCR_TIMING] shotgun_ocr_on_roi (6 variants): %.2fs", time.perf_counter() - t0)
+        logger.info("[OCR_TIMING] shotgun_ocr_on_roi (5 variants): %.2fs", time.perf_counter() - t0)
     return pool
 
 
@@ -1011,15 +1554,6 @@ def _shotgun_ocr_pan(image: "np.ndarray") -> List[Tuple[str, float]]:
     results: List[Tuple[str, float]] = []
     if image is None or image.size == 0:
         return results
-
-    if HAS_TESSERACT:
-        for psm in (6, 7):
-            try:
-                t = pytesseract.image_to_string(image, config=f"--oem 3 --psm {psm}")
-                if t.strip():
-                    results.append((t.strip(), TESSERACT_DEFAULT_CONFIDENCE))
-            except Exception:
-                pass
 
     reader = _get_easyocr_reader()
     if reader is None:
@@ -1087,7 +1621,7 @@ def _shotgun_ocr_pan(image: "np.ndarray") -> List[Tuple[str, float]]:
 
 
 def _shotgun_ocr_on_pan_roi(roi: "np.ndarray", frame_index: int = 0) -> List[Tuple[str, float]]:
-    """PAN-only ROI OCR: 6 variants + digit-stitching EasyOCR."""
+    """PAN-only ROI OCR: 5 preprocessing variants + digit-stitching EasyOCR."""
     if roi is None or roi.size == 0:
         return []
     variants = _build_six_variants(roi)
@@ -1098,7 +1632,7 @@ def _shotgun_ocr_on_pan_roi(roi: "np.ndarray", frame_index: int = 0) -> List[Tup
     for v in variants:
         pool.extend(_shotgun_ocr_pan(v))
     if _OCR_TIMING and t0 is not None:
-        logger.info("[OCR_TIMING] shotgun_ocr_on_pan_roi (6 variants): %.2fs", time.perf_counter() - t0)
+        logger.info("[OCR_TIMING] shotgun_ocr_on_pan_roi (5 variants): %.2fs", time.perf_counter() - t0)
     return pool
 
 
@@ -1230,8 +1764,9 @@ def _gate_mrz(
         for l1 in _extract_td3_line1_candidates(loose):
             line1_candidates.append((l1, conf))
 
-        # Best Line 2 candidate from this entry (if any).
-        best = _best_td3_line2_candidate(loose)
+        # Best Line 2 candidate from this entry (if any); trim merged L2+L1 tail only for Line 2.
+        loose_l2 = _trim_line2_loose_if_line1_concatenated(loose)
+        best = _best_td3_line2_candidate(loose_l2)
         if best is None:
             continue
         l2, passed = best
@@ -1250,8 +1785,8 @@ def _gate_mrz(
 
 
 def _gate_mrz_from_pools(
-    line1_pool: List[Tuple[str, float]],
-    line2_pool: List[Tuple[str, float]],
+    line1_pool: List[Tuple[str, float, str]],
+    line2_pool: List[Tuple[str, float, str]],
 ) -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]], Dict[str, int]]:
     """TD3 MRZ gating using ROI-specific pools.
 
@@ -1262,13 +1797,17 @@ def _gate_mrz_from_pools(
     checksum_pass_count: Dict[str, int] = {}
     line1_candidates: List[Tuple[str, float]] = []
     valid_line2s: List[Tuple[str, float]] = []
+    issuer_hint: Optional[str] = None
 
     def _add_line1_from_loose(loose: str, conf: float) -> None:
         for l1 in _extract_td3_line1_candidates(loose):
             line1_candidates.append((l1, conf))
 
     def _add_line2_from_loose(loose: str, conf: float) -> None:
-        best = _best_td3_line2_candidate(loose)
+        loose = _trim_line2_loose_if_line1_concatenated(loose)
+        if not loose:
+            return
+        best = _best_td3_line2_candidate(loose, issuer_hint=issuer_hint)
         if best is None:
             return
         l2, passed = best
@@ -1279,36 +1818,70 @@ def _gate_mrz_from_pools(
         valid_line2s.append((l2, float(conf) * boost))
 
     # Per-entry extraction (baseline).
-    for raw_text, conf in line1_pool:
+    for raw_text, conf, variant in line1_pool:
         loose = _normalize_mrz_text_loose(raw_text or "")
         if loose:
-            _add_line1_from_loose(loose, float(conf))
-    for raw_text, conf in line2_pool:
+            w = float(conf) * _mrz_pool_variant_conf_scale(variant)
+            _add_line1_from_loose(loose, w)
+    issuer_hint = _majority_td3_issuer_from_line1_candidates(line1_candidates)
+    for raw_text, conf, variant in line2_pool:
         loose = _normalize_mrz_text_loose(raw_text or "")
         if loose:
-            _add_line2_from_loose(loose, float(conf))
+            loose = _trim_line2_loose_if_line1_concatenated(loose)
+        if loose:
+            w = float(conf) * _mrz_pool_variant_conf_scale(variant)
+            _add_line2_from_loose(loose, w)
 
     # Cross-entry assembly within each ROI (top-N by confidence).
     # This helps when OCR splits line 1 across entries (e.g. P<... and USMAN...).
     try:
         top_l1 = sorted(
-            ((_normalize_mrz_text_loose(t), float(c)) for t, c in line1_pool if t),
-            key=lambda x: x[1],
+            (
+                (_normalize_mrz_text_loose(t), float(c) * _mrz_pool_variant_conf_scale(_v))
+                for t, c, _v in line1_pool
+                if t
+            ),
+            key=lambda x: _mrz_l1_loose_merge_priority(x[0], x[1]),
             reverse=True,
         )[:8]
         top_l2 = sorted(
-            ((_normalize_mrz_text_loose(t), float(c)) for t, c in line2_pool if t),
-            key=lambda x: x[1],
+            (
+                (
+                    _trim_line2_loose_if_line1_concatenated(_normalize_mrz_text_loose(t)),
+                    float(c) * _mrz_pool_variant_conf_scale(_v),
+                )
+                for t, c, _v in line2_pool
+                if t
+            ),
+            key=lambda x: _mrz_l2_loose_merge_priority(x[0], x[1]),
             reverse=True,
         )[:8]
+        top_l2 = [(s, c) for s, c in top_l2 if s]
 
         # Combined loose strings (acts like a "bag" of fragments).
         if top_l1:
             combined_l1 = "<".join(s for s, _ in top_l1 if s)
             _add_line1_from_loose(combined_l1, sum(c for _, c in top_l1) / max(len(top_l1), 1))
+        issuer_hint = _majority_td3_issuer_from_line1_candidates(line1_candidates)
+        # Optional **combined** Line-2 bag: joining fragments recreates the long string sliding-window
+        # search needs when each OCR entry alone is too short (common with v3-style preprocessing).
+        #
+        # Risk: junk fragments (e.g. ``(<06``) plus good text can yield a *misaligned* 44-char window
+        # that still passes checksum heuristics (e.g. doc ``3456AAOCA`` for CAN). Mitigation: keep
+        # per-entry extraction above as the primary path; add this as an extra candidate source only,
+        # omit **very short** pool entries from the join (they add length without MRZ structure and
+        # shift sliding windows); refresh issuer after combined Line 1; use issuer-aware window
+        # rejection in ``_best_td3_line2_candidate``; then ``_consensus_winning_mrz_lines`` votes on
+        # document keys.
         if top_l2:
-            combined_l2 = "<".join(s for s, _ in top_l2 if s)
-            _add_line2_from_loose(combined_l2, sum(c for _, c in top_l2) / max(len(top_l2), 1))
+            top_l2_for_combine = [(s, c) for s, c in top_l2 if len(s or "") >= 12]
+            if not top_l2_for_combine:
+                top_l2_for_combine = list(top_l2)
+            combined_l2 = "<".join(s for s, _ in top_l2_for_combine if s)
+            _add_line2_from_loose(
+                combined_l2,
+                sum(c for _, c in top_l2_for_combine) / max(len(top_l2_for_combine), 1),
+            )
 
         # Targeted pairwise stitch for line 1: TD3 anchor (P< or PP etc.) + name-only fragment.
         #
@@ -1341,7 +1914,7 @@ def _gate_mrz_from_pools(
             base44 = base_cands[0]
             for n_s, n_c in name_frags[:10]:
                 injected = _inject_name_fragment(base44, n_s)
-                if injected and _has_td3_line1_prefix(injected):
+                if injected and _is_plausible_td3_line1_candidate(injected):
                     line1_candidates.append((injected, (p_c + n_c) / 2.0))
     except Exception:
         pass
@@ -1369,6 +1942,127 @@ def _confidence_weighted_vote(bucket: List[Tuple[str, float]]) -> Tuple[Optional
     return winner, scores[winner], counts[winner]
 
 
+def _line2_document_key(l2: str) -> str:
+    """Normalize TD3 Line 2 document field (positions 0-8) for cross-variant voting."""
+    if not l2 or len(l2) < 9:
+        return ""
+    return (l2[0:9].replace("<", "").strip().upper())
+
+
+def _majority_td3_issuer_from_line1_candidates(line1_cands: List[Tuple[str, float]]) -> Optional[str]:
+    """Weighted majority issuing state (MRZ Line 1 indices 2-4, ICAO)."""
+    scores: Dict[str, float] = {}
+    for l1, conf in line1_cands:
+        if not l1 or len(l1) < 5:
+            continue
+        issuer = l1[2:5].upper()
+        if len(issuer) != 3 or not re.match(r"^[A-Z<]{3}$", issuer):
+            continue
+        issuer = issuer.replace("<", "")
+        if len(issuer) < 3:
+            continue
+        scores[issuer] = scores.get(issuer, 0.0) + float(conf)
+    if not scores:
+        return None
+    return max(scores, key=scores.get)  # type: ignore[arg-type]
+
+
+def _td3_line2_doc_plausible_for_issuer(doc_key: str, issuer: Optional[str]) -> bool:
+    """Reject misaligned 44-char windows that still satisfy checksum heuristics.
+
+    Canadian passports (issuer ``CAN``) use MRZ document numbers that virtually always start with a
+    letter (typically ``P``). A key like ``3456AAOCA`` is almost always a sliding-window artifact.
+    """
+    if not doc_key or not issuer:
+        return True
+    if issuer == "CAN":
+        if doc_key[0].isdigit():
+            return False
+    return True
+
+
+def _filter_valid_line2_by_issuer(
+    valid_l2s: List[Tuple[str, float]],
+    issuer: Optional[str],
+) -> List[Tuple[str, float]]:
+    if not valid_l2s or not issuer:
+        return valid_l2s
+    filtered = [
+        (l2, c)
+        for l2, c in valid_l2s
+        if _td3_line2_doc_plausible_for_issuer(_line2_document_key(l2), issuer)
+    ]
+    return filtered if filtered else valid_l2s
+
+
+def _consensus_winning_mrz_lines(
+    line1_cands: List[Tuple[str, float]],
+    valid_l2s: List[Tuple[str, float]],
+) -> Tuple[Optional[str], Optional[str]]:
+    """Consensus Line 1 + Line 2 with issuer-aware Line 2 filtering and document-key voting.
+
+    Voting on **full 44-char Line 2 strings** splits mass across harmless alignment differences and
+    lets rare bogus windows win. We instead:
+
+    1. Pick winning Line 1 via confidence-weighted vote (unchanged).
+    2. Infer ICAO issuer (3 letters) from weighted Line 1 candidates; filter Line 2 rows whose
+       document field contradicts issuer rules (e.g. CAN + digit-leading doc key).
+    3. Confidence-weighted vote on **normalized document keys** (Line 2 chars 0-8).
+    4. Choose the **single Line 2 row** with that key and highest confidence (stable decode).
+    """
+    winning_l1, _, _ = _confidence_weighted_vote(line1_cands)
+    issuer = _majority_td3_issuer_from_line1_candidates(line1_cands)
+    if issuer is None and winning_l1 and len(winning_l1) >= 5:
+        cand = winning_l1[2:5].upper().replace("<", "")
+        if len(cand) == 3:
+            issuer = cand
+
+    v2 = _filter_valid_line2_by_issuer(valid_l2s, issuer)
+
+    id_bucket: List[Tuple[str, float]] = [
+        (dk, float(c))
+        for l2, c in v2
+        if (dk := _line2_document_key(l2))
+    ]
+    winning_doc, _, _ = _confidence_weighted_vote(id_bucket)
+
+    if not winning_doc:
+        winning_l2, _, _ = _confidence_weighted_vote(v2)
+        return winning_l1, winning_l2
+
+    matching = [(l2, c) for l2, c in v2 if _line2_document_key(l2) == winning_doc]
+    if not matching:
+        winning_l2, _, _ = _confidence_weighted_vote(v2)
+        return winning_l1, winning_l2
+
+    matching.sort(key=lambda t: t[1], reverse=True)
+    winning_l2 = matching[0][0]
+    return winning_l1, winning_l2
+
+
+def _debug_print_mrz_raw_ocr_pools(
+    line1_pool: List[Tuple[str, float, str]],
+    line2_pool: List[Tuple[str, float, str]],
+    *,
+    frame_index: Optional[int] = None,
+    max_lines_per_side: int = 120,
+) -> None:
+    """When DEBUG_ACTIVATE, print every raw MRZ OCR fragment with its variant label."""
+    if not DEBUG_ACTIVATE:
+        return
+    fi = frame_index if frame_index is not None else "?"
+    print(f"\n--- MRZ raw OCR (frame {fi}) — variant tagged ---", file=sys.stderr, flush=True)
+    for side_name, pool in (("line1_pool", line1_pool), ("line2_pool", line2_pool)):
+        print(f"  [{side_name}] {len(pool)} entr(y/ies)", file=sys.stderr, flush=True)
+        for i, (txt, conf, vkey) in enumerate(pool[:max_lines_per_side], 1):
+            snippet = (txt or "").replace("\n", " ").strip()
+            if len(snippet) > 120:
+                snippet = snippet[:117] + "..."
+            print(f"    {i:3d}. [{vkey}] conf={conf:.3f}  {snippet!r}", file=sys.stderr, flush=True)
+        if len(pool) > max_lines_per_side:
+            print(f"    ... ({len(pool) - max_lines_per_side} more omitted)", file=sys.stderr, flush=True)
+
+
 def _print_consensus(
     label: str,
     bucket: List[Tuple[str, float]],
@@ -1387,8 +2081,8 @@ def _print_consensus(
     if not DEBUG_ACTIVATE:
         return
     if not bucket:
-        print(f"\n--- {label} consensus ---")
-        print(f"  (no candidates passed gating — {raw_pool_size} raw pool entries)")
+        print(f"\n--- {label} consensus ---", file=sys.stderr, flush=True)
+        print(f"  (no candidates passed gating — {raw_pool_size} raw pool entries)", file=sys.stderr, flush=True)
         return
     scores: Dict[str, float] = {}
     counts: Dict[str, int] = {}
@@ -1396,18 +2090,18 @@ def _print_consensus(
         scores[value] = scores.get(value, 0.0) + conf
         counts[value] = counts.get(value, 0) + 1
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    print(f"\n--- {label} consensus ---")
+    print(f"\n--- {label} consensus ---", file=sys.stderr, flush=True)
     for i, (val, score) in enumerate(ranked[:8], 1):
         mark = " [SELECTED]" if val == winner else ""
         vote_str = f"score={score:.2f}, {counts[val]} vote(s)"
         if value_actual_counts is not None and val in value_actual_counts:
             vote_str += f", {value_actual_counts[val]} check-digit pass(es)"
-        print(f"  {i}. {val} ({vote_str}){mark}")
+        print(f"  {i}. {val} ({vote_str}){mark}", file=sys.stderr, flush=True)
     if winner:
         win_vote = f"score={scores.get(winner, 0):.2f}, {counts.get(winner, 0)} vote(s)"
         if value_actual_counts is not None and winner in value_actual_counts:
             win_vote += f", {value_actual_counts[winner]} check-digit pass(es)"
-        print(f"  -> Selected {label}: {winner} ({win_vote})")
+        print(f"  -> Selected {label}: {winner} ({win_vote})", file=sys.stderr, flush=True)
 
 
 def _normalize_expiry_ocr(text: str) -> str:
@@ -1549,17 +2243,17 @@ def _debug_print_mrz_winner(
         return
 
     if not winning_l1 and not winning_l2:
-        print("\n[MRZ_DEBUG] No winning MRZ lines from consensus.")
+        print("\n[MRZ_DEBUG] No winning MRZ lines from consensus.", file=sys.stderr, flush=True)
         return
 
-    print("\n=== MRZ winner (consensus) ===")
-    print(f"L1: {winning_l1 or '[none]'}")
-    print(f"L2: {winning_l2 or '[none]'}")
+    print("\n=== MRZ winner (consensus) ===", file=sys.stderr, flush=True)
+    print(f"L1: {winning_l1 or '[none]'}", file=sys.stderr, flush=True)
+    print(f"L2: {winning_l2 or '[none]'}", file=sys.stderr, flush=True)
 
     if not (winning_l1 and winning_l2 and len(winning_l1) >= 44 and len(winning_l2) >= 44):
-        print("[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).")
-        print(f"  -> passport_id used : {passport_id or '-'}")
-        print(f"  -> guest_name used  : {guest_name or '-'}")
+        print("[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).", file=sys.stderr, flush=True)
+        print(f"  -> passport_id used : {passport_id or '-'}", file=sys.stderr, flush=True)
+        print(f"  -> guest_name used  : {guest_name or '-'}", file=sys.stderr, flush=True)
         return
 
     # Use normalized 44-character lines for parsing.
@@ -1608,21 +2302,16 @@ def _debug_print_mrz_winner(
     final_field = l2[0:10] + l2[13:20] + l2[21:43]
     final_cd_status = _cd_status(final_field, final_cd)
 
-    print("\n=== MRZ fields decoded from winner ===")
-    print(f"  Document type     : {doc_type}")
-    print(f"  Issuing state     : {issuing_state}")
-    print(f"  Surname           : {surname or '-'}")
-    print(f"  Given names       : {given or '-'}")
-    print(f"  Guest name (MRZ)  : {parsed_guest_name or '-'}")
-    print(f"  Passport number   : {doc_number or '-'}  (check digit {doc_number_cd_status})")
-    print("\n  -> passport_id used : {}".format(passport_id or "-"))
-    print("  -> guest_name used  : {}".format(guest_name or "-"))
+    print("\n=== MRZ fields decoded from winner ===", file=sys.stderr, flush=True)
+    print(f"  Document type     : {doc_type}", file=sys.stderr, flush=True)
+    print(f"  Issuing state     : {issuing_state}", file=sys.stderr, flush=True)
+    print(f"  Surname           : {surname or '-'}", file=sys.stderr, flush=True)
+    print(f"  Given names       : {given or '-'}", file=sys.stderr, flush=True)
+    print(f"  Guest name (MRZ)  : {parsed_guest_name or '-'}", file=sys.stderr, flush=True)
+    print(f"  Passport number   : {doc_number or '-'}  (check digit {doc_number_cd_status})", file=sys.stderr, flush=True)
+    print("\n  -> passport_id used : {}".format(passport_id or "-"), file=sys.stderr, flush=True)
+    print("  -> guest_name used  : {}".format(guest_name or "-"), file=sys.stderr, flush=True)
 
-
-# Multiple vertical bands where the MRZ may appear (fraction of height from top).
-# Used as fallback when CLAHE+EasyOCR line detection fails.
-PASSPORT_MRZ_BAND_STARTS = [0.60, 0.65, 0.70, 0.72, 0.74]
-PASSPORT_MRZ_BAND_HEIGHT = 0.24
 
 # ---------------------------------------------------------------------------
 # MRZ Checksum Engine (ICAO 9303 modulus-10 with 7-3-1 weighting)
@@ -1803,6 +2492,82 @@ def _find_td3_line1_start(s: str) -> int:
     return -1
 
 
+def _trim_line2_loose_if_line1_concatenated(loose: str) -> str:
+    """Drop a trailing Line 1 blob when OCR merged Line 2 + Line 1 in one read.
+
+    Example: ``P123456AA0CAN...00PPCANHARTIN<<SARAH...`` — sliding-window Line 2
+    extraction on the full string picks a wrong 44-char slice. Keeping only the
+    prefix before the embedded ``PPCAN...`` anchor fixes validation without
+    requiring 3+/4 checksum passes.
+    """
+    if not loose or len(loose) < 15:
+        return loose
+    j = _find_td3_line1_start(loose)
+    if j <= 0:
+        return loose
+    seg44 = (loose[j : j + 44] + "<" * 44)[:44]
+    if not _has_td3_line1_prefix(seg44):
+        return loose
+    if not re.match(r"^P[<A-Z][A-Z]{3}", seg44):
+        return loose
+    return loose[:j]
+
+
+def _line2_window_tiebreak_score(w: str) -> Tuple[int, int]:
+    """Prefer TD3-like doc numbers (often start with a letter, e.g. P123456AA)."""
+    if not w or len(w) < 9:
+        return (0, 0)
+    letter_start = 1 if w[0].isalpha() else 0
+    fill = sum(1 for c in w[0:9] if c != "<")
+    return (letter_start, fill)
+
+
+# TD3 Line 1: positions 5..43 are the name field (letters + '<' mostly). Line 2 is digit-heavy;
+# merged OCR often smears Line 2 patterns into a bogus "Line 1" window.
+_TD3_LINE1_NAME_MAX_DIGIT_COUNT = 4
+
+
+def _td3_line1_name_field_digit_count(l1_44: str) -> int:
+    """Count digit characters in TD3 Line 1 name field (indices 5..43 inclusive)."""
+    if len(l1_44) < 44:
+        return 99
+    return sum(1 for c in l1_44[5:44] if c.isdigit())
+
+
+def _td3_line1_has_obvious_line2_leakage(l1_44: str) -> bool:
+    """True when *l1_44* embeds patterns that belong on TD3 Line 2 (merged-line OCR).
+
+    Heuristics (name field only, after issuing state):
+    - YYMMDD + check + sex + YYMMDD blocks typical of Line 2.
+    - Long runs of digits (doc #, dates, optional data).
+    - Document-number style \"P\" + long digit run (common when Line 2 is concatenated).
+    """
+    if len(l1_44) != 44:
+        return False
+    nf = l1_44[5:44]
+    # Line 2: DOB (6) + check + sex + expiry (6) — should not appear inside Line 1 names.
+    if re.search(r"\d{6}[0-9<][MF<]\d{6}", nf):
+        return True
+    # Five+ consecutive digits are rare in names; common in merged Line 2.
+    if re.search(r"\d{5,}", nf):
+        return True
+    # Merged passport Line 2 often starts with a P-type doc number + many digits.
+    if re.search(r"P\d{6,}", nf):
+        return True
+    return False
+
+
+def _is_plausible_td3_line1_candidate(cand: str) -> bool:
+    """False when a 44-char TD3 Line 1 window is clearly contaminated by Line 2 or too digit-heavy."""
+    if len(cand) != 44 or not _has_td3_line1_prefix(cand):
+        return False
+    if _td3_line1_has_obvious_line2_leakage(cand):
+        return False
+    if _td3_line1_name_field_digit_count(cand) > _TD3_LINE1_NAME_MAX_DIGIT_COUNT:
+        return False
+    return True
+
+
 def _extract_td3_line1_candidates(loose: str) -> List[str]:
     """Extract possible TD3 line 1 candidates (44 chars starting with P< or P[A-Z]) from a loose string."""
     if not loose:
@@ -1831,6 +2596,8 @@ def _extract_td3_line1_candidates(loose: str) -> List[str]:
         # Basic TD3 sanity: positions 2-4 are issuing state (3 uppercase letters).
         if not re.match(r"^P[<A-Z][A-Z]{3}", cand):
             continue
+        if not _is_plausible_td3_line1_candidate(cand):
+            continue
         cands.append(cand)
     # De-dup while preserving order
     out: List[str] = []
@@ -1842,13 +2609,29 @@ def _extract_td3_line1_candidates(loose: str) -> List[str]:
     return out
 
 
-def _best_td3_line2_candidate(loose: str) -> Optional[Tuple[str, int]]:
+def _best_td3_line2_candidate(
+    loose: str,
+    *,
+    issuer_hint: Optional[str] = None,
+) -> Optional[Tuple[str, int]]:
     """Pick the best 44-char TD3 line 2 candidate from a loose string.
 
     Returns (line2, checks_passed) or None.
+
+    EasyOCR often returns Line 2 *shorter than 44 characters* (missing trailing ``<``
+    fillers). Previously we returned None immediately, so good reads like
+    ``P123456AA0CAN9008010...`` never reached checksum validation. ICAO pads with ``<``;
+    we pad short strings to 44 and score that window like any other.
+
+    issuer_hint: when ``CAN``, skip windows whose document field (chars 0–8) normalizes to a
+    digit-leading key — those are almost always misaligned slices on stitched OCR (e.g.
+    ``3456AAOCA``), while genuine Canadian passport numbers start with a letter (``P...``).
     """
     if not loose or len(loose) < 20:
         return None
+
+    # OCR often puts letters (K, I, l) inside filler runs that must be '<'.
+    loose = _sanitize_td3_line2_loose_filler(loose)
 
     # Build windows of length 44 from the loose string and pick the one with the best
     # checksum score after corrections. We additionally allow "relaxed" doc-number
@@ -1857,14 +2640,19 @@ def _best_td3_line2_candidate(loose: str) -> Optional[Tuple[str, int]]:
     best_passed = -1
     best_doc_ok = False
 
-    if len(loose) < 44:
-        return None
+    windows: List[str] = []
+    if len(loose) >= 44:
+        max_starts = min(len(loose) - 44, 120)  # cap work per entry
+        for i in range(max_starts + 1):
+            windows.append(loose[i : i + 44])
+    else:
+        # Single candidate: pad with MRZ filler to full TD3 line length.
+        windows.append((loose + "<" * 44)[:44])
 
-    max_starts = min(len(loose) - 44, 120)  # cap work per entry
-    for i in range(max_starts + 1):
-        w = loose[i : i + 44]
+    for w in windows:
         if len(w) != 44:
             continue
+        w = _apply_td3_line2_digit_zone_ocr_map(w)
         # Fast reject: Line 2 should not look like a Line 1 header (P< or PP etc.)
         if _has_td3_line1_prefix(w):
             continue
@@ -1888,7 +2676,21 @@ def _best_td3_line2_candidate(loose: str) -> Optional[Tuple[str, int]]:
         except Exception:
             pass
 
-        if (passed > best_passed) or (passed == best_passed and doc_ok and not best_doc_ok):
+        if issuer_hint == "CAN":
+            dk = _line2_document_key(w2)
+            if dk and dk[0].isdigit():
+                continue
+
+        take = False
+        if passed > best_passed:
+            take = True
+        elif passed == best_passed and doc_ok and not best_doc_ok:
+            take = True
+        elif passed == best_passed and doc_ok == best_doc_ok and best is not None:
+            if _line2_window_tiebreak_score(w2) > _line2_window_tiebreak_score(best):
+                take = True
+
+        if take:
             best_passed = passed
             best_doc_ok = doc_ok
             best = w2
@@ -1897,8 +2699,11 @@ def _best_td3_line2_candidate(loose: str) -> Optional[Tuple[str, int]]:
 
     if best is None:
         return None
-    # Require at least relaxed doc-number validity to avoid stitching the wrong line.
+    # Require at least checksum strength to avoid stitching the wrong line.
     if not best_doc_ok:
+        return None
+    # Require at least 2 of 4 TD3 checksum checks (doc / DOB / expiry / composite).
+    if best_passed < 2:
         return None
     return best, best_passed
 
@@ -1908,6 +2713,27 @@ _MRZ_OCR_CORRECTIONS = {
     "I": "1", "L": "1", "l": "1",
     "Z": "2", "S": "5", "B": "8", "G": "6",
 }
+
+
+def _sanitize_td3_line2_loose_filler(loose: str) -> str:
+    """Turn stray letters inside chevron runs into MRZ filler ``<`` (common EasyOCR noise: K, I)."""
+    if not loose:
+        return loose
+    return re.sub(r"(?<=<)[KIil]+(?=<)", lambda m: "<" * len(m.group(0)), loose)
+
+
+def _apply_td3_line2_digit_zone_ocr_map(w44: str) -> str:
+    """Map common letter→digit confusions in TD3 Line 2 DOB / expiry / check positions (13–27)."""
+    if len(w44) < 28:
+        return w44
+    chars = list(w44)
+    for i in (13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27):
+        if i >= len(chars):
+            break
+        rep = _MRZ_OCR_CORRECTIONS.get(chars[i])
+        if rep and rep.isdigit():
+            chars[i] = rep
+    return "".join(chars)
 
 
 def _mrz_try_single_char_corrections(line2: str) -> Optional[str]:
@@ -1937,7 +2763,7 @@ def _mrz_try_single_char_corrections(line2: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# Pass 2: Targeted MRZ Hunt (decoupled from Pass 1 deskew; runs on deskewed image only)
+# Pass 2: Targeted MRZ Hunt (runs on preprocessed passport alignment crop; strip deskew after union)
 # ---------------------------------------------------------------------------
 
 # MRZ line length (TD3): 44 characters. For detection, accept wider range because
@@ -1993,38 +2819,28 @@ def _expand_mrz_box_full_width(
 
 
 def _detect_mrz_lines_with_easyocr(
-    deskewed: "np.ndarray",
+    passport_page: "np.ndarray",
     frame_index: Optional[int] = None,
 ) -> List[Tuple[int, int, int, int]]:
-    """Pass 2: Targeted MRZ hunt on the deskewed image only.
+    """Pass 2: Targeted MRZ hunt on the preprocessed passport alignment crop (not full-frame deskewed).
 
-    Does NOT use any text blocks from the deskew step. Runs a dedicated EasyOCR
-    pass on the bottom 25% of the image to find two horizontal blocks that match
-    the 44-character MRZ pattern. Returns raw boxes in full deskewed coordinates;
-    caller applies vertical buffer and full-width expansion before cropping.
+    Runs a dedicated EasyOCR pass on the full crop to find two horizontal blocks that match
+    the 44-character MRZ pattern anywhere in the frame — regardless of passport position or tilt.
+    Returns raw boxes in the same coordinate system as *passport_page*; caller applies vertical buffer
+    and full-width expansion before cropping the combined MRZ strip (then strip-only deskew).
 
     Uses chevron (`<`) density and TD3 Line 1 anchor (P< or P[A-Z]) to distinguish real MRZ
     lines from other passport text (dates, labels) that passes basic length/charset filters.
     """
     reader = _get_easyocr_reader()
-    if reader is None or deskewed is None or deskewed.size == 0:
+    if reader is None or passport_page is None or passport_page.size == 0:
         return []
-    h, w = deskewed.shape[:2]
-    bottom_frac = 0.25
-    y_crop_start = int(h * (1.0 - bottom_frac))
-    y_crop_start = max(0, min(y_crop_start, h - 10))
-    crop = deskewed[y_crop_start:h, 0:w]
+    h, w = passport_page.shape[:2]
+    # Search the full image — MRZ can be anywhere when passport is shifted or tilted.
+    y_crop_start = 0
+    crop = passport_page
     if crop.size == 0:
         return []
-
-    if DEBUG_ACTIVATE and HAS_OPENCV and frame_index is not None:
-        try:
-            ddir = _get_debug_variants_dir("passport")
-            ddir.mkdir(parents=True, exist_ok=True)
-            crop_debug_path = ddir / f"crop_debug_region_frame_{frame_index}.png"
-            cv2.imwrite(str(crop_debug_path.resolve()), crop)
-        except Exception:
-            pass
 
     clahe_master = _build_clahe_master(crop)
     try:
@@ -2046,7 +2862,7 @@ def _detect_mrz_lines_with_easyocr(
     # to locate Line 1 even if that block alone is too short to pass length filters.
     all_blocks: List[Dict[str, Any]] = []
     p_anchor_block: Optional[Dict[str, Any]] = None
-    logger.debug("[MRZ_DETECT] EasyOCR returned %d results on bottom %.0f%% crop (%dx%d)", len(results), bottom_frac*100, crop_w, crop_h)
+    logger.debug("[MRZ_DETECT] EasyOCR returned %d results on full frame (%dx%d)", len(results), crop_w, crop_h)
     for bbox, txt, conf in results:
         if not txt:
             continue
@@ -2170,12 +2986,12 @@ def _detect_mrz_lines_with_easyocr(
         if not placed:
             lines.append([cand])
 
-    # Score each line group: prefer high chevron density + bottom position.
+    # Score each line group purely on chevron density — no position bias.
+    # This ensures MRZ lines are ranked the same whether the passport is at the
+    # top, middle, or bottom of the frame.
     for group in lines:
         max_chevron = max(c["chevron_density"] for c in group)
-        avg_y = sum(c["mid_y"] for c in group) / len(group)
-        bottom_bonus = avg_y / max(crop_h, 1)
-        group[0]["_line_score"] = max_chevron + bottom_bonus
+        group[0]["_line_score"] = max_chevron
 
     lines.sort(key=lambda g: g[0].get("_line_score", 0), reverse=True)
     lines = lines[:2]
@@ -2219,148 +3035,215 @@ def _detect_mrz_lines_with_easyocr(
     return boxes
 
 
+def _passport_mrz_ocr_combined_strip(
+    passport_page: "np.ndarray",
+    used_boxes: List[Tuple[int, int, int, int]],
+    *,
+    detection_source: str,
+    frame_index: int,
+) -> Tuple[List[Tuple[str, float, str]], List[Tuple[str, float, str]], float]:
+    """Passport MRZ recognition: variants are built **only** on the combined MRZ strip (never the full page).
+
+    Flow (identical whether ``DEBUG_ACTIVATE`` is on or off — debug only writes PNGs):
+
+    1. Vertical union of *used_boxes* → ``combined_roi`` from *passport_page*.
+    2. :func:`_deskew_passport_mrz_combined_roi` — when ``DESKEW_ENABLE`` is on, measure tilt on the strip
+       and rotate it; when off, returns ``combined_roi.copy()`` unchanged (variants use the **non-deskewed** strip).
+    3. ``_build_six_variants(strip_for_ocr)`` **once** on that strip → five preprocessing images.
+    4. Optional: ``_save_debug_variants_plain`` → ``f*_mrzroi_*`` under ``debug/variants/passport/``.
+    5. ``_shotgun_ocr_mrz_on_variant_images`` — y-bands scaled if strip height changed after deskew.
+
+    Does **not** re-run :func:`_detect_mrz_lines_with_easyocr`; boxes must already be in *used_boxes*.
+
+    Returns ``(line1_pool, line2_pool, mrz_measured_tilt_deg)`` for confidence boost when strip was rotated.
+    """
+    empty_pools: Tuple[List[Tuple[str, float, str]], List[Tuple[str, float, str]]] = ([], [])
+    if passport_page is None or passport_page.size == 0 or not used_boxes:
+        return empty_pools[0], empty_pools[1], 0.0
+    cx1 = min(b[0] for b in used_boxes)
+    cy1 = min(b[1] for b in used_boxes)
+    cx2 = max(b[2] for b in used_boxes)
+    cy2 = max(b[3] for b in used_boxes)
+    if cx2 <= cx1 or cy2 <= cy1:
+        return empty_pools[0], empty_pools[1], 0.0
+    combined_roi = passport_page[cy1:cy2, cx1:cx2].copy()
+    if combined_roi.size == 0:
+        return empty_pools[0], empty_pools[1], 0.0
+    roi_h_before = int(combined_roi.shape[0])
+
+    strip_for_variants, mrz_tilt_deg = _deskew_passport_mrz_combined_roi(
+        combined_roi, frame_index=frame_index
+    )
+    if strip_for_variants is None or strip_for_variants.size == 0:
+        return empty_pools[0], empty_pools[1], 0.0
+
+    roi_h_after = int(strip_for_variants.shape[0])
+    mrz_variant_images = _build_six_variants(strip_for_variants)
+    if not mrz_variant_images:
+        return empty_pools[0], empty_pools[1], mrz_tilt_deg
+    if DEBUG_ACTIVATE:
+        try:
+            _save_debug_variants_plain(
+                mrz_variant_images,
+                frame_index,
+                doc_type="passport",
+                tag=f"mrzroi_{detection_source}_combined",
+            )
+        except Exception:
+            pass
+    band1, band2 = _mrz_combined_roi_bands_y(used_boxes, cy1, cy2)
+    band1, band2 = _scale_mrz_roi_bands_y(band1, band2, roi_h_before, roi_h_after)
+    return (
+        *_shotgun_ocr_mrz_on_variant_images(
+            mrz_variant_images,
+            source_tag=f"{detection_source}_combined",
+            line1_band=band1,
+            line2_band=band2,
+        ),
+        mrz_tilt_deg,
+    )
+
+
 def _collect_passport_raw_pool(
     frame: "np.ndarray",
     frame_index: Optional[int] = None,
     fallback_boxes: Optional[List[Tuple[int, int, int, int]]] = None,
-) -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]], Optional["np.ndarray"], List[Tuple[int, int, int, int]]]:
-    """Stage 1+2 for one passport frame: text-based deskew, then detect MRZ lines
-    on the straightened image, run 6-variant shotgun OCR per MRZ line ROI.
+    require_detection: bool = False,
+) -> Tuple[List[Tuple[str, float, str]], List[Tuple[str, float, str]], Optional["np.ndarray"], List[Tuple[int, int, int, int]]]:
+    """Stage 1+2 for one passport frame: MRZ line detection on alignment crop, strip deskew, MRZ OCR.
 
-    Fallback chain when MRZ line detection fails:
-      1. Use fallback_boxes (coordinates from a previous successful frame).
-      2. Multi-band search (generic yellow bands).
+    MRZ **recognition** uses :func:`_passport_mrz_ocr_combined_strip`: union of Pass-2 boxes, optional
+    strip deskew (``DESKEW_ENABLE``), **one** variant build on that strip only (no full-page variants),
+    then OCR — **same pipeline with ``DEBUG_ACTIVATE`` off or on** (debug only adds PNG saves).
+    Line 1 and Line 2 **raw** pools are filled separately (same combined strip, split by y-band + gates).
 
-    Applies 1.2x confidence boost when the frame was actually rotated.
-    Returns (line1_pool, line2_pool, deskewed_image, detected_boxes).
+    When require_detection=True and Pass 2 finds no lines, returns empty pools immediately
+    (no OCR on other regions).
+
+    Applies 1.2x confidence boost when the **MRZ strip** was rotated by deskew.
+    Returns ``(line1_pool, line2_pool, passport_alignment_image, detected_boxes)`` — third value is the
+    full preprocessed passport crop (not globally deskewed), for ``passport_image_base64`` / API.
     """
     empty_boxes: List[Tuple[int, int, int, int]] = []
-    if frame is None or frame.size == 0 or not (HAS_TESSERACT or HAS_EASYOCR):
+    if frame is None or frame.size == 0 or not HAS_EASYOCR:
         return [], [], None, empty_boxes
+    _save_debug_passport_original_frame(frame, frame_index)
     crop = _crop_passport_alignment_region(frame)
     if crop is None or crop.size == 0:
         return [], [], None, empty_boxes
 
-    # Pass 1 (Global Angle): deskew only; no MRZ logic, OCR results from this step are not used for MRZ.
-    deskewed, _ocr_results, rotation_angle = _text_based_deskew(
-        crop, frame_index=frame_index, label="passport"
-    )
-    was_rotated = abs(rotation_angle) > 0.05
-    if deskewed is None or deskewed.size == 0:
+    # Gamma + global brightness/contrast (SCAN_GAMMA, SCAN_GLOBAL_*). No full-page deskew here.
+    passport_page = _preprocess_passport_alignment_crop(crop)
+    if passport_page is None or passport_page.size == 0:
         return [], [], None, empty_boxes
 
-    # Pass 2 (Targeted MRZ Hunt): dedicated search on deskewed image for two 44-char lines in bottom 40%.
-    desk_h, desk_w = deskewed.shape[:2]
-    line_boxes = _detect_mrz_lines_with_easyocr(deskewed, frame_index=frame_index)
-    line1_pool: List[Tuple[str, float]] = []
-    line2_pool: List[Tuple[str, float]] = []
+    # Pass 2 (Targeted MRZ Hunt): EasyOCR on the full alignment crop (may be tilted).
+    img_h, img_w = passport_page.shape[:2]
+    line_boxes = _detect_mrz_lines_with_easyocr(passport_page, frame_index=frame_index)
+    line1_pool: List[Tuple[str, float, str]] = []
+    line2_pool: List[Tuple[str, float, str]] = []
     used_boxes: List[Tuple[int, int, int, int]] = []
     detection_source = "none"
+    mrz_tilt_deg = 0.0
 
     if line_boxes:
         used_boxes = []
         for box_idx, (dx1, dy1, dx2, dy2) in enumerate(line_boxes):
             extra_bottom = _LINE2_EXTRA_BOTTOM_PX if box_idx == 1 else 0
-            used_boxes.append(_expand_mrz_box_full_width(dx1, dy1, dx2, dy2, desk_w, desk_h, extra_bottom_px=extra_bottom))
+            used_boxes.append(_expand_mrz_box_full_width(dx1, dy1, dx2, dy2, img_w, img_h, extra_bottom_px=extra_bottom))
         detection_source = "easyocr"
+    elif require_detection:
+        logger.debug("Frame %s: no MRZ detected (require_detection=True), skipping frame", frame_index)
+        return [], [], passport_page, []
     elif fallback_boxes:
         for fbx1, fby1, fbx2, fby2 in fallback_boxes:
-            bx1 = max(0, min(fbx1, desk_w - 1))
-            by1 = max(0, min(fby1, desk_h - 1))
-            bx2 = max(bx1 + 1, min(fbx2, desk_w))
-            by2 = max(by1 + 1, min(fby2, desk_h))
+            bx1 = max(0, min(fbx1, img_w - 1))
+            by1 = max(0, min(fby1, img_h - 1))
+            bx2 = max(bx1 + 1, min(fbx2, img_w))
+            by2 = max(by1 + 1, min(fby2, img_h))
             used_boxes.append((bx1, by1, bx2, by2))
         detection_source = "coord_memory"
 
     if used_boxes:
-        for idx, (dx1, dy1, dx2, dy2) in enumerate(used_boxes):
-            if dx2 <= dx1 or dy2 <= dy1:
-                continue
-            line_roi = deskewed[dy1:dy2, dx1:dx2].copy()
-            if line_roi.size > 0:
-                # MRZ ROIs benefit from stitching EasyOCR split boxes into full-line candidates.
-                roi_pool = _shotgun_ocr_on_mrz_roi(line_roi, frame_index=frame_index or 0)
-                if idx == 0:
-                    line1_pool.extend(roi_pool)
-                elif idx == 1:
-                    line2_pool.extend(roi_pool)
-                else:
-                    # Safety: if more than 2 boxes, treat as mixed.
-                    line1_pool.extend(roi_pool)
-                    line2_pool.extend(roi_pool)
-        logger.debug(
-            "Frame %s: %s detected %d MRZ line(s), l1_pool=%d l2_pool=%d",
-            frame_index, detection_source, len(used_boxes), len(line1_pool), len(line2_pool),
+        roi_l1, roi_l2, mrz_tilt_deg = _passport_mrz_ocr_combined_strip(
+            passport_page,
+            used_boxes,
+            detection_source=detection_source,
+            frame_index=frame_index or 0,
         )
-        # Save 6 full-frame variants with Pass 2 expanded boxes only (no fallbacks). Line 1 = light green, Line 2 = dark green.
-        if (
-            line_boxes
-            and DEBUG_ACTIVATE
-            and DEBUG_SAVE_VARIANTS
-            and HAS_OPENCV
-            and frame_index is not None
-            and not _debug_variants_saved_passport
-        ):
-            try:
-                variants = _build_six_variants(deskewed)
-                if len(variants) == 6:
-                    for i in range(len(variants)):
-                        v = variants[i]
-                        if v.ndim == 2:
-                            v = cv2.cvtColor(v, cv2.COLOR_GRAY2BGR)
-                            variants[i] = v
-                        for box_idx, (dx1, dy1, dx2, dy2) in enumerate(used_boxes):
-                            color = _DEBUG_BGR_LINE1 if box_idx == 0 else _DEBUG_BGR_LINE2
-                            cv2.rectangle(variants[i], (dx1, dy1), (dx2, dy2), color, 2)
-                    _save_debug_variants(variants, frame_index, doc_type="passport")
-            except Exception:
-                pass
-    else:
-        logger.debug("Frame %s: MRZ line detection failed, using band fallback", frame_index)
-        for idx, start_frac in enumerate(PASSPORT_MRZ_BAND_STARTS):
-            y1 = max(0, int(desk_h * start_frac))
-            y2 = min(desk_h, int(desk_h * (start_frac + PASSPORT_MRZ_BAND_HEIGHT)))
-            if y2 <= y1:
-                continue
-            band_roi = deskewed[y1:y2, 0:desk_w].copy()
-            if band_roi.size == 0:
-                continue
-            # Band ROI may include both MRZ lines; add to both pools and let TD3 gating decide.
-            band_pool = _shotgun_ocr_on_mrz_roi(band_roi, frame_index=frame_index or 0)
-            line1_pool.extend(band_pool)
-            line2_pool.extend(band_pool)
+        line1_pool.extend(roi_l1)
+        line2_pool.extend(roi_l2)
+        logger.debug(
+            "Frame %s: %s %d MRZ box(es) → combined ROI OCR, l1_pool=%d l2_pool=%d",
+            frame_index,
+            detection_source,
+            len(used_boxes),
+            len(line1_pool),
+            len(line2_pool),
+        )
 
-    if was_rotated:
-        line1_pool = _apply_deskew_boost(line1_pool)
-        line2_pool = _apply_deskew_boost(line2_pool)
+    if abs(mrz_tilt_deg) > 0.05:
+        line1_pool = _apply_deskew_boost_mrz(line1_pool)
+        line2_pool = _apply_deskew_boost_mrz(line2_pool)
 
-    return line1_pool, line2_pool, deskewed, line_boxes
+    _debug_print_mrz_raw_ocr_pools(line1_pool, line2_pool, frame_index=frame_index)
+
+    return line1_pool, line2_pool, passport_page, line_boxes
 
 
-def scan_passport_from_frame(frame: "np.ndarray", frame_index: Optional[int] = None) -> Optional[Dict[str, Any]]:
+def scan_passport_from_frame(
+    frame: "np.ndarray",
+    frame_index: Optional[int] = None,
+    require_detection: bool = False,
+) -> Optional[Dict[str, Any]]:
     """Process one passport frame through the unified mass consensus pipeline (Stages 1-4).
 
     When called with a single frame (e.g. from the API), the pipeline builds filter
     variants, runs shotgun OCR, gates MRZ pairs, and confidence-votes on that frame.
+
+    require_detection=True returns None immediately when Pass 2 finds no MRZ lines (no OCR).
+    Use in the poll loop to avoid EasyOCR on frames where no passport is visible.
+
+    The returned ``deskewed_image`` key is the **full preprocessed passport alignment crop**
+    (not globally deskewed). MRZ deskew applies only to the combined MRZ strip inside the pipeline.
     """
-    if frame is None or frame.size == 0 or not (HAS_TESSERACT or HAS_EASYOCR):
+    if frame is None or frame.size == 0 or not HAS_EASYOCR:
         return None
-    l1_pool, l2_pool, deskewed, _boxes = _collect_passport_raw_pool(frame, frame_index=frame_index)
+    l1_pool, l2_pool, deskewed, _boxes = _collect_passport_raw_pool(
+        frame, frame_index=frame_index, require_detection=require_detection
+    )
     if not l1_pool and not l2_pool:
         return None
 
-    line1_cands, valid_l2s, _ = _gate_mrz_from_pools(l1_pool, l2_pool)
+    line1_cands, valid_l2s, checksum_pass_count = _gate_mrz_from_pools(l1_pool, l2_pool)
 
-    winning_l1, _l1_score, _l1_cnt = _confidence_weighted_vote(line1_cands)
-    winning_l2, _l2_score, _l2_cnt = _confidence_weighted_vote(valid_l2s)
+    winning_l1, winning_l2 = _consensus_winning_mrz_lines(line1_cands, valid_l2s)
 
     passport_id, guest_name = _decode_mrz_winners(winning_l1, winning_l2)
+
+    if DEBUG_ACTIVATE:
+        _debug_print_mrz_winner(winning_l1, winning_l2, passport_id, guest_name)
+        id_bucket: List[Tuple[str, float]] = [
+            (l2[0:9].replace("<", "").strip(), conf)
+            for l2, conf in valid_l2s
+            if l2[0:9].replace("<", "").strip()
+        ]
+        name_bucket: List[Tuple[str, float]] = []
+        if winning_l1:
+            for l2, conf in valid_l2s:
+                _, gname = _parse_mrz_td3(winning_l1, l2)
+                if gname:
+                    name_bucket.append((gname, conf))
+        _print_consensus("Passport ID", id_bucket, passport_id, value_actual_counts=checksum_pass_count, raw_pool_size=len(l2_pool))
+        _print_consensus("Guest Name", name_bucket, guest_name, raw_pool_size=len(l1_pool))
+
     if not passport_id and not guest_name:
         return None
     return {
         "passport_id": passport_id,
         "guest_name": guest_name,
         "raw_text": "",
+        # Legacy key name: full alignment crop (gamma/contrast), not full-page deskew.
         "deskewed_image": deskewed,
     }
 
@@ -2377,31 +3260,35 @@ def _passport_image_to_base64(image: "np.ndarray") -> str:
 
 
 def capture_passport_image_only() -> Optional[str]:
-    """Capture one frame of the passport (align + verify), deskew it, and return base64. No MRZ decode. Use when guest entered passport number manually so we still save the image."""
+    """Capture one frame of the passport (align + verify), return base64 of the alignment crop. No MRZ decode.
+
+    Image is preprocessed (gamma/contrast) but **not** globally deskewed; MRZ-only deskew runs only
+    during a full MRZ scan on the combined strip. Use when guest entered passport number manually
+    so we still save the page image.
+    """
     if not HAS_OPENCV:
         return None
+    reset_deskew_angle_cache("passport")
     frames = _capture_frames_from_camera()
     if not frames:
         return None
     frame = frames[0]
-    crop = _crop_passport_alignment_region(frame)
-    deskewed, _ocr, _angle = _text_based_deskew(crop, label="passport")
-    if deskewed is None or deskewed.size == 0:
+    crop = _preprocess_passport_alignment_crop(_crop_passport_alignment_region(frame))
+    if crop is None or crop.size == 0:
         return None
-    return _passport_image_to_base64(deskewed)
+    return _passport_image_to_base64(crop)
 
 
 def scan_passport() -> Optional[Dict[str, Any]]:
-    """Scan passport via camera: capture top-2 raw → verify → then process
-    through the mass consensus pipeline (deskew, detection master, shotgun OCR,
-    gate, confidence-weighted vote).
+    """Scan passport via camera: capture sharpest 1-of-3 raw → verify → MRZ detect, MRZ-strip deskew,
+    shotgun OCR, gate, confidence-weighted vote. Saved image = full alignment crop (not globally deskewed).
     """
-    if not HAS_OPENCV or not (HAS_TESSERACT or HAS_EASYOCR):
+    if not HAS_OPENCV or not HAS_EASYOCR:
         logger.info("MOCK HARDWARE/OCR: Simulating passport scan")
         return {"passport_id": "MOCK123456", "guest_name": "John Doe", "raw_text": "", "passport_image_base64": None}
 
     _clear_roi_debug_images("passport")
-    logger.info("Scanning passport with camera (top-2 raw capture, MRZ mass consensus)...")
+    logger.info("Scanning passport with camera (sharpest 1-of-3 raw capture, MRZ pipeline)...")
 
     while True:
         frames = _capture_frames_from_camera()
@@ -2412,14 +3299,14 @@ def scan_passport() -> Optional[Dict[str, Any]]:
         print("Retaking passport image...")
 
     if DEBUG_ACTIVATE:
-        print("Processing images (deskew + detection master + MRZ decode, mass consensus)...")
+        print("Processing images (MRZ detect + strip deskew + MRZ decode, mass consensus)...")
 
-    global _debug_variants_saved_this_session, _debug_variants_saved_passport
-    _debug_variants_saved_this_session = False
-    _debug_variants_saved_passport = False
+    global _debug_mrz_plain_variants_saved_tags
+    _debug_mrz_plain_variants_saved_tags.clear()
+    reset_deskew_angle_cache("passport")
 
-    all_l1: List[Tuple[str, float]] = []
-    all_l2: List[Tuple[str, float]] = []
+    all_l1: List[Tuple[str, float, str]] = []
+    all_l2: List[Tuple[str, float, str]] = []
     last_deskewed = None
     last_good_boxes: Optional[List[Tuple[int, int, int, int]]] = None
 
@@ -2437,8 +3324,7 @@ def scan_passport() -> Optional[Dict[str, Any]]:
 
     line1_cands, valid_l2s, checksum_pass_count = _gate_mrz_from_pools(all_l1, all_l2)
 
-    winning_l1, _l1_score, _l1_cnt = _confidence_weighted_vote(line1_cands)
-    winning_l2, _l2_score, _l2_cnt = _confidence_weighted_vote(valid_l2s)
+    winning_l1, winning_l2 = _consensus_winning_mrz_lines(line1_cands, valid_l2s)
 
     passport_id, guest_name = _decode_mrz_winners(winning_l1, winning_l2)
     deskewed = last_deskewed
@@ -2484,8 +3370,7 @@ def scan_passport() -> Optional[Dict[str, Any]]:
     if not (winning_l1 or winning_l2):
         logger.warning("MRZ decode failed on all frames; saving image from last confirmed frame only")
         if deskewed is None and frames:
-            crop = _crop_passport_alignment_region(frames[0])
-            deskewed, _, _ = _text_based_deskew(crop, label="passport")
+            deskewed = _preprocess_passport_alignment_crop(_crop_passport_alignment_region(frames[0]))
 
     passport_image_base64 = _passport_image_to_base64(deskewed) if deskewed is not None else None
 
@@ -2499,21 +3384,24 @@ def scan_passport() -> Optional[Dict[str, Any]]:
 
 def scan_passport_from_frames(frames: List["np.ndarray"]) -> Optional[Dict[str, Any]]:
     """Same pipeline as scan_passport() but using a list of frames (e.g. from a file).
-    Uses 3 frames → deskew + Pass 2 + 6 variants, mass consensus. No camera or verification UI."""
-    if not frames or not (HAS_TESSERACT or HAS_EASYOCR):
+    MRZ detect on alignment crop → combined-strip deskew → 5-variant OCR, mass consensus. No camera UI."""
+    if not frames or not HAS_EASYOCR:
         return None
     for f in frames:
         if f is None or f.size == 0:
             return None
 
     _clear_roi_debug_images("passport")
-    logger.info("Processing passport from %d frame(s) (deskew + detection + MRZ mass consensus)...", len(frames))
-    global _debug_variants_saved_this_session, _debug_variants_saved_passport
-    _debug_variants_saved_this_session = False
-    _debug_variants_saved_passport = False
+    logger.info(
+        "Processing passport from %d frame(s) (MRZ detect + strip deskew + MRZ mass consensus)...",
+        len(frames),
+    )
+    global _debug_mrz_plain_variants_saved_tags
+    _debug_mrz_plain_variants_saved_tags.clear()
+    reset_deskew_angle_cache("passport")
 
-    all_l1: List[Tuple[str, float]] = []
-    all_l2: List[Tuple[str, float]] = []
+    all_l1: List[Tuple[str, float, str]] = []
+    all_l2: List[Tuple[str, float, str]] = []
     last_deskewed = None
     last_good_boxes: Optional[List[Tuple[int, int, int, int]]] = None
 
@@ -2531,8 +3419,7 @@ def scan_passport_from_frames(frames: List["np.ndarray"]) -> Optional[Dict[str, 
 
     line1_cands, valid_l2s, checksum_pass_count = _gate_mrz_from_pools(all_l1, all_l2)
 
-    winning_l1, _l1_score, _l1_cnt = _confidence_weighted_vote(line1_cands)
-    winning_l2, _l2_score, _l2_cnt = _confidence_weighted_vote(valid_l2s)
+    winning_l1, winning_l2 = _consensus_winning_mrz_lines(line1_cands, valid_l2s)
 
     passport_id, guest_name = _decode_mrz_winners(winning_l1, winning_l2)
     deskewed = last_deskewed
@@ -2578,8 +3465,7 @@ def scan_passport_from_frames(frames: List["np.ndarray"]) -> Optional[Dict[str, 
     if not (winning_l1 or winning_l2):
         logger.warning("MRZ decode failed on all frames")
         if deskewed is None and frames:
-            crop = _crop_passport_alignment_region(frames[0])
-            deskewed, _, _ = _text_based_deskew(crop, label="passport")
+            deskewed = _preprocess_passport_alignment_crop(_crop_passport_alignment_region(frames[0]))
 
     passport_image_base64 = _passport_image_to_base64(deskewed) if deskewed is not None else None
 
@@ -2631,7 +3517,7 @@ def _build_clahe_master(card: "np.ndarray") -> "np.ndarray":
     """Build CLAHE-enhanced master image used only for EasyOCR coordinate detection."""
     try:
         gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY) if card.ndim == 3 else card.copy()
-        clahe_obj = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        clahe_obj = cv2.createCLAHE(clipLimit=_SCAN_CLAHE_MASTER_CLIP, tileGridSize=(8, 8))
         return clahe_obj.apply(gray)
     except Exception:
         return card
@@ -2642,6 +3528,485 @@ def _build_clahe_master(card: "np.ndarray") -> "np.ndarray":
 # ---------------------------------------------------------------------------
 _DESKEW_MAX_ANGLE = 15.0
 _DESKEW_CONFIDENCE_BOOST = 1.2
+
+
+def reset_deskew_angle_cache(label: Optional[str] = None) -> None:
+    """Clear cached deskew tilt (degrees). Call at the start of each multi-frame passport/card scan.
+
+    Omit *label* to clear all; pass ``\"passport\"`` or ``\"card\"`` to clear one pipeline only.
+    Starting a passport scan clears both full-page ``passport`` (legacy, unused) and
+    ``passport_mrz`` (combined MRZ strip deskew cache).
+    Polling loops that call ``scan_passport_from_frame`` repeatedly reuse the MRZ cache until the
+    process exits or you call this (e.g. before a new guest in a long-lived app).
+    """
+    global _deskew_cached_tilt_degrees
+    if label is None:
+        _deskew_cached_tilt_degrees.clear()
+    elif str(label) == "passport":
+        _deskew_cached_tilt_degrees.pop("passport", None)
+        _deskew_cached_tilt_degrees.pop("passport_mrz", None)
+    else:
+        _deskew_cached_tilt_degrees.pop(str(label), None)
+
+
+def _rotate_crop_by_measured_tilt(raw_crop: "np.ndarray", measured_tilt_deg: float) -> "np.ndarray":
+    """Rotate *raw_crop* to compensate for text tilt *measured_tilt_deg* (same convention as :func:`_text_based_deskew`)."""
+    rotation_angle = float(measured_tilt_deg)
+    if not HAS_OPENCV or raw_crop is None or raw_crop.size == 0:
+        return raw_crop
+    if abs(rotation_angle) <= 0.05:
+        return raw_crop.copy()
+    applied_angle = -rotation_angle
+    h, w = raw_crop.shape[:2]
+    center = (w / 2.0, h / 2.0)
+    M = cv2.getRotationMatrix2D(center, applied_angle, 1.0)
+    cos_a = abs(M[0, 0])
+    sin_a = abs(M[0, 1])
+    new_w = int(h * sin_a + w * cos_a)
+    new_h = int(h * cos_a + w * sin_a)
+    M[0, 2] += (new_w - w) / 2.0
+    M[1, 2] += (new_h - h) / 2.0
+    return cv2.warpAffine(
+        raw_crop,
+        M,
+        (new_w, new_h),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REPLICATE,
+    )
+
+
+def _refine_passport_skew_angle(raw_crop: "np.ndarray", measured_tilt_deg: float) -> float:
+    """Fine-tune document tilt (degrees) so MRZ-scale text is closer to horizontal.
+
+    Coarse angle comes from Hough / box median; EasyOCR boxes are often axis-aligned, so Hough
+    dominates and can be off by a fraction of a degree. This scans a small window around
+    *measured_tilt_deg* on the **bottom** of the alignment crop (MRZ-heavy), rotating a gray ROI
+    and picking the angle that **maximizes variance of the horizontal projection** (sharper text rows).
+
+    Same sign convention as :func:`_text_based_deskew` (*measured_tilt_deg* = clockwise tilt of text
+    in the image; output is the refined tilt to pass to :func:`_rotate_crop_by_measured_tilt`).
+    """
+    if not HAS_OPENCV or raw_crop is None or raw_crop.size == 0:
+        return measured_tilt_deg
+    try:
+        h, w = raw_crop.shape[:2]
+        # Bottom ~40%: MRZ usually lives here in the passport alignment crop.
+        y0 = int(h * 0.60)
+        if h - y0 < 28 or w < 80:
+            return measured_tilt_deg
+        roi = raw_crop[y0:h, :]
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if roi.ndim == 3 else roi.copy()
+        gray = cv2.GaussianBlur(gray, (3, 3), 0)
+        rh, rw = gray.shape[:2]
+        cx, cy = rw / 2.0, rh / 2.0
+        try:
+            half = float(os.environ.get("DESKEW_REFINE_HALF_DEG", "2.2"))
+            step = float(os.environ.get("DESKEW_REFINE_STEP_DEG", "0.2"))
+        except ValueError:
+            half, step = 2.2, 0.2
+        half = max(0.5, min(half, 4.0))
+        step = max(0.08, min(step, 0.5))
+        m0 = float(measured_tilt_deg)
+        best_score = -1.0
+        best_tilt = m0
+        n_steps = int(math.ceil((2 * half) / step)) + 1
+        tilt = m0 - half
+        for _ in range(max(1, n_steps)):
+            if tilt > m0 + half + 1e-9:
+                break
+            M = cv2.getRotationMatrix2D((cx, cy), -tilt, 1.0)
+            warped = cv2.warpAffine(
+                gray,
+                M,
+                (rw, rh),
+                flags=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_REPLICATE,
+            )
+            proj = np.sum(warped.astype(np.float32), axis=1)
+            score = float(np.var(proj))
+            if score > best_score:
+                best_score = score
+                best_tilt = float(tilt)
+            tilt += step
+        if DEBUG_ACTIVATE and abs(best_tilt - m0) > 0.06:
+            logger.debug("Passport deskew refine: %.3f° -> %.3f° (row-projection)", m0, best_tilt)
+        return best_tilt
+    except Exception:
+        return measured_tilt_deg
+
+
+# Cache key for tilt measured on the **combined MRZ strip** only (not full passport page).
+_MRZ_COMBINED_DESKEW_LABEL = "passport_mrz"
+
+
+def _mrz_strip_projection_score(strip: "np.ndarray", tilt_deg: float) -> float:
+    """Score how well *tilt_deg* straightens the MRZ strip.
+
+    The old grayscale row-sum score could be dominated by the bright page background,
+    which made slightly tilted strips still look "good enough" and under-corrected the
+    saved `f*_mrzroi_*` variants. This version emphasizes dark text using blackhat /
+    thresholded text pixels, then rewards concentrated horizontal rows.
+    """
+    if not HAS_OPENCV or strip is None or strip.size == 0:
+        return -1.0
+    try:
+        gray = cv2.cvtColor(strip, cv2.COLOR_BGR2GRAY) if strip.ndim == 3 else strip.copy()
+        h, w = gray.shape[:2]
+        if h < 24 or w < 80:
+            return -1.0
+
+        # Trim page margins so the score is driven more by MRZ glyph rows than blank borders.
+        x_margin = max(2, int(w * 0.02))
+        y_margin = max(1, int(h * 0.08))
+        if (w - 2 * x_margin) >= 40 and (h - 2 * y_margin) >= 16:
+            gray = gray[y_margin : h - y_margin, x_margin : w - x_margin]
+
+        rh, rw = gray.shape[:2]
+        if rh < 16 or rw < 40:
+            return -1.0
+
+        M = cv2.getRotationMatrix2D((rw / 2.0, rh / 2.0), -float(tilt_deg), 1.0)
+        warped = cv2.warpAffine(
+            gray,
+            M,
+            (rw, rh),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+
+        warped = cv2.GaussianBlur(warped, (3, 3), 0)
+        clahe_obj = cv2.createCLAHE(clipLimit=max(1.5, float(_SCAN_CLAHE_MASTER_CLIP)), tileGridSize=(8, 8))
+        boosted = clahe_obj.apply(warped)
+
+        kw = max(9, min(rw, max(9, rw // 10)))
+        kh = max(3, min(rh, max(3, rh // 14)))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
+        text_emphasis = cv2.morphologyEx(boosted, cv2.MORPH_BLACKHAT, kernel)
+
+        _, bw = cv2.threshold(text_emphasis, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        if int(np.count_nonzero(bw)) < max(20, bw.size // 300):
+            # Fallback when blackhat under-separates faint text on bright backgrounds.
+            _, bw = cv2.threshold(boosted, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+        row_sums = np.sum((bw > 0).astype(np.float32), axis=1)
+        if row_sums.size < 4:
+            return -1.0
+
+        score = float(np.var(row_sums))
+        peak_count = min(3, row_sums.size)
+        if peak_count > 0:
+            top_rows = np.partition(row_sums, -peak_count)[-peak_count:]
+            score += 0.25 * float(np.sum(top_rows))
+        return score
+    except Exception:
+        return -1.0
+
+
+def _refine_mrz_strip_skew_angle(strip: "np.ndarray", measured_tilt_deg: float) -> float:
+    """Fine-tune MRZ strip tilt using horizontal projection variance on the **entire** strip.
+
+    Same sign convention as :func:`_text_based_deskew`. The combined MRZ ROI is almost
+    entirely MRZ lines, so we refine on the full image (unlike :func:`_refine_passport_skew_angle`
+    which uses only the bottom of the alignment crop).
+    """
+    if not HAS_OPENCV or strip is None or strip.size == 0:
+        return measured_tilt_deg
+    try:
+        h, w = strip.shape[:2]
+        if h < 24 or w < 80:
+            return measured_tilt_deg
+        try:
+            half = float(os.environ.get("DESKEW_REFINE_HALF_DEG", "3.2"))
+            step = float(os.environ.get("DESKEW_REFINE_STEP_DEG", "0.1"))
+        except ValueError:
+            half, step = 3.2, 0.1
+        half = max(1.0, min(half, 5.0))
+        step = max(0.05, min(step, 0.5))
+        m0 = float(measured_tilt_deg)
+        best_score = _mrz_strip_projection_score(strip, m0)
+        best_tilt = m0
+        n_steps = int(math.ceil((2 * half) / step)) + 1
+        tilt = m0 - half
+        for _ in range(max(1, n_steps)):
+            if tilt > m0 + half + 1e-9:
+                break
+            score = _mrz_strip_projection_score(strip, tilt)
+            if score > best_score:
+                best_score = score
+                best_tilt = float(tilt)
+            tilt += step
+        if DEBUG_ACTIVATE and abs(best_tilt - m0) > 0.06:
+            logger.debug(
+                "MRZ strip deskew refine: %.3f° -> %.3f° (text-row projection, score %.2f)",
+                m0,
+                best_tilt,
+                best_score,
+            )
+        return best_tilt
+    except Exception:
+        return measured_tilt_deg
+
+
+def _scale_mrz_roi_bands_y(
+    band1: Optional[Tuple[float, float]],
+    band2: Optional[Tuple[float, float]],
+    roi_h_before: int,
+    roi_h_after: int,
+) -> Tuple[Optional[Tuple[float, float]], Optional[Tuple[float, float]]]:
+    """After strip deskew, output height may change; scale y-bands proportionally (small-angle OK)."""
+    if roi_h_before <= 0 or roi_h_after <= 0:
+        return band1, band2
+    s = float(roi_h_after) / float(roi_h_before)
+    if abs(s - 1.0) < 1e-6:
+        return band1, band2
+
+    def _sc(b: Optional[Tuple[float, float]]) -> Optional[Tuple[float, float]]:
+        if b is None:
+            return None
+        lo, hi = b[0] * s, b[1] * s
+        rh = float(roi_h_after)
+        return (max(0.0, lo), min(rh, hi))
+
+    return _sc(band1), _sc(band2)
+
+
+def _deskew_passport_mrz_combined_roi(
+    combined_roi: "np.ndarray",
+    frame_index: Optional[int] = None,
+) -> Tuple["np.ndarray", float]:
+    """Measure tilt on the combined MRZ strip only, then rotate **that strip** (not the full page).
+
+    When ``DESKEW_ENABLE`` is false, returns ``(combined_roi.copy(), 0.0)`` so callers build OCR
+    variants from the **non-deskewed** strip only.
+
+    Uses EasyOCR boxes + Hough on the **full** strip (``bottom_frac=1.0``), optional projection
+    refine via :func:`_refine_mrz_strip_skew_angle`. Caches tilt under :data:`_MRZ_COMBINED_DESKEW_LABEL`
+    when ``DESKEW_CACHE_ANGLE`` is on (same batch behavior as full-page deskew).
+
+    Returns ``(strip_bgr, rotation_angle)`` where *rotation_angle* is the estimated text tilt
+    in degrees (same convention as :func:`_text_based_deskew`).
+    """
+    label = _MRZ_COMBINED_DESKEW_LABEL
+    if not HAS_OPENCV or combined_roi is None or combined_roi.size == 0:
+        return combined_roi, 0.0
+
+    if not DESKEW_ENABLE:
+        if DEBUG_ACTIVATE:
+            logger.info("MRZ strip deskew: skipped (DESKEW_ENABLE is False).")
+        return combined_roi.copy(), 0.0
+
+    # Fast path: reuse tilt from first frame of this passport batch.
+    if DESKEW_CACHE_ANGLE and label in _deskew_cached_tilt_degrees:
+        rotation_angle = float(_deskew_cached_tilt_degrees[label])
+        base_image = _rotate_crop_by_measured_tilt(combined_roi, rotation_angle)
+        applied_angle = -rotation_angle
+        if _OCR_TIMING:
+            logger.info(
+                "[OCR_TIMING] MRZ strip deskew: reused tilt %.2f° — warp applied; skipped EasyOCR remeasure",
+                rotation_angle,
+            )
+        if frame_index is not None and DEBUG_ACTIVATE and HAS_OPENCV:
+            try:
+                ddir = _get_debug_variants_dir("passport")
+                ddir.mkdir(parents=True, exist_ok=True)
+                dbg = base_image.copy()
+                if dbg.ndim == 2:
+                    dbg = cv2.cvtColor(dbg, cv2.COLOR_GRAY2BGR)
+                _warped = abs(float(rotation_angle)) > 0.05
+                cv2.putText(
+                    dbg,
+                    f"MRZ strip tilt={rotation_angle:+.2f} deg (reused)",
+                    (6, 22),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    (0, 255, 255),
+                    2,
+                )
+                cv2.putText(
+                    dbg,
+                    "warpAffine on MRZ strip | skipped EasyOCR remeasure"
+                    if _warped
+                    else "no warp (|tilt|<=0.05 deg) | skipped remeasure",
+                    (6, 44),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 255),
+                    2,
+                )
+                cv2.imwrite(
+                    str((ddir / f"mrz_strip_deskew_debug_frame_{frame_index}.png").resolve()),
+                    dbg,
+                )
+                _write_deskew_tilt_and_zone_debug(
+                    "passport_mrz",
+                    int(frame_index),
+                    base_image,
+                    rotation_angle,
+                    applied_angle,
+                    zone_source_bgr=dbg,
+                    cached=True,
+                )
+            except Exception:
+                pass
+        return base_image, rotation_angle
+
+    clahe_master, easyocr_results = _build_clahe_and_detect_boxes(combined_roi, label=label)
+
+    if frame_index is not None and DEBUG_ACTIVATE:
+        try:
+            ddir = _get_debug_variants_dir("passport")
+            ddir.mkdir(parents=True, exist_ok=True)
+            vis = combined_roi.copy()
+            if vis.ndim == 2:
+                vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
+            for bbox, txt, _conf in easyocr_results:
+                pts = np.array(bbox, dtype=np.int32)
+                cv2.polylines(vis, [pts], True, (0, 255, 0), 2)
+            cv2.putText(
+                vis,
+                f"MRZ strip detection ({len(easyocr_results)} blocks)",
+                (6, 22),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 255),
+                2,
+            )
+            cv2.imwrite(
+                str((ddir / f"mrz_strip_detection_boxes_frame_{frame_index}.png").resolve()),
+                vis,
+            )
+        except Exception:
+            pass
+
+    weighted_angles: List[Tuple[float, float]] = []
+    for bbox, txt, _conf in easyocr_results:
+        if not txt:
+            continue
+        norm_txt = re.sub(r"[^A-Za-z0-9<]", "", txt)
+        if len(norm_txt) < 10:
+            continue
+        xs = [p[0] for p in bbox]
+        ys = [p[1] for p in bbox]
+        x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
+        width = max(1.0, x2 - x1)
+        height = max(1.0, y2 - y1)
+        if width < height * 3.0:
+            continue
+        a = _box_angle(bbox)
+        if a is None:
+            continue
+        weighted_angles.append((a, 1.0))
+
+    rotation_angle = 0.0
+    if weighted_angles:
+        weighted_angles.sort(key=lambda t: t[0])
+        total_w = sum(w for _, w in weighted_angles)
+        threshold = total_w / 2.0
+        acc = 0.0
+        median_angle = 0.0
+        for angle, w in weighted_angles:
+            acc += w
+            if acc >= threshold:
+                median_angle = angle
+                break
+        if abs(median_angle) <= _DESKEW_MAX_ANGLE:
+            rotation_angle = median_angle
+
+    # Hough on the **entire** MRZ strip only (not a fraction of the passport page).
+    # Compare it against the current seed using the MRZ text-row projection score, so
+    # slightly non-zero EasyOCR box angles do not block a clearly better Hough estimate.
+    hough_angle = _dominant_line_angle_hough(clahe_master, bottom_frac=1.0)
+    if hough_angle is not None and abs(hough_angle) <= _DESKEW_MAX_ANGLE:
+        seed_angle = rotation_angle
+        current_score = _mrz_strip_projection_score(combined_roi, rotation_angle)
+        hough_score = _mrz_strip_projection_score(combined_roi, hough_angle)
+        if hough_score > current_score:
+            rotation_angle = hough_angle
+            logger.debug(
+                "MRZ strip frame %s: using Hough tilt %.2f° over seed %.2f° (scores %.2f > %.2f)",
+                frame_index,
+                rotation_angle,
+                seed_angle,
+                hough_score,
+                current_score,
+            )
+
+    if DESKEW_REFINE_PASSPORT and abs(rotation_angle) <= _DESKEW_MAX_ANGLE:
+        rotation_angle = _refine_mrz_strip_skew_angle(combined_roi, rotation_angle)
+
+    applied_angle = -rotation_angle
+    base_image = _rotate_crop_by_measured_tilt(combined_roi, rotation_angle)
+
+    if DESKEW_ENABLE and DESKEW_CACHE_ANGLE:
+        _deskew_cached_tilt_degrees[label] = float(rotation_angle)
+
+    if frame_index is not None and DEBUG_ACTIVATE and DESKEW_ENABLE:
+        try:
+            ddir = _get_debug_variants_dir("passport")
+            ddir.mkdir(parents=True, exist_ok=True)
+            vis = base_image.copy()
+            if vis.ndim == 2:
+                vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
+            if applied_angle != 0.0 and easyocr_results:
+                h, w = combined_roi.shape[:2]
+                center = (w / 2.0, h / 2.0)
+                M = cv2.getRotationMatrix2D(center, applied_angle, 1.0)
+                cos_a = abs(M[0, 0])
+                sin_a = abs(M[0, 1])
+                new_w = int(h * sin_a + w * cos_a)
+                new_h = int(h * cos_a + w * sin_a)
+                M[0, 2] += (new_w - w) / 2.0
+                M[1, 2] += (new_h - h) / 2.0
+                for bbox, _txt, _conf in easyocr_results:
+                    pts_src = np.array(bbox, dtype=np.float64)
+                    ones = np.ones((pts_src.shape[0], 1), dtype=np.float64)
+                    pts_h = np.hstack([pts_src, ones])
+                    pts_rot = (M @ pts_h.T).T.astype(np.int32)
+                    cv2.polylines(vis, [pts_rot], True, (0, 255, 0), 2)
+            else:
+                for bbox, _txt, _conf in easyocr_results:
+                    pts = np.array(bbox, dtype=np.int32)
+                    cv2.polylines(vis, [pts], True, (0, 255, 0), 2)
+            cv2.putText(
+                vis,
+                f"MRZ strip tilt={rotation_angle:+.2f} deg ({len(weighted_angles)} blocks)",
+                (6, 22),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 255),
+                2,
+            )
+            cv2.imwrite(
+                str((ddir / f"mrz_strip_deskew_debug_frame_{frame_index}.png").resolve()),
+                vis,
+            )
+            vis_bgr = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR) if vis.ndim == 2 else vis
+            _write_deskew_tilt_and_zone_debug(
+                "passport_mrz",
+                int(frame_index),
+                base_image,
+                rotation_angle,
+                applied_angle,
+                zone_source_bgr=vis_bgr,
+                cached=False,
+            )
+        except Exception:
+            pass
+
+    if DEBUG_ACTIVATE:
+        if abs(rotation_angle) > 0.05:
+            logger.info(
+                "MRZ strip deskew: estimated tilt=%.2f°, applied rotation=%.2f°.",
+                rotation_angle,
+                applied_angle,
+            )
+        else:
+            logger.info(
+                "MRZ strip deskew: tilt small (%.2f°) — no rotation.",
+                rotation_angle,
+            )
+
+    return base_image, rotation_angle
 
 
 def _box_angle(bbox: list) -> Optional[float]:
@@ -2760,22 +4125,190 @@ def _build_clahe_and_detect_boxes(
     return clahe_master, easyocr_results
 
 
+def _write_deskew_tilt_and_zone_debug(
+    label: str,
+    frame_index: int,
+    base_image: "np.ndarray",
+    rotation_angle: float,
+    applied_angle: float,
+    *,
+    zone_source_bgr: "np.ndarray",
+    cached: bool = False,
+) -> None:
+    """Write ``deskew_tilt_*`` and per-frame ``deskew_debug_zone_*`` (same *base_image* MRZ pipeline uses)."""
+    if not DEBUG_ACTIVATE or not DESKEW_ENABLE or not HAS_OPENCV:
+        return
+    try:
+        ddir = _get_debug_variants_dir(label)
+        ddir.mkdir(parents=True, exist_ok=True)
+
+        tilt_vis = base_image.copy()
+        if tilt_vis.ndim == 2:
+            tilt_vis = cv2.cvtColor(tilt_vis, cv2.COLOR_GRAY2BGR)
+        est_angle = rotation_angle
+        rot_angle = applied_angle
+        abs_est = abs(est_angle)
+        tilt_status = "applied" if abs_est > 0.05 else "skipped"
+        est_text = f"estimated tilt: {est_angle:+.2f} deg"
+        if abs(rot_angle) > 0.05:
+            rot_dir = "anticlockwise" if rot_angle > 0 else "clockwise"
+            rot_text = f"applied rotation: {rot_angle:+.2f} deg ({rot_dir})"
+        else:
+            rot_text = "applied rotation: 0.00 deg (none)"
+        if cached:
+            est_text = f"{est_text}  [CACHED]"
+        cv2.putText(
+            tilt_vis,
+            est_text,
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 255),
+            2,
+        )
+        cv2.putText(
+            tilt_vis,
+            rot_text,
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 255),
+            2,
+        )
+        if tilt_status == "applied" and abs(rot_angle) > 0.05:
+            h_t, w_t = tilt_vis.shape[:2]
+            x_mid, y_mid = w_t // 2, h_t // 2
+            length = max(40, w_t // 6)
+            if rot_angle < 0:
+                p1 = (x_mid - length, y_mid - length // 2)
+                p2 = (x_mid + length, y_mid + length // 2)
+            else:
+                p1 = (x_mid - length, y_mid + length // 2)
+                p2 = (x_mid + length, y_mid - length // 2)
+            cv2.arrowedLine(tilt_vis, p1, p2, (0, 255, 0), 3, tipLength=0.2)
+
+        tilt_path = ddir / f"deskew_tilt_{label}_frame_{frame_index}.png"
+        cv2.imwrite(str(tilt_path.resolve()), tilt_vis)
+
+        zones_vis = zone_source_bgr.copy()
+        if zones_vis.ndim == 2:
+            zones_vis = cv2.cvtColor(zones_vis, cv2.COLOR_GRAY2BGR)
+        zh, zw = zones_vis.shape[:2]
+        zone_specs = [
+            (int(zh * 0.55), "45%", (255, 0, 0)),
+            (int(zh * 0.65), "35%", (0, 255, 0)),
+            (int(zh * 0.75), "25%", (0, 0, 255)),
+            (int(zh * 0.85), "15%", (255, 255, 0)),
+        ]
+        for y, zone_lbl, color in zone_specs:
+            if 0 <= y < zh:
+                cv2.line(zones_vis, (0, y), (zw, y), color, 2)
+                cv2.putText(
+                    zones_vis,
+                    f"bottom {zone_lbl}",
+                    (10, y - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    color,
+                    1,
+                )
+        zones_path = ddir / f"deskew_debug_zone_{label}_frame_{frame_index}.png"
+        cv2.imwrite(str(zones_path.resolve()), zones_vis)
+    except Exception:
+        pass
+
+
 def _text_based_deskew(
     raw_crop: "np.ndarray",
     frame_index: Optional[int] = None,
     label: str = "doc",
 ) -> Tuple["np.ndarray", List[list], float]:
-    """CLAHE + detection always; tilt/rotation only when DESKEW_ENABLE is True.
+    """CLAHE + detection; tilt/rotation when DESKEW_ENABLE is True.
 
     Pipeline:
-      A. _build_clahe_and_detect_boxes: CLAHE + EasyOCR → bounding boxes (always).
-      B. If DESKEW_ENABLE: compute angle from boxes (weighted median + Hough), rotate
-         raw_crop; else return raw_crop unchanged (rotation_angle 0.0).
+      A. If DESKEW_ENABLE + DESKEW_CACHE_ANGLE and a tilt was cached for *label* (same scan batch),
+         apply :func:`_rotate_crop_by_measured_tilt` only — **no** deskew EasyOCR ``readtext``.
+      B. Else: _build_clahe_and_detect_boxes: CLAHE + EasyOCR → bounding boxes (always).
+      C. If DESKEW_ENABLE: compute angle from boxes (weighted median + Hough for passport), rotate
+         raw_crop and store tilt in cache when DESKEW_CACHE_ANGLE; else return raw_crop unchanged.
 
-    Returns (base_image, easyocr_results, rotation_angle_degrees).
+    Returns (base_image, easyocr_results, rotation_angle_degrees) where *rotation_angle* is the
+    estimated text tilt (degrees), not the applied warp angle.
     """
     if not HAS_OPENCV or raw_crop is None or raw_crop.size == 0:
         return raw_crop, [], 0.0
+
+    # Fast path: reuse tilt from the first frame of this batch (no deskew readtext).
+    if DESKEW_ENABLE and DESKEW_CACHE_ANGLE and label in _deskew_cached_tilt_degrees:
+        rotation_angle = float(_deskew_cached_tilt_degrees[label])
+        base_image = _rotate_crop_by_measured_tilt(raw_crop, rotation_angle)
+        applied_angle = -rotation_angle
+        if _OCR_TIMING:
+            logger.info(
+                "[OCR_TIMING] Deskew %s: reused tilt %.2f° — warp still applied; skipped EasyOCR remeasure",
+                label,
+                rotation_angle,
+            )
+        if DEBUG_ACTIVATE:
+            if abs(rotation_angle) > 0.05:
+                logger.info(
+                    "Deskew %s: estimated tilt=%.2f°, applied rotation=%.2f° (cached).",
+                    label,
+                    rotation_angle,
+                    applied_angle,
+                )
+            else:
+                logger.info(
+                    "Deskew %s: estimated tilt small (%.2f°) — no rotation (cached).",
+                    label,
+                    rotation_angle,
+                )
+        # Same deskewed pixels as MRZ; without this, zone PNG had no frame id and cache frames wrote nothing.
+        if frame_index is not None and DEBUG_ACTIVATE and DESKEW_ENABLE and HAS_OPENCV:
+            try:
+                ddir = _get_debug_variants_dir(label)
+                ddir.mkdir(parents=True, exist_ok=True)
+                dbg = base_image.copy()
+                if dbg.ndim == 2:
+                    dbg = cv2.cvtColor(dbg, cv2.COLOR_GRAY2BGR)
+                # "Cached" = reuse angle from first frame in batch. Rotation (warp) still runs unless |tilt|<=0.05 deg.
+                _warped = abs(float(rotation_angle)) > 0.05
+                cv2.putText(
+                    dbg,
+                    f"tilt={rotation_angle:+.2f} deg (reused angle)",
+                    (10, 28),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 255),
+                    2,
+                )
+                cv2.putText(
+                    dbg,
+                    "warpAffine APPLIED | skipped EasyOCR remeasure (speed)"
+                    if _warped
+                    else "no warp (|tilt|<=0.05 deg) | skipped EasyOCR remeasure",
+                    (10, 54),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    (0, 255, 255),
+                    2,
+                )
+                cv2.imwrite(
+                    str((ddir / f"deskew_debug_{label}_frame_{frame_index}.png").resolve()),
+                    dbg,
+                )
+                _write_deskew_tilt_and_zone_debug(
+                    label,
+                    frame_index,
+                    base_image,
+                    rotation_angle,
+                    applied_angle,
+                    zone_source_bgr=dbg,
+                    cached=True,
+                )
+            except Exception:
+                pass
+        return base_image, [], rotation_angle
 
     clahe_master, easyocr_results = _build_clahe_and_detect_boxes(raw_crop, label=label)
 
@@ -2809,13 +4342,9 @@ def _text_based_deskew(
             logger.info("Deskew %s: skipped (DESKEW_ENABLE is False).", label)
         return raw_crop.copy(), easyocr_results, 0.0
 
-    h_img, w_img = raw_crop.shape[:2]
-
-    # Collect candidate angles with weights. We deliberately ignore short or
-    # highly vertical blocks (e.g. signatures, dates) and focus on long,
-    # horizontal text lines such as MRZ or long titles. Blocks in the bottom
-    # 40% of the image (MRZ band) get higher weight so local straight MRZ
-    # lines dominate over skewed signatures elsewhere.
+    # Collect candidate angles from long horizontal text lines (MRZ, titles).
+    # Short or steep blocks (signatures, dates) are skipped.
+    # All text lines are weighted equally regardless of vertical position.
     weighted_angles: List[Tuple[float, float]] = []
     for bbox, txt, _conf in easyocr_results:
         if not txt:
@@ -2830,12 +4359,10 @@ def _text_based_deskew(
         height = max(1.0, y2 - y1)
         if width < height * 3.0:
             continue
-        mid_y = (y1 + y2) / 2.0
         a = _box_angle(bbox)
         if a is None:
             continue
-        weight = 2.0 if mid_y >= h_img * 0.6 else 1.0
-        weighted_angles.append((a, weight))
+        weighted_angles.append((a, 1.0))
 
     rotation_angle = 0.0
     if weighted_angles:
@@ -2852,33 +4379,25 @@ def _text_based_deskew(
         if abs(median_angle) <= _DESKEW_MAX_ANGLE:
             rotation_angle = median_angle
 
-    # EasyOCR returns axis-aligned bboxes, so box angles are always 0. Use Hough line fallback.
-    # Focus on the bottom 30% (MRZ band) for passports; for cards Hough is disabled entirely
-    # because decorative lines and photo edges elsewhere produce misleading angles.
+    # EasyOCR returns axis-aligned bboxes, so box angles are usually 0. Use Hough line fallback.
+    # Passport MRZ uses strip-only deskew elsewhere; full-page deskew here applies only to *card*
+    # and any legacy callers — use the full CLAHE image for Hough (no passport bottom-fraction bias).
+    # For cards Hough is disabled entirely because decorative lines produce misleading angles.
     if label != "card" and abs(rotation_angle) < 0.15:
-        hough_angle = _dominant_line_angle_hough(clahe_master, bottom_frac=0.30)
+        hough_angle = _dominant_line_angle_hough(clahe_master, bottom_frac=1.0)
         if hough_angle is not None and abs(hough_angle) <= _DESKEW_MAX_ANGLE:
             rotation_angle = hough_angle
-            logger.debug("%s frame %s: using Hough line angle %.2f° (EasyOCR boxes axis-aligned)", label, frame_index, rotation_angle)
+            logger.debug(
+                "%s frame %s: using Hough line angle %.2f° (bottom_frac=1.0, EasyOCR boxes axis-aligned)",
+                label,
+                frame_index,
+                rotation_angle,
+            )
 
     # Applied correction is the opposite of the measured tilt.
     applied_angle = -rotation_angle
-
+    base_image = _rotate_crop_by_measured_tilt(raw_crop, rotation_angle)
     if abs(rotation_angle) > 0.05:
-        h, w = raw_crop.shape[:2]
-        center = (w / 2.0, h / 2.0)
-        M = cv2.getRotationMatrix2D(center, applied_angle, 1.0)
-        cos_a = abs(M[0, 0])
-        sin_a = abs(M[0, 1])
-        new_w = int(h * sin_a + w * cos_a)
-        new_h = int(h * cos_a + w * sin_a)
-        M[0, 2] += (new_w - w) / 2.0
-        M[1, 2] += (new_h - h) / 2.0
-        base_image = cv2.warpAffine(
-            raw_crop, M, (new_w, new_h),
-            flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_REPLICATE,
-        )
         logger.debug(
             "%s frame %s: text-deskew rotated %.2f° (estimated tilt=%.2f°, %d text blocks)",
             label,
@@ -2888,7 +4407,6 @@ def _text_based_deskew(
             len(weighted_angles),
         )
     else:
-        base_image = raw_crop.copy()
         logger.debug(
             "%s frame %s: text-deskew skipped (angle=%.2f°, %d weighted blocks)",
             label,
@@ -2896,6 +4414,9 @@ def _text_based_deskew(
             rotation_angle,
             len(weighted_angles),
         )
+
+    if DESKEW_ENABLE and DESKEW_CACHE_ANGLE:
+        _deskew_cached_tilt_degrees[label] = float(rotation_angle)
 
     if frame_index is not None and DEBUG_ACTIVATE and DESKEW_ENABLE:
         try:
@@ -2936,80 +4457,19 @@ def _text_based_deskew(
             debug_path = ddir / f"deskew_debug_{label}_frame_{frame_index}.png"
             cv2.imwrite(str(debug_path.resolve()), vis)
 
-            # Extra: dedicated "tilt applied" debug image (not used for variants).
-            # Shows whether tilt was applied, magnitude, and direction (clockwise / anticlockwise).
-            tilt_vis = base_image.copy()
-            est_angle = rotation_angle
-            rot_angle = applied_angle
-            abs_est = abs(est_angle)
-            if abs_est > 0.05:
-                tilt_status = "applied"
+            if vis.ndim == 2:
+                vis_bgr = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
             else:
-                tilt_status = "skipped"
-
-            est_text = f"estimated tilt: {est_angle:+.2f} deg"
-            if abs(rot_angle) > 0.05:
-                rot_dir = "anticlockwise" if rot_angle > 0 else "clockwise"
-                rot_text = f"applied rotation: {rot_angle:+.2f} deg ({rot_dir})"
-            else:
-                rot_text = "applied rotation: 0.00 deg (none)"
-
-            h_t, w_t = tilt_vis.shape[:2]
-            org1 = (10, 30)
-            org2 = (10, 60)
-            cv2.putText(
-                tilt_vis,
-                est_text,
-                org1,
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 255),
-                2,
+                vis_bgr = vis
+            _write_deskew_tilt_and_zone_debug(
+                label,
+                frame_index,
+                base_image,
+                rotation_angle,
+                applied_angle,
+                zone_source_bgr=vis_bgr,
+                cached=False,
             )
-            cv2.putText(
-                tilt_vis,
-                rot_text,
-                org2,
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 255, 255),
-                2,
-            )
-
-            # Optional arrow indicating direction when tilt was applied.
-            if tilt_status == "applied" and abs(rot_angle) > 0.05:
-                x_mid = w_t // 2
-                y_mid = h_t // 2
-                length = max(40, w_t // 6)
-                if rot_angle < 0:
-                    # Negative applied angle = clockwise rotation.
-                    p1 = (x_mid - length, y_mid - length // 2)
-                    p2 = (x_mid + length, y_mid + length // 2)
-                else:  # positive applied angle = anticlockwise rotation.
-                    p1 = (x_mid - length, y_mid + length // 2)
-                    p2 = (x_mid + length, y_mid - length // 2)
-                cv2.arrowedLine(tilt_vis, p1, p2, (0, 255, 0), 3, tipLength=0.2)
-
-            tilt_path = ddir / f"deskew_tilt_{label}_frame_{frame_index}.png"
-            cv2.imwrite(str(tilt_path.resolve()), tilt_vis)
-
-            # Duplicate with zone lines: bottom 45%, 35%, 25%, 15% (top edge of each zone).
-            zones_vis = vis.copy()
-            if zones_vis.ndim == 2:
-                zones_vis = cv2.cvtColor(zones_vis, cv2.COLOR_GRAY2BGR)
-            zh, zw = zones_vis.shape[:2]
-            zone_specs = [
-                (int(zh * 0.55), "45%", (255, 0, 0)),    # BGR: blue
-                (int(zh * 0.65), "35%", (0, 255, 0)),    # green
-                (int(zh * 0.75), "25%", (0, 0, 255)),    # red
-                (int(zh * 0.85), "15%", (255, 255, 0)),  # cyan
-            ]
-            for y, zone_label, color in zone_specs:
-                if 0 <= y < zh:
-                    cv2.line(zones_vis, (0, y), (zw, y), color, 2)
-                    cv2.putText(zones_vis, f"bottom {zone_label}", (10, y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-            zones_path = ddir / f"deskew_debug_zone_{label}.png"
-            cv2.imwrite(str(zones_path.resolve()), zones_vis)
         except Exception:
             pass
 
@@ -3169,7 +4629,7 @@ def _get_card_rois(
 
     Pass 1 (Straighten): Text-based deskew → median tilt, rotate raw crop → Base Image. Upscale 2x.
     Pass 2 (Targeted Search): Dedicated EasyOCR on Base Image (CLAHE) to find PAN (12–19 digits)
-    and MM/YY expiry only. Use Pass 2 boxes for cropping and 6-variant shotgun; fall back to
+    and MM/YY expiry only. Use Pass 2 boxes for cropping and 5-variant shotgun; fall back to
     CARD_ZONES only if Pass 2 finds nothing.
 
     save_debug_images: if False, do not write deskew/name_roi debug files (e.g. when running
@@ -3191,7 +4651,7 @@ def _get_card_rois(
     }
     if not HAS_OPENCV or frame is None or frame.size == 0:
         return result
-    raw_crop = _crop_to_alignment_region(frame)
+    raw_crop = _preprocess_card_alignment_crop(_crop_to_alignment_region(frame))
 
     # Pass 1 (The Straighten): median tilt angle only; do not use any boxes from this step.
     deskew_frame_index = frame_index if save_debug_images else None
@@ -3199,7 +4659,7 @@ def _get_card_rois(
     result["was_rotated"] = abs(angle) > 0.05
 
     h_pre, w_pre = card.shape[:2]
-    card = cv2.resize(card, (w_pre * 2, h_pre * 2), interpolation=cv2.INTER_CUBIC)
+    # Keep original card resolution; no resizing / stretching.
     result["processed_card"] = card
 
     try:
@@ -3289,11 +4749,18 @@ def _apply_deskew_boost(
     return [(txt, conf * _DESKEW_CONFIDENCE_BOOST) for txt, conf in pool]
 
 
+def _apply_deskew_boost_mrz(
+    pool: List[Tuple[str, float, str]],
+) -> List[Tuple[str, float, str]]:
+    """Same as _apply_deskew_boost but preserve MRZ variant/source tag on each entry."""
+    return [(txt, conf * _DESKEW_CONFIDENCE_BOOST, vkey) for txt, conf, vkey in pool]
+
+
 def _collect_card_raw_pools(
     frame: "np.ndarray", frame_index: Optional[int] = None, save_debug_images: bool = True
 ) -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]], List[Tuple[str, float]]]:
     """Stage 1+2 for one card frame: text-based deskew, per-frame ROI detection,
-    then 6-variant shotgun OCR.  If the frame was rotated (deskewed), every
+    then 5-variant shotgun OCR.  If the frame was rotated (deskewed), every
     OCR result gets a 1.2x confidence boost since straightened text is more
     reliable.
     save_debug_images: if False, do not write card debug/variant files (e.g. when
@@ -3343,7 +4810,7 @@ def _collect_card_raw_pools(
                     if sy2 > sy1:
                         strip_box = (0, sy1, cw, sy2)
 
-                if len(variants) == 6:
+                if len(variants) == 5:
                     for i in range(len(variants)):
                         v = variants[i]
                         if v.ndim == 2:
@@ -3419,7 +4886,7 @@ def scan_card() -> Optional[Dict[str, Any]]:
     through the mass consensus pipeline (deskew, detection master, shotgun OCR,
     gate, confidence-weighted vote).
     """
-    if not HAS_OPENCV or not (HAS_TESSERACT or HAS_EASYOCR):
+    if not HAS_OPENCV or not HAS_EASYOCR:
         logger.info("MOCK HARDWARE/OCR: Simulating card scan")
         return {
             "card_no": "1234567890123456",
@@ -3429,10 +4896,11 @@ def scan_card() -> Optional[Dict[str, Any]]:
         }
 
     _clear_roi_debug_images("card")
-    logger.info("Scanning card with camera (top-2 raw capture, 6-variant x 3-engine shotgun)...")
+    logger.info("Scanning card with camera (top-2 raw capture, 5-variant x 3-engine shotgun)...")
 
     global _debug_variants_saved_card
     _debug_variants_saved_card = False
+    reset_deskew_angle_cache("card")
 
     while True:
         frames = capture_card_frames()
@@ -3492,9 +4960,9 @@ def scan_card_from_frames(
     frames: List["np.ndarray"], skip_clear_roi: bool = False
 ) -> Optional[Dict[str, Any]]:
     """Same pipeline as scan_card() but using a list of frames (e.g. from a file).
-    Uses 3 frames → deskew + Pass 2 + 6 variants, mass consensus. No camera or verification UI.
+    Uses 3 frames → deskew + Pass 2 + 5 variants, mass consensus. No camera or verification UI.
     skip_clear_roi: if True, do not clear ROI/debug images (e.g. when running after passport in test script)."""
-    if not frames or not (HAS_TESSERACT or HAS_EASYOCR):
+    if not frames or not HAS_EASYOCR:
         return None
     for f in frames:
         if f is None or f.size == 0:
@@ -3504,6 +4972,7 @@ def scan_card_from_frames(
     logger.info("Processing card from %d frame(s) (deskew + detection + shotgun consensus)...", len(frames))
     global _debug_variants_saved_card
     _debug_variants_saved_card = False
+    reset_deskew_angle_cache("card")
 
     all_pan: List[Tuple[str, float]] = []
     all_expiry: List[Tuple[str, float]] = []

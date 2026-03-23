@@ -9,7 +9,7 @@ This guide covers installing and running the Payment and Identity System on a de
 
 ## Quick start (development)
 
-1. **Python 3.7+** and **Tesseract** (see the Tesseract Setup section below).
+1. **Python 3.7+** with the dependencies in `requirements.txt`.
 2. Install dependencies:
    ```bash
    pip install -r requirements.txt
@@ -87,7 +87,7 @@ To run on a device that has no internet or has strict SSL/firewall limits:
 | `SUPABASE_SERVICE_ROLE_KEY` | Optional service-role key used when present (overrides anon key) for authenticated writes. |
 | `CAMERA_INDEX` | Camera device index (0, 1, …). Set if the default camera is wrong. |
 | `EASYOCR_MODULE_PATH` | Path to folder with EasyOCR `.pth` files. If unset, app uses `./easyocr_models/` when present. |
-| `DISABLE_EASYOCR` | Set to `1` to use Tesseract-only (limited OCR). |
+| `DISABLE_EASYOCR` | Set to `1` to disable EasyOCR OCR entirely. |
 | `ESP32_WIFI_START_URL` | HTTP URL for the ESP32 `/start` endpoint (e.g. `http://192.168.1.50/start`). Used to wake the NFC reader. |
 | `NFC_SHARED_SECRET_KEY` | Shared 16‑character AES-128 key used between Jetson/laptop and ESP32 for encrypting/decrypting `ACTIVATE` and NFC UIDs. Must match the key in `arduinofile.cpp`. |
 | `JETSON_NFC_UID_PORT` | HTTP port (default `8765`) where this app listens for encrypted NFC UIDs from the ESP32. Must match `JETSON_PORT` in `arduinofile.cpp`. |
@@ -114,44 +114,18 @@ The app loads `.env` with override, so values in `.env` always win. If you previ
 | **EasyOCR not available – SSL / certificate error** | Run `python download_easyocr_models.py` on a machine with internet (and `pip install python-certifi-win32` on Windows if needed). Then copy `easyocr_models/` to the edge device. |
 | **EasyOCR not available – Unicode/progress bar crash (Windows)** | Run with `set PYTHONIOENCODING=utf-8` then `python download_easyocr_models.py`. |
 | **No winning MRZ lines / Card: no result** | Usually means EasyOCR did not load. Ensure `easyocr_models/` exists with both `.pth` files, or run the download script once. |
-| **Tesseract not found** | Install Tesseract and set its path; see the Tesseract Setup section below. |
+| **Tesseract not found** | (Historical) Tesseract is no longer required; the current pipeline is EasyOCR-only. |
 
 ---
 
-## Tesseract Setup (Windows)
+## Tesseract (historical)
 
-Tesseract is one of the OCR engines used by the scanner (together with EasyOCR). The Python package `pytesseract` is only a wrapper -- you must install the Tesseract binary separately on Windows.
+Earlier versions of this project used Tesseract alongside EasyOCR for OCR. The
+current implementation is **EasyOCR-only** and no longer requires Tesseract or
+the `pytesseract` Python wrapper. You can safely skip any Tesseract installation
+steps from older guides.
 
-### Download and install
-
-1. Go to: **https://github.com/UB-Mannheim/tesseract/wiki**
-2. Download the **64-bit** installer (e.g. [tesseract-ocr-w64-setup-5.5.0.20241111.exe](https://github.com/tesseract-ocr/tesseract/releases/download/5.5.0/tesseract-ocr-w64-setup-5.5.0.20241111.exe)).
-3. Run the installer. **Keep the default path**: `C:\Program Files\Tesseract-OCR` (the scanner checks this path automatically).
-4. Optionally add Tesseract to PATH during setup -- not required if using the default path.
-
-### Verify installation
-
-Open a **new** terminal and run:
-
-```
-"C:\Program Files\Tesseract-OCR\tesseract.exe" --version
-```
-
-You should see version info (e.g. `tesseract 5.5.0`).
-
-### Custom install path
-
-If Tesseract is installed elsewhere (e.g. `D:\Tesseract`), add your path to the list in `core/scanner.py`:
-
-```python
-_tesseract_paths = [
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-    r"D:\Tesseract\tesseract.exe",  # your custom path
-]
-```
-
----
+----
 
 ## Supabase guests table and NFC end-to-end test
 
