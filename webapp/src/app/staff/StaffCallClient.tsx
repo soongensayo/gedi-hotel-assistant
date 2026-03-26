@@ -109,7 +109,11 @@ export default function StaffCallClient() {
 
     // Step 2: camera & mic
     try {
-      const [audio, video] = await AgoraRTC.createMicrophoneAndCameraTracks();
+      const [audio, video] = await AgoraRTC.createMicrophoneAndCameraTracks({
+        AEC: true,
+        AGC: true,
+        ANS: true,
+      });
       localAudioRef.current = audio;
       localVideoRef.current = video;
       if (localContainerRef.current) video.play(localContainerRef.current);

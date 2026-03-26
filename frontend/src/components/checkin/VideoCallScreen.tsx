@@ -10,6 +10,9 @@ import { useCheckinStore } from '../../stores/checkinStore';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3001';
 
+/** Mic processing for kiosk / open speakers — reduces speaker→mic feedback (echo). */
+const MIC_CAPTURE_CONFIG = { AEC: true, AGC: true, ANS: true } as const;
+
 type CallStatus =
   | 'idle'
   | 'fetching-token'
@@ -162,7 +165,9 @@ export function VideoCallScreen() {
     let audioTrack: ILocalAudioTrack;
     let videoTrack: ILocalVideoTrack;
     try {
-      [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+      [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+        MIC_CAPTURE_CONFIG,
+      );
     } catch (err: unknown) {
       console.error('[VideoCall] Camera/mic failed:', err);
       await cleanupCall();
