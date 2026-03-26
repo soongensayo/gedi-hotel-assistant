@@ -9,6 +9,7 @@ import { ReservationFoundScreen } from './components/checkin/ReservationFoundScr
 import { UpgradeOfferScreen } from './components/checkin/UpgradeOfferScreen';
 import { PaymentScreen } from './components/checkin/PaymentScreen';
 import { KeyCardScreen } from './components/checkin/KeyCardScreen';
+import { VideoCallScreen } from './components/checkin/VideoCallScreen';
 
 /**
  * Steps that show as a centered overlay panel on top of the avatar.
@@ -37,7 +38,17 @@ function CheckinOverlayContent() {
 function App() {
   const currentStep = useCheckinStore((s) => s.currentStep);
   const isWelcome = currentStep === 'welcome';
+  const isVideoCall = currentStep === 'video-call';
   const showOverlay = OVERLAY_STEPS.includes(currentStep);
+
+  // Video call gets the entire viewport — no progress bar, no chat panel
+  if (isVideoCall) {
+    return (
+      <div className="h-full w-full bg-hotel-dark overflow-hidden">
+        <VideoCallScreen />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full w-full flex flex-col bg-hotel-dark overflow-hidden">

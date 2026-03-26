@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
     "@tailwindcss/vite": "^4.1.18",
+    "agora-rtc-sdk-ng": "^4.24.3",
     "axios": "^1.13.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
