@@ -13,7 +13,8 @@ export type CheckinStep =
   | 'upgrade-offer'
   | 'payment'
   | 'key-card'
-  | 'farewell';
+  | 'farewell'
+  | 'video-call';
 
 export interface Guest {
   id: string;
