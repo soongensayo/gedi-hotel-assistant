@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { execFile, ChildProcess, spawn } from 'child_process';
+import { execFile, ChildProcess } from 'child_process';
 import path from 'path';
 import {
   lookupReservation,
@@ -11,6 +11,7 @@ import { generateWalletPass, isWalletConfigured } from '../services/wallet';
 import { sendCheckinEmail, isEmailConfigured } from '../services/emailService';
 import { encryptToHex, decryptFromHex, normalizeUid, isNfcConfigured } from '../utils/nfcCrypto';
 import { startNfcSerialListener, stopNfcSerialListener } from '../services/nfcSerial';
+import { passportScannerWorker } from '../services/passportScannerWorker';
 import { config } from '../config';
 
 const router = Router();
@@ -45,6 +46,9 @@ function resetScannerState() {
   scanSession++;
   if (scannerState.process) {
     try { scannerState.process.kill('SIGTERM'); } catch { /* already dead */ }
+  }
+  if (scannerState.status === 'scanning') {
+    passportScannerWorker.cancelActiveScan();
   }
   scannerState.process = null;
   scannerState.status = 'idle';
@@ -108,7 +112,7 @@ router.post('/scan-passport', async (_req: Request, res: Response) => {
       const timeout = config.passportScannerTimeout;
 
       const result = await new Promise<{ success: boolean; data?: Record<string, string>; error?: string }>((resolve) => {
-        execFile(pythonBin, [scriptPath], { timeout }, (err, stdout, stderr) => {
+        execFile(pythonBin, [scriptPath], { timeout, env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' } }, (err, stdout, stderr) => {
           if (err) {
             console.error('[Checkin Route] Passport scanner error:', err.message);
             if (stderr) console.error('[Checkin Route] Scanner stderr:', stderr);
@@ -223,91 +227,67 @@ router.post('/start-passport-scan', async (_req: Request, res: Response) => {
       return;
     }
 
-    // Live mode: spawn the polling Python script (engine selects EasyOCR or Tesseract)
-    const scriptPath = config.passportScannerEngine === 'easyocr'
-      ? path.resolve(__dirname, '../../scripts/scan_passport_easyocr_poll.py')
-      : path.resolve(__dirname, '../../scripts/scan_passport_poll.py');
-    const pythonBin = config.passportScannerPython;
+    // Live mode: reuse a persistent EasyOCR worker that was pre-warmed at backend startup.
+    if (config.passportScannerEngine !== 'easyocr') {
+      console.error(`[Passport Scanner] Unsupported passportScannerEngine='${config.passportScannerEngine}'. Only 'easyocr' is supported now.`);
+      scannerState.status = 'failed';
+      scannerState.error = 'Unsupported passport scanner engine (expected easyocr).';
+      res.json({ status: 'failed', error: scannerState.error });
+      return;
+    }
+
     const timeout = Math.floor(config.passportScannerTimeout / 1000);
 
     const mySession = ++scanSession;
-    console.log(`[Passport Scanner] Starting live scan (session ${mySession}): ${pythonBin} ${scriptPath} --timeout ${timeout}`);
+    console.log(`[Passport Scanner] Starting live scan (session ${mySession}) using warm worker (timeout ${timeout}s)`);
 
     scannerState.status = 'scanning';
     scannerState.startedAt = Date.now();
     scannerState.attempts = 0;
     scannerState.data = undefined;
     scannerState.error = undefined;
+    scannerState.process = null;
 
-    const child = spawn(pythonBin, [scriptPath, '--timeout', String(timeout)], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    scannerState.process = child;
-    let stdoutData = '';
-
-    child.stdout!.on('data', (chunk: Buffer) => {
-      stdoutData += chunk.toString();
-    });
-
-    child.stderr!.on('data', (chunk: Buffer) => {
-      if (mySession !== scanSession) return;
-      const lines = chunk.toString().trim().split('\n');
-      for (const line of lines) {
-        try {
-          const progress = JSON.parse(line);
-          if (progress.attempt) {
-            scannerState.attempts = progress.attempt;
-            if (progress.attempt % 5 === 1) {
-              console.log(`[Passport Scanner] Attempt ${progress.attempt} (${progress.elapsed}s elapsed)`);
-            }
+    await passportScannerWorker.startScan(timeout, {
+      onProgress: (progress) => {
+        if (mySession !== scanSession) return;
+        if (progress.attempt) {
+          scannerState.attempts = progress.attempt;
+          if (progress.error) {
+            console.log(`[Passport Scanner] Attempt ${progress.attempt} ERROR: ${progress.error}`);
+          } else if (progress.attempt % 5 === 1) {
+            console.log(`[Passport Scanner] Attempt ${progress.attempt} (${progress.elapsed}s elapsed)`);
           }
-        } catch {
-          if (line.trim()) console.log(`[Passport Scanner] stderr: ${line.trim()}`);
+        } else if (progress.no_mrz_frames && progress.no_mrz_frames % 5 === 1) {
+          console.log(`[Passport Scanner] Waiting for passport (${progress.elapsed}s elapsed, ${progress.no_mrz_frames} frames without MRZ)`);
         }
-      }
-    });
+      },
+      onResult: (result) => {
+        if (mySession !== scanSession) {
+          console.log(`[Passport Scanner] Ignoring stale worker result for session ${mySession} (current: ${scanSession})`);
+          return;
+        }
 
-    child.on('close', (code) => {
-      if (mySession !== scanSession) {
-        console.log(`[Passport Scanner] Stale process (session ${mySession}) exited, ignoring (current: ${scanSession})`);
-        return;
-      }
-
-      scannerState.process = null;
-
-      try {
-        const parsed = JSON.parse(stdoutData.trim());
-        if (code === 0 && !parsed.error) {
-          const nameParts = (parsed.guest_name || '').trim().split(/\s+/);
+        scannerState.process = null;
+        if (result.success && result.data) {
+          const nameParts = (result.data.guest_name || '').trim().split(/\s+/);
           const firstName = nameParts[0] || '';
           const lastName = nameParts.slice(1).join(' ') || firstName;
           scannerState.status = 'success';
           scannerState.data = {
             firstName,
             lastName,
-            passportNumber: parsed.passport_id || '',
-            passportImageBase64: parsed.passport_image_base64 || '',
+            passportNumber: result.data.passport_id || '',
+            passportImageBase64: result.data.passport_image_base64 || '',
           };
           console.log(`[Passport Scanner] Success: ${firstName} ${lastName}, passport ${scannerState.data.passportNumber}`);
-        } else {
-          scannerState.status = 'failed';
-          scannerState.error = parsed.error || 'Scanner failed';
-          console.log(`[Passport Scanner] Failed: ${scannerState.error}`);
+          return;
         }
-      } catch {
-        scannerState.status = 'failed';
-        scannerState.error = 'Failed to parse scanner output';
-        console.log(`[Passport Scanner] Failed to parse output: ${stdoutData.substring(0, 200)}`);
-      }
-    });
 
-    child.on('error', (err) => {
-      if (mySession !== scanSession) return;
-      console.error(`[Passport Scanner] Process error: ${err.message}`);
-      scannerState.process = null;
-      scannerState.status = 'failed';
-      scannerState.error = `Scanner process error: ${err.message}`;
+        scannerState.status = 'failed';
+        scannerState.error = result.error || 'Scanner failed';
+        console.log(`[Passport Scanner] Failed: ${scannerState.error}`);
+      },
     });
 
     res.json({ status: 'scanning' });
@@ -354,12 +334,27 @@ router.get('/passport-scan-status', (_req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/checkin/passport-guide-on
+ * Turn on the passport guide light before the full scanner starts.
+ */
+router.post('/passport-guide-on', async (_req: Request, res: Response) => {
+  try {
+    await passportScannerWorker.guideOn();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Passport Scanner] Guide on error:', error);
+    res.status(500).json({ success: false, error: 'Failed to turn on passport guide light' });
+  }
+});
+
+/**
  * POST /api/checkin/stop-passport-scan
  * Kill the running scanner process and reset state. Used for bypass/cancel.
  */
 router.post('/stop-passport-scan', (_req: Request, res: Response) => {
   console.log(`[Passport Scanner] Stopping scan (was: ${scannerState.status})`);
   resetScannerState();
+  passportScannerWorker.guideOff();
   res.json({ success: true });
 });
 

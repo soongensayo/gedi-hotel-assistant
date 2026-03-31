@@ -1,9 +1,23 @@
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 import { config, validateConfig } from './config';
 import { errorHandler } from './middleware/errorHandler';
 import { setupSocketIO } from './socket';
+import { passportScannerWorker } from './services/passportScannerWorker';
+
+// Clear stale debug images from previous sessions on every startup.
+const debugDir = path.resolve(__dirname, '../../../camera-and-nfc/Identification-and-payment-app/debug');
+if (fs.existsSync(debugDir)) {
+  fs.readdirSync(debugDir, { recursive: true, withFileTypes: true })
+    .filter(f => f.isFile() && /\.(png|jpg|jpeg)$/i.test(f.name))
+    .forEach(f => {
+      try { fs.unlinkSync(path.join(f.parentPath ?? (f as any).path, f.name)); } catch { /* ignore */ }
+    });
+  console.log('[Startup] Cleared debug images from previous session.');
+}
 
 // Routes
 import chatRoutes from './routes/chat';
@@ -71,6 +85,17 @@ server.listen(config.port, () => {
     console.log('');
     console.log('   The server will use mock/fallback data where needed.');
     console.log('   Set the appropriate keys in .env to enable full features.');
+  }
+
+  if (config.passportScannerMode === 'live' && config.passportScannerEngine === 'easyocr') {
+    console.log('[Startup] Pre-warming EasyOCR passport worker...');
+    void passportScannerWorker.prewarm()
+      .then((result) => {
+        console.log(`[Startup] Passport worker ready (${result.cached ? 'cached' : `${result.warmup_seconds ?? 0}s warmup`}).`);
+      })
+      .catch((err) => {
+        console.error('[Startup] Passport worker warmup failed:', err instanceof Error ? err.message : String(err));
+      });
   }
 
   console.log('');

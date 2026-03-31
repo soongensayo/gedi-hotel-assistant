@@ -67,6 +67,68 @@ def _open_camera() -> Tuple[Optional["cv2.VideoCapture"], int]:
             logger.debug("Camera index %s failed: %s", idx, e)
     return None, -1
 
+
+try:
+    import requests
+
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
+_esp32_flash_warning_shown = False
+
+
+def _esp32_flash_ip() -> str:
+    """HTTP host for ESP32 fill light (e.g. 10.161.23.195). Empty disables flash calls."""
+    return (os.getenv("ESP32_FLASH_IP") or os.getenv("ESP32_IP") or "").strip()
+
+
+def _esp32_passport_flash_enabled() -> bool:
+    return bool(_esp32_flash_ip()) and HAS_REQUESTS
+
+
+def _esp32_flash_request(path: str) -> None:
+    global _esp32_flash_warning_shown
+    ip = _esp32_flash_ip()
+    if not ip or not HAS_REQUESTS:
+        return
+    url = f"http://{ip}/{path.lstrip('/')}"
+    try:
+        response = requests.get(url, timeout=2)
+        response.raise_for_status()
+    except Exception as e:
+        # Show at least one visible warning so network issues are not silently swallowed.
+        if not _esp32_flash_warning_shown:
+            logger.warning("ESP32 flash request failed for %s: %s", url, e)
+            _esp32_flash_warning_shown = True
+
+
+def _esp32_flash_on() -> None:
+    _esp32_flash_request("on")
+
+
+def _esp32_flash_off() -> None:
+    _esp32_flash_request("off")
+
+
+def _esp32_guide_on() -> None:
+    _esp32_flash_request("guide/on")
+
+
+def _esp32_guide_off() -> None:
+    _esp32_flash_request("guide/off")
+
+
+def _esp32_prepare_passport_flash(preflash_ms: int = 250) -> None:
+    """Turn off the guide strip, then enable flash shortly before capture."""
+    if not _esp32_passport_flash_enabled():
+        return
+    _esp32_guide_off()
+    _esp32_flash_on()
+    if preflash_ms > 0:
+        time.sleep(preflash_ms / 1000.0)
+
+
 # Bounding box size (pixels) for document alignment.
 # Card guide rectangle (smaller, closer to ID-1 aspect).
 RECT_W, RECT_H = 560, 400
@@ -244,6 +306,25 @@ def _capture_best_frames(
             time.sleep(interval_ms / 1000.0)
     scored.sort(key=lambda t: t[0], reverse=True)
     return [f for _, f in scored[:top_k]]
+
+
+def _capture_fresh_frame(
+    cap: "cv2.VideoCapture",
+    discard_frames: int = 3,
+    interval_ms: int = 30,
+) -> Optional["np.ndarray"]:
+    """Read past a few buffered frames and return the freshest available frame."""
+    if not HAS_OPENCV or cap is None or not cap.isOpened():
+        return None
+    latest: Optional["np.ndarray"] = None
+    total_reads = max(1, int(discard_frames) + 1)
+    for idx in range(total_reads):
+        ret, frame = cap.read()
+        if ret and frame is not None:
+            latest = frame.copy()
+        if idx < total_reads - 1 and interval_ms > 0:
+            time.sleep(interval_ms / 1000.0)
+    return latest
 
 
 def _capture_selection_config(doc_type: str) -> Tuple[int, int]:
@@ -588,6 +669,9 @@ def _capture_frame_via_tkinter(cap: "cv2.VideoCapture", doc_type: str = "passpor
     captured_frames: List["np.ndarray"] = []
     after_id = [None]
 
+    if not use_card_rect:
+        _esp32_guide_on()
+
     root = tk.Tk()
     root.title("Robot Scanner - Align Document")
     root.configure(bg="black")
@@ -625,7 +709,14 @@ def _capture_frame_via_tkinter(cap: "cv2.VideoCapture", doc_type: str = "passpor
         cancel_preview()
         lbl.configure(text="Hold steady... capturing frames.")
         root.update()
-        time.sleep(0.6)
+        if use_card_rect:
+            time.sleep(0.6)
+        else:
+            if _esp32_passport_flash_enabled():
+                _esp32_prepare_passport_flash()
+                _capture_fresh_frame(cap, discard_frames=3, interval_ms=30)
+            else:
+                time.sleep(0.6)
         num_frames, top_k = _capture_selection_config(doc_type)
         captured_frames = _capture_best_frames(cap, num_frames=num_frames, interval_ms=75, top_k=top_k)
         root.quit()
@@ -673,6 +764,8 @@ def _capture_frames_from_camera(doc_type: str = "passport") -> List["np.ndarray"
         return []
 
     use_card_rect = doc_type.strip().lower() == "card"
+    is_passport = not use_card_rect
+    cap = None
 
     try:
         cap, cam_idx = _open_camera()
@@ -682,6 +775,9 @@ def _capture_frames_from_camera(doc_type: str = "passport") -> List["np.ndarray"
 
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+
+        if is_passport:
+            _esp32_guide_on()
 
         window_name = "Robot Scanner - Align Document"
 
@@ -697,34 +793,39 @@ def _capture_frames_from_camera(doc_type: str = "passport") -> List["np.ndarray"
 
                 # Space or Enter to capture
                 if key in (32, 13):
-                    time.sleep(0.5)
+                    if use_card_rect:
+                        time.sleep(0.5)
+                    else:
+                        if _esp32_passport_flash_enabled():
+                            _esp32_prepare_passport_flash()
+                            _capture_fresh_frame(cap, discard_frames=3, interval_ms=30)
+                        else:
+                            time.sleep(0.5)
                     num_frames, top_k = _capture_selection_config(doc_type)
                     picked = _capture_best_frames(cap, num_frames=num_frames, interval_ms=75, top_k=top_k)
-                    cap.release()
                     cv2.destroyWindow(window_name)
                     return picked
                 # Esc to cancel
                 if key == 27:
                     break
 
-            cap.release()
             cv2.destroyWindow(window_name)
             return []
 
         except cv2.error:
             if HAS_TKINTER_PREVIEW:
                 logger.info("OpenCV GUI unavailable, using tkinter camera preview")
-                frames = _capture_frame_via_tkinter(cap, doc_type=doc_type)
-                cap.release()
-                return frames
+                return _capture_frame_via_tkinter(cap, doc_type=doc_type)
             logger.warning("OpenCV GUI not available, falling back to prompt-based capture")
             print("\nPosition your passport/card in front of the camera.")
             print("Take your time. Press Enter when you are ready to capture.")
             input()
             print("Capturing now...")
+            if not use_card_rect and _esp32_passport_flash_enabled():
+                _esp32_prepare_passport_flash()
+                _capture_fresh_frame(cap, discard_frames=3, interval_ms=30)
             num_frames, top_k = _capture_selection_config(doc_type)
             picked = _capture_best_frames(cap, num_frames=num_frames, interval_ms=75, top_k=top_k)
-            cap.release()
             try:
                 cv2.destroyAllWindows()
             except Exception:
@@ -733,11 +834,16 @@ def _capture_frames_from_camera(doc_type: str = "passport") -> List["np.ndarray"
 
     except Exception as exc:
         logger.error("Error during camera capture: %s", exc, exc_info=True)
-        try:
-            cap.release()
-        except Exception:
-            pass
         return []
+    finally:
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception:
+                pass
+        if is_passport:
+            _esp32_flash_off()
+            _esp32_guide_off()
 
 
 def _luhn_check(card_num: str) -> bool:
@@ -1449,7 +1555,12 @@ def _route_mrz_strip_item_to_pools(
     in2 = band2[0] <= mid_y <= band2[1]
 
     if in1 and not in2:
-        return (not c2_only) and (g1 or c1_frag), False
+        add1 = (not c2_only) and (g1 or c1_frag)
+        # EasyOCR often returns one tall box spanning both MRZ rows; mid_y then sits in band1 only.
+        # The string still contains Line 2 (e.g. ...<<SARAH<123456aa...). Previously we forced add2=False
+        # here, which emptied line2_pool and broke decode. Use the same add2 rule as the overlap case.
+        add2 = (not (c1_frag and not g2)) or (c2_only and not c1_frag)
+        return add1, add2
     if in2 and not in1:
         l2 = (not (c1_frag and not g2)) or (c2_only and not c1_frag)
         return False, l2

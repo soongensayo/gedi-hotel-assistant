@@ -53,11 +53,11 @@ def _print_grid_summary(grid: Dict[str, List[str]]) -> int:
 
 def _centered_kernel_values(center: int, preset: str) -> List[str]:
     if preset == "wide":
-        values = [center - 1, center, center + 1, center + 2]
+        values = [center - 2, center - 1, center, center + 1, center + 2]
     elif preset == "fine":
-        values = [center]
+        values = [center - 1, center, center + 1]
     elif preset == "standard":
-        values = [center, center + 1, center + 2]
+        values = [center - 1, center, center + 1]
     else:
         values = [center, center + 1]
     return _int_values(values, 0, 7)
@@ -70,7 +70,7 @@ def _build_morph_refinement_grid(base_env: Dict[str, str], best_stage1: TuneResu
     dilate_center = _read_int(merged, ("SCAN_PRE_DILATE", "SCAN_DILATE"), 0, 0, 7)
     return {
         "SCAN_PRE_ERODE": _centered_kernel_values(erode_center, preset),
-        "SCAN_PRE_DILATE": _centered_kernel_values(dilate_center, preset if preset != "quick" else "standard"),
+        "SCAN_PRE_DILATE": _centered_kernel_values(dilate_center, preset),
     }
 
 

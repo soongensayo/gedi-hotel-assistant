@@ -18,7 +18,7 @@ A full-stack kiosk application featuring a **voice-interactive AI concierge** th
 - **🔑 Digital Key Card** — Generates an Apple Wallet pass (`.pkpass`) on check-in completion and emails it to the guest. The pass includes room details, QR barcode, and hotel branding — guests can add it to Apple Wallet directly from the email. Modular wallet service architecture supports future Google Wallet integration.
 - **📧 Check-in Confirmation Email** — Sends a styled HTML email to the guest with room details, stay dates, and the wallet pass attached.
 - **💬 Post Check-in Conversation** — After check-in completes, the AI continues chatting as a personal concierge — sharing local tips, answering hotel questions, and making the guest feel welcome.
-- **📷 Real Passport Scanner** — Camera-based passport OCR (EasyOCR + Tesseract MRZ pipeline) with automatic field extraction. Falls back to mock data or manual entry when hardware is unavailable.
+- **📷 Real Passport Scanner** — Camera-based passport OCR (EasyOCR MRZ pipeline) with automatic field extraction. Falls back to mock data or manual entry when hardware is unavailable.
 - **💳 NFC Card Reader** — ESP32 + PN532 contactless card reader for demo payments. Simple USB serial communication. Falls back to on-screen tap simulation when hardware is unavailable.
 - **📊 Hotel Data Backend** — In-memory mock data with Supabase support for production
 
@@ -45,7 +45,7 @@ ai-checkin-robot/
 │   └── certs/                 # Apple Wallet certificates — gitignored
 ├── camera-and-nfc/            # Hardware integration (passport OCR + NFC reader)
 │   └── Identification-and-payment-app/
-│       ├── core/              # Scanner (EasyOCR + Tesseract MRZ), validator, data model
+│       ├── core/              # Scanner (EasyOCR MRZ/card pipeline), validator, data model
 │       └── network/           # NFC serial listener, legacy WiFi modules, Supabase transmitter
 ├── scripts/                   # Setup scripts
 ├── supabase/                  # DB schema & seed data
@@ -257,7 +257,7 @@ By default the app runs in **mock mode** — no camera, NFC reader, or ESP32 nee
 
 ### Passport Scanner (Camera + OCR)
 
-**What it does:** The backend spawns a Python subprocess that captures a frame from the connected camera, runs a two-pass MRZ OCR pipeline (EasyOCR + Tesseract), and extracts the passport number and guest name.
+**What it does:** The backend spawns a Python subprocess that captures a frame from the connected camera, runs a two-pass MRZ OCR pipeline (EasyOCR-only, with multi-variant consensus), and extracts the passport number and guest name.
 
 **Setup:**
 

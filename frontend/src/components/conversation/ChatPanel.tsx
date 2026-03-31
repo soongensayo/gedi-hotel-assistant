@@ -3,7 +3,7 @@ import { TranscriptDisplay } from './TranscriptDisplay';
 import { VoiceButton } from './VoiceButton';
 import { useConversationStore } from '../../stores/conversationStore';
 import { useCheckinStore } from '../../stores/checkinStore';
-import { sendChatMessage, stopPassportScan } from '../../services/api';
+import { sendChatMessage, stopPassportScan, turnOnPassportGuide } from '../../services/api';
 import type { AIAction } from '../../services/api';
 import { useVoiceOutput } from '../../hooks/useVoiceOutput';
 import type { CheckinStep } from '../../types';
@@ -25,6 +25,9 @@ function useActionProcessor() {
           case 'set_step': {
             const step = action.payload?.step as CheckinStep | undefined;
             if (step) {
+              if (step === 'passport-scan') {
+                turnOnPassportGuide().catch(() => {});
+              }
               setStep(step);
             }
             break;
@@ -40,6 +43,7 @@ function useActionProcessor() {
             break;
           }
           case 'show_passport_scanner':
+          turnOnPassportGuide().catch(() => {});
             setStep('passport-scan');
             break;
           case 'skip_passport_scanner':

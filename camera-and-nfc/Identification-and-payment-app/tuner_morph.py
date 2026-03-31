@@ -44,6 +44,7 @@ def _build_morph_grid(base_env: Dict[str, str], preset: str) -> Dict[str, List[s
     contrast = _read_int(base_env, ("SCAN_CONTRAST", "SCAN_GLOBAL_CONTRAST", "ADJUST_CONTRAST"), 170, 50, 200)
     pre_sharp = _read_int(base_env, ("SCAN_PRE_SHARPNESS", "SCAN_PREPROCESS_SHARPNESS"), 15, 0, 100)
     clahe = _read_float(base_env, ("SCAN_CLAHE_CLIP",), 2.2, 0.10, 5.00)
+    master_clahe = _read_float(base_env, ("SCAN_CLAHE_MASTER_CLIP",), 1.8, 0.10, 5.00)
     variant_sharp = _read_int(
         base_env,
         ("SCAN_VARIANT_SHARPNESS", "SCAN_SHARPNESS_VARIANT", "ADJUST_SHARPNESS"),
@@ -59,6 +60,7 @@ def _build_morph_grid(base_env: Dict[str, str], preset: str) -> Dict[str, List[s
             "SCAN_CONTRAST": _int_values([contrast - 5, contrast, contrast + 5], 50, 200),
             "SCAN_PRE_SHARPNESS": _int_values([0, 2, 4], 0, 100),
             "SCAN_CLAHE_CLIP": _float_values([clahe - 0.10, clahe, clahe + 0.10], 0.10, 5.00),
+            "SCAN_CLAHE_MASTER_CLIP": _float_values([master_clahe - 0.10, master_clahe, master_clahe + 0.10], 0.10, 5.00),
             "SCAN_VARIANT_SHARPNESS": _int_values([0, 4, 8], 0, 125),
             "SCAN_MRZ_LAB_POOL_WEIGHT": _float_values([0.05], 0.05, 1.50),
             "SCAN_PRE_ERODE": _int_values([0], 0, 7),
@@ -71,6 +73,7 @@ def _build_morph_grid(base_env: Dict[str, str], preset: str) -> Dict[str, List[s
             "SCAN_CONTRAST": _int_values([contrast - 25, contrast - 10, contrast], 50, 200),
             "SCAN_PRE_SHARPNESS": _int_values([0, pre_sharp // 2, pre_sharp], 0, 100),
             "SCAN_CLAHE_CLIP": _float_values([clahe - 0.60, clahe - 0.30, clahe], 0.10, 5.00),
+            "SCAN_CLAHE_MASTER_CLIP": _float_values([master_clahe - 0.40, master_clahe, master_clahe + 0.30], 0.10, 5.00),
             "SCAN_VARIANT_SHARPNESS": _int_values([max(0, variant_sharp - 20), variant_sharp], 0, 125),
             "SCAN_MRZ_LAB_POOL_WEIGHT": _float_values([0.05, lab_weight], 0.05, 1.50),
             "SCAN_PRE_ERODE": _int_values([0, 1, 2], 0, 7),
@@ -83,6 +86,7 @@ def _build_morph_grid(base_env: Dict[str, str], preset: str) -> Dict[str, List[s
             "SCAN_CONTRAST": _int_values([contrast - 25, contrast], 50, 200),
             "SCAN_PRE_SHARPNESS": _int_values([0, pre_sharp], 0, 100),
             "SCAN_CLAHE_CLIP": _float_values([clahe - 0.60, clahe], 0.10, 5.00),
+            "SCAN_CLAHE_MASTER_CLIP": _float_values([master_clahe - 0.30, master_clahe, master_clahe + 0.20], 0.10, 5.00),
             "SCAN_VARIANT_SHARPNESS": _int_values([max(0, variant_sharp - 20), variant_sharp], 0, 125),
             "SCAN_MRZ_LAB_POOL_WEIGHT": _float_values([0.05, lab_weight], 0.05, 1.50),
             "SCAN_PRE_ERODE": _int_values([0, 1, 2], 0, 7),
@@ -94,6 +98,7 @@ def _build_morph_grid(base_env: Dict[str, str], preset: str) -> Dict[str, List[s
         "SCAN_CONTRAST": _int_values([contrast - 20, contrast], 50, 200),
         "SCAN_PRE_SHARPNESS": _int_values([0, pre_sharp], 0, 100),
         "SCAN_CLAHE_CLIP": _float_values([clahe - 0.50, clahe], 0.10, 5.00),
+        "SCAN_CLAHE_MASTER_CLIP": _float_values([master_clahe - 0.30, master_clahe], 0.10, 5.00),
         "SCAN_VARIANT_SHARPNESS": _int_values([max(0, variant_sharp - 15), variant_sharp], 0, 125),
         "SCAN_MRZ_LAB_POOL_WEIGHT": _float_values([0.05, lab_weight], 0.05, 1.50),
         "SCAN_PRE_ERODE": _int_values([0, 1], 0, 7),

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Lightweight passport MRZ polling scanner.
+"""DEPRECATED: Legacy passport MRZ polling scanner (no OCR implementation).
 
-Captures frames from the camera in a loop, runs Tesseract OCR on the MRZ
-region (bottom ~40%), and exits with JSON on stdout as soon as a valid
-passport is detected (name + passport number).
+This script previously captured frames from the camera in a loop and ran
+Tesseract-based OCR on the MRZ region. The main scanner pipeline has since
+been migrated to an EasyOCR-only engine (see scan_passport_easyocr_poll.py
+and camera-and-nfc/Identification-and-payment-app/core/scanner.py).
 
-Called by the Node.js backend as a child process.
-Handles SIGTERM gracefully for mid-scan cancellation.
+If this script is invoked by mistake, it will immediately exit with a clear
+JSON error so callers do not misinterpret its output as a successful scan.
 
 Usage:
   python3 scan_passport_poll.py              # poll camera (default 60s timeout)
@@ -33,12 +34,6 @@ try:
 except ImportError:
     print(json.dumps({"error": "opencv-python and numpy are required"}), file=sys.stdout)
     sys.exit(1)
-
-try:
-    import pytesseract
-    HAS_TESSERACT = True
-except ImportError:
-    HAS_TESSERACT = False
 
 # ---------------------------------------------------------------------------
 # Globals
@@ -219,20 +214,10 @@ def _ocr_mrz_region(crop: np.ndarray) -> Tuple[Optional[dict], int]:
     all_text_lines: List[str] = []
 
     for variant in variants:
-        text = ""
-        if HAS_TESSERACT:
-            # PSM 6 = uniform block of text; PSM 4 = column of variable sizes
-            for psm in (6, 4):
-                try:
-                    t = pytesseract.image_to_string(
-                        variant,
-                        config=f"--psm {psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<",
-                    )
-                    text += " " + t
-                except Exception:
-                    pass
-
-        normalized = _normalize_mrz(text)
+        # NOTE: This legacy script previously used Tesseract here. To keep it
+        # functional without Tesseract, wire it up to EasyOCR or remove this
+        # script entirely in favor of scan_passport_easyocr_poll.py.
+        normalized = _normalize_mrz("")
         if normalized:
             all_text_lines.append(normalized)
 
@@ -338,54 +323,14 @@ def _sigterm_handler(_signum, _frame):
 # ---------------------------------------------------------------------------
 
 def poll(timeout: float = 60.0):
-    global _shutdown
+    """Entry point for the legacy poll script.
 
-    signal.signal(signal.SIGTERM, _sigterm_handler)
-    signal.signal(signal.SIGINT, _sigterm_handler)
-
-    if not HAS_TESSERACT:
-        print(json.dumps({"error": "pytesseract is required but not installed"}), file=sys.stdout)
-        sys.exit(1)
-
-    cap = _open_camera()
-    if cap is None:
-        print(json.dumps({"error": "Could not open camera"}), file=sys.stdout)
-        sys.exit(1)
-
-    start_time = time.time()
-    attempt = 0
-
-    try:
-        while not _shutdown:
-            elapsed = time.time() - start_time
-            if elapsed > timeout:
-                print(json.dumps({"error": "Timeout: no passport detected", "attempts": attempt}), file=sys.stdout)
-                sys.exit(1)
-
-            ret, frame = cap.read()
-            if not ret or frame is None:
-                time.sleep(0.5)
-                continue
-
-            attempt += 1
-            # Report progress on stderr so backend can parse it
-            print(json.dumps({"attempt": attempt, "elapsed": round(elapsed, 1)}), file=sys.stderr, flush=True)
-
-            result = _process_frame(frame)
-
-            if result and result.get("passport_id"):
-                result["passport_image_base64"] = _image_to_base64(frame)
-                result.setdefault("guest_name", None)
-                print(json.dumps(result), file=sys.stdout)
-                sys.exit(0)
-
-            time.sleep(POLL_INTERVAL)
-
-    finally:
-        _close_camera()
-
-    # Reached here only via SIGTERM
-    print(json.dumps({"error": "Cancelled"}), file=sys.stdout)
+    This script is deprecated and no longer performs OCR. It exits immediately
+    with a JSON error so callers do not rely on it for production scanning.
+    """
+    print(json.dumps({
+        "error": "scan_passport_poll.py is deprecated. Use scan_passport_easyocr_poll.py (EasyOCR-only pipeline) instead."
+    }), file=sys.stdout)
     sys.exit(1)
 
 
