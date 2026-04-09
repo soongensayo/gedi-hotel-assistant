@@ -6,6 +6,7 @@
 
 export type CheckinStep =
   | 'welcome'
+  | 'video-call'
   | 'identify'
   | 'passport-scan'
   | 'reservation-found'
@@ -13,8 +14,7 @@ export type CheckinStep =
   | 'upgrade-offer'
   | 'payment'
   | 'key-card'
-  | 'farewell'
-  | 'video-call';
+  | 'farewell';
 
 export interface Guest {
   id: string;
@@ -40,6 +40,7 @@ export interface Room {
   imageUrl?: string;
   isAvailable: boolean;
   description: string;
+  roomForRobot?: string;
 }
 
 export interface RoomUpgrade {

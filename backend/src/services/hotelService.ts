@@ -55,6 +55,7 @@ const MOCK_ROOMS = [
     amenities: ['City View', 'Mini Bar', 'Rain Shower', '55" Smart TV', 'Nespresso Machine'],
     isAvailable: true,
     description: 'Elegant room with city skyline views and modern amenities.',
+    roomForRobot: 'RM1204',
   },
   {
     id: 'room-2',
@@ -68,6 +69,7 @@ const MOCK_ROOMS = [
     amenities: ['Marina Bay View', 'Mini Bar', 'Rainfall Shower', '65" Smart TV', 'Nespresso Machine', 'Bathrobe & Slippers', 'Turndown Service'],
     isAvailable: true,
     description: 'Spacious room with panoramic Marina Bay views and premium touches.',
+    roomForRobot: 'RM1508',
   },
   {
     id: 'room-3',
@@ -81,6 +83,7 @@ const MOCK_ROOMS = [
     amenities: ['Panoramic Bay View', 'Separate Living Area', 'Walk-in Closet', 'Jacuzzi Tub', 'Premium Mini Bar', '75" Smart TV', 'Butler Service', 'Complimentary Breakfast'],
     isAvailable: true,
     description: 'Luxurious suite with separate living area and butler service.',
+    roomForRobot: 'RM2001',
   },
   {
     id: 'room-4',
@@ -94,6 +97,7 @@ const MOCK_ROOMS = [
     amenities: ['360° Panoramic View', 'Private Terrace', 'Full Kitchen', 'Dining Room', 'Private Pool', 'Home Theater', 'Butler Service', 'Complimentary Spa', 'Airport Transfer'],
     isAvailable: true,
     description: 'The pinnacle of luxury — a private penthouse with terrace pool and 360° views.',
+    roomForRobot: 'RM2501',
   },
 ];
 
@@ -248,6 +252,7 @@ function normalizeRoom(row: any) {
     imageUrl: row.image_url ?? row.imageUrl,
     isAvailable: row.is_available ?? row.isAvailable,
     description: row.description,
+    roomForRobot: row.room_for_robot ?? row.roomForRobot,
   };
 }
 
@@ -527,6 +532,24 @@ export async function lookupReservationByName(
   // --- No exact match — fall back to fuzzy search ---
   const suggestions = await searchGuestsFuzzy(firstName, lastName);
   return { reservation: null, suggestions };
+}
+
+/**
+ * Look up the Sesto robot waypoint ID for a given room.
+ * Returns the `room_for_robot` value (e.g. "RM1204") or null if not set.
+ */
+export async function getRoomWaypointId(roomId: string): Promise<string | null> {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('rooms')
+      .select('room_for_robot')
+      .eq('id', roomId)
+      .single();
+    if (!error && data?.room_for_robot) return data.room_for_robot;
+  }
+
+  const room = MOCK_ROOMS.find((r) => r.id === roomId);
+  return room?.roomForRobot ?? null;
 }
 
 export async function getGuestByPassport(passportNumber: string) {
