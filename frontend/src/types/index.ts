@@ -6,6 +6,7 @@
 
 export type CheckinStep =
   | 'welcome'
+  | 'video-call'
   | 'identify'
   | 'passport-scan'
   | 'reservation-found'
