@@ -2,15 +2,16 @@ import { useEffect } from 'react';
 import { useCheckinStore } from '../../stores/checkinStore';
 
 export function FarewellScreen() {
-  const { guest, selectedRoom, resetSession } = useCheckinStore();
+  const { guest, selectedRoom, isEscorting, resetSession } = useCheckinStore();
 
-  // Auto-reset after 15 seconds
+  // Auto-reset after 15 seconds (disabled while robot is escorting guest)
   useEffect(() => {
+    if (isEscorting) return;
     const timer = setTimeout(() => {
       resetSession();
     }, 15000);
     return () => clearTimeout(timer);
-  }, [resetSession]);
+  }, [resetSession, isEscorting]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 py-8 gap-8 text-center">

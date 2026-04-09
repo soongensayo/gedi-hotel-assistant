@@ -24,6 +24,9 @@ interface CheckinState {
   // AI-driven flow: pending message to send to AI on behalf of the user
   pendingMessage: string | null;
   
+  // Robot escort
+  isEscorting: boolean;
+  
   // Session
   sessionId: string;
   sessionStartTime: number | null;
@@ -41,6 +44,7 @@ interface CheckinState {
   setSelectedUpgrade: (upgrade: RoomUpgrade | null) => void;
   setPaymentResult: (result: PaymentResult) => void;
   setPendingMessage: (msg: string | null) => void;
+  setIsEscorting: (val: boolean) => void;
   resetSession: () => void;
 }
 
@@ -69,6 +73,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   selectedUpgrade: null,
   paymentResult: null,
   pendingMessage: null,
+  isEscorting: false,
   sessionId: generateSessionId(),
   sessionStartTime: null,
 
@@ -102,6 +107,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
   setSelectedUpgrade: (upgrade) => set({ selectedUpgrade: upgrade }),
   setPaymentResult: (result) => set({ paymentResult: result }),
   setPendingMessage: (msg) => set({ pendingMessage: msg }),
+  setIsEscorting: (val) => set({ isEscorting: val }),
 
   resetSession: () => set({
     currentStep: 'welcome',
@@ -114,6 +120,7 @@ export const useCheckinStore = create<CheckinState>((set, get) => ({
     selectedUpgrade: null,
     paymentResult: null,
     pendingMessage: null,
+    isEscorting: false,
     sessionId: generateSessionId(),
     sessionStartTime: null,
   }),

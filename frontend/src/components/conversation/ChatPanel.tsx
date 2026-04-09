@@ -16,6 +16,7 @@ function useActionProcessor() {
   const setStep = useCheckinStore((s) => s.setStep);
   const setReservation = useCheckinStore((s) => s.setReservation);
   const setGuest = useCheckinStore((s) => s.setGuest);
+  const setIsEscorting = useCheckinStore((s) => s.setIsEscorting);
   const processActions = useCallback(
     (actions: AIAction[]) => {
       if (!actions || actions.length === 0) return;
@@ -52,10 +53,13 @@ function useActionProcessor() {
           case 'show_key_card':
             setStep('key-card');
             break;
+          case 'move_to_room':
+            setIsEscorting(true);
+            break;
         }
       }
     },
-    [setStep, setReservation, setGuest]
+    [setStep, setReservation, setGuest, setIsEscorting]
   );
 
   return processActions;
