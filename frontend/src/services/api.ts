@@ -135,6 +135,11 @@ export async function startPassportScan(): Promise<{ status: string }> {
   return data;
 }
 
+export async function turnOnPassportGuide(): Promise<{ success: boolean }> {
+  const { data } = await api.post('/checkin/passport-guide-on');
+  return data;
+}
+
 export async function getPassportScanStatus(): Promise<PassportScanStatus> {
   const { data } = await api.get('/checkin/passport-scan-status');
   return data;

@@ -1,0 +1,325 @@
+rank,index,total,overall_score,name_score,passport_score,elapsed_s,returncode,timed_out,passport_id,guest_name,line1,line2,output_path,output_excerpt,SCAN_GAMMA,SCAN_CONTRAST,SCAN_PRE_SHARPNESS,SCAN_CLAHE_CLIP,SCAN_CLAHE_MASTER_CLIP,SCAN_VARIANT_SHARPNESS,SCAN_MRZ_LAB_POOL_WEIGHT
+1,17,27,0.8860,0.7720,1.0000,9.50,0,0,P123456AA,SARAH HARTIN,PPCANHARTIN<<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<,P123456AA0CAN9008010F3301141<<<<<<<<<<<<00<P,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HARTIN
+  Given names       : SARAH
+  Guest name (MRZ)  : SARAH HARTIN
+  Passport number   : P123456AA  (check digit 0 (OK))
+  -> passport_id used : P123456AA
+  -> guest_name used  : SARAH HARTIN
+--- Passport ID consensus ---
+  1. P123456AA (score=0.13, 3 vote(s), 3 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P123456AA (score=0.13, 3 vote(s), 3 check-digit pass(es))
+--- Guest Name consensus ---
+  1. SARAH HARTIN (score=0.13, 3 vote(s)) [SELECTED]
+  -> Selected Guest Name: SARAH HARTIN (score=0.13, 3 vote(s))",0.83,155,0,0.10,1.80,0,0.05
+2,10,27,0.6246,0.6936,0.5556,9.00,0,0,P1Z34SGAA,SADAH HARTIN,PPCANHARTIN<<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<,P1Z34SGAA6CAN9008010F330T1<P1Z34SGAAOCAN90O8,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HARTIN
+  Given names       : SADAH
+  Guest name (MRZ)  : SADAH HARTIN
+  Passport number   : P1Z34SGAA  (check digit 6 (OK))
+  -> passport_id used : P1Z34SGAA
+  -> guest_name used  : SADAH HARTIN
+--- Passport ID consensus ---
+  1. P1Z34SGAA (score=0.08, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P1Z34SGAA (score=0.08, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  1. SADAH HARTIN (score=0.08, 1 vote(s)) [SELECTED]
+  -> Selected Guest Name: SADAH HARTIN (score=0.08, 1 vote(s))",0.83,125,0,0.10,1.50,0,0.05
+3,11,27,0.6246,0.6936,0.5556,9.21,0,0,P1Z34SGAA,SADAH HARTIN,PPCANHARTIN<<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<,P1Z34SGAA6CAN9008010F330T1<P1Z34SGAAOCAN90O8,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HARTIN
+  Given names       : SADAH
+  Guest name (MRZ)  : SADAH HARTIN
+  Passport number   : P1Z34SGAA  (check digit 6 (OK))
+  -> passport_id used : P1Z34SGAA
+  -> guest_name used  : SADAH HARTIN
+--- Passport ID consensus ---
+  1. P1Z34SGAA (score=0.08, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P1Z34SGAA (score=0.08, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  1. SADAH HARTIN (score=0.08, 1 vote(s)) [SELECTED]
+  -> Selected Guest Name: SADAH HARTIN (score=0.08, 1 vote(s))",0.83,125,0,0.10,1.80,0,0.05
+4,16,27,0.6140,0.2280,1.0000,9.74,0,0,P123456AA,6 AARTINKSADAH,PPCANAARTINKSADAH<<<<<<<<6<<<<<<<<<<<<<<<<<<,P123456AA0CAN9008010F330T1<<DB<<<<<<<<<<<<<<,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Given names       : 6
+  Guest name (MRZ)  : 6 AARTINKSADAH
+  Passport number   : P123456AA  (check digit 0 (OK))
+  -> passport_id used : P123456AA
+  -> guest_name used  : 6 AARTINKSADAH
+--- Passport ID consensus ---
+  1. P123456AA (score=0.50, 4 vote(s), 4 check-digit pass(es)) [SELECTED]
+  2. P1234SGAA (score=0.09, 3 vote(s), 3 check-digit pass(es))
+  -> Selected Passport ID: P123456AA (score=0.50, 4 vote(s), 4 check-digit pass(es))
+--- Guest Name consensus ---
+  1. 6 AARTINKSADAH (score=0.59, 7 vote(s)) [SELECTED]
+  -> Selected Guest Name: 6 AARTINKSADAH (score=0.59, 7 vote(s))",0.83,155,0,0.10,1.50,0,0.05
+5,9,27,0.5871,0.1742,1.0000,8.37,0,0,P123456AA,04 HARTINKSADAH,PPCANHARTINKSADAH<<<<<<<<04<<<<<<<<<<<<<<<<<,P123456AA0CAN9008010F330T1<<0B<<<<<<<<<<<<<<,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Given names       : 04
+  Guest name (MRZ)  : 04 HARTINKSADAH
+  Passport number   : P123456AA  (check digit 0 (OK))
+  -> passport_id used : P123456AA
+  -> guest_name used  : 04 HARTINKSADAH
+--- Passport ID consensus ---
+  1. P123456AA (score=0.64, 4 vote(s), 4 check-digit pass(es)) [SELECTED]
+  2. P1Z34SGAA (score=0.12, 3 vote(s), 3 check-digit pass(es))
+  -> Selected Passport ID: P123456AA (score=0.64, 4 vote(s), 4 check-digit pass(es))
+--- Guest Name consensus ---
+  1. 04 HARTINKSADAH (score=0.77, 7 vote(s)) [SELECTED]
+  -> Selected Guest Name: 04 HARTINKSADAH (score=0.77, 7 vote(s))",0.78,155,0,0.10,2.00,0,0.05
+6,15,27,0.5388,0.0775,1.0000,9.21,0,0,P123456AA,None,[none],P123456AA0CAN9008010E3301E<<<<<<00<<<<<<<<<<,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     19. [easyocr_combined/v6_lab_clahe] conf=0.134  'P123456Aa0cAN9OO8O10F3S0T-<K<Du'
+=== MRZ winner (consensus) ===
+L1: [none]
+L2: P123456AA0CAN9008010E3301E<<<<<<00<<<<<<<<<<
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : P123456AA
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  1. P123456AA (score=0.32, 5 vote(s), 5 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P123456AA (score=0.32, 5 vote(s), 5 check-digit pass(es))
+--- Guest Name consensus ---
+  (no candidates passed gating — 2 raw pool entries)",0.83,140,0,0.10,2.00,0,0.05
+7,18,27,0.5388,0.0775,1.0000,9.33,0,0,P123456AA,None,[none],P123456AA0CAN9008010F350TEEAEEETE<<<00<<<<<<,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     17. [easyocr_combined/v6_lab_clahe] conf=0.103  'P1z3456aa0cAn90obo10e33o1<40b'
+=== MRZ winner (consensus) ===
+L1: [none]
+L2: P123456AA0CAN9008010F350TEEAEEETE<<<00<<<<<<
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : P123456AA
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  1. P123456AA (score=0.38, 7 vote(s), 7 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P123456AA (score=0.38, 7 vote(s), 7 check-digit pass(es))
+--- Guest Name consensus ---
+  (no candidates passed gating — 4 raw pool entries)",0.83,155,0,0.10,2.00,0,0.05
+8,4,27,0.4756,0.3124,0.6389,8.07,0,0,P1Z345GAA,HARTINGASARAH,PPCANHARTINGASARAH<<<<<<<<<<<<<<<<<<<<<<<<<<,P1Z345GAA3CAN9008010F330T141<<<<<<<<06<P1Z34,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HARTINGASARAH
+  Given names       : -
+  Guest name (MRZ)  : HARTINGASARAH
+  Passport number   : P1Z345GAA  (check digit 3 (OK))
+  -> passport_id used : P1Z345GAA
+  -> guest_name used  : HARTINGASARAH
+--- Passport ID consensus ---
+  1. P1Z345GAA (score=0.06, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P1Z345GAA (score=0.06, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  1. HARTINGASARAH (score=0.06, 1 vote(s)) [SELECTED]
+  -> Selected Guest Name: HARTINGASARAH (score=0.06, 1 vote(s))",0.78,140,0,0.10,1.50,0,0.05
+9,24,27,0.4700,0.2178,0.7222,9.76,0,0,P1Z3456AA,6 HARTINK SADAH,PPCANHARTINK<SADAH<<<<<<<<6<<<<<<<<<<<<<<<<<,P1Z3456AA3CAN9008010F330T1<6<06<<<<<<<<<<<<<,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Guest name (MRZ)  : 6 HARTINK SADAH
+  Passport number   : P1Z3456AA  (check digit 3 (OK))
+  -> passport_id used : P1Z3456AA
+  -> guest_name used  : 6 HARTINK SADAH
+--- Passport ID consensus ---
+  1. P1Z3456AA (score=0.29, 2 vote(s), 2 check-digit pass(es)) [SELECTED]
+  2. P1Z34S6AA (score=0.09, 3 vote(s), 3 check-digit pass(es))
+  3. P123456AA (score=0.01, 2 vote(s), 2 check-digit pass(es))
+  -> Selected Passport ID: P1Z3456AA (score=0.29, 2 vote(s), 2 check-digit pass(es))
+--- Guest Name consensus ---
+  1. 6 HARTINK SADAH (score=0.39, 7 vote(s)) [SELECTED]
+  -> Selected Guest Name: 6 HARTINK SADAH (score=0.39, 7 vote(s))",0.88,140,0,0.10,2.00,0,0.05
+10,6,27,0.4178,0.2801,0.5556,8.94,0,0,P1ZI4S6AA,K HARTINK SAAH,PPCANHARTINK<SAAH<<<K<<<<<<<<<<<<<<<<<<<<<<<,P1ZI4S6AA1CAN9008010F3301144<<<<<<<<<<<<<<06,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HARTINK SAAH
+  Given names       : K
+  Guest name (MRZ)  : K HARTINK SAAH
+  Passport number   : P1ZI4S6AA  (check digit 1 (OK))
+  -> passport_id used : P1ZI4S6AA
+  -> guest_name used  : K HARTINK SAAH
+--- Passport ID consensus ---
+  1. P1ZI4S6AA (score=0.14, 3 vote(s), 3 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P1ZI4S6AA (score=0.14, 3 vote(s), 3 check-digit pass(es))
+--- Guest Name consensus ---
+  1. K HARTINK SAAH (score=0.14, 3 vote(s)) [SELECTED]
+  -> Selected Guest Name: K HARTINK SAAH (score=0.14, 3 vote(s))",0.78,140,0,0.10,2.00,0,0.05
+11,5,27,0.4108,0.6550,0.1667,8.40,0,0,AAOCAN90O,SARAH HART N,PPCANHART<N<<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<,AAOCAN90O8O10F350T1<4<06<P123456AAOCAN90O8O1,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HART N
+  Given names       : SARAH
+  Guest name (MRZ)  : SARAH HART N
+  Passport number   : AAOCAN90O  (check digit 8 (OK))
+  -> passport_id used : AAOCAN90O
+  -> guest_name used  : SARAH HART N
+--- Passport ID consensus ---
+  1. AAOCAN90O (score=0.13, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: AAOCAN90O (score=0.13, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  1. SARAH HART N (score=0.13, 1 vote(s)) [SELECTED]
+  -> Selected Guest Name: SARAH HART N (score=0.13, 1 vote(s))",0.78,140,0,0.10,1.80,0,0.05
+12,2,27,0.3758,0.2793,0.4722,8.05,0,0,P1Z3GSGAA,HART IN SADAH,PPCANHART<IN<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<,P1Z3GSGAA2CAN9008010F3301144<4<<88<88<<<06<P,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HART IN SADAH
+  Given names       : -
+  Guest name (MRZ)  : HART IN SADAH
+  Passport number   : P1Z3GSGAA  (check digit 2 (OK))
+  -> passport_id used : P1Z3GSGAA
+  -> guest_name used  : HART IN SADAH
+--- Passport ID consensus ---
+  1. P1Z3GSGAA (score=0.05, 3 vote(s), 3 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P1Z3GSGAA (score=0.05, 3 vote(s), 3 check-digit pass(es))
+--- Guest Name consensus ---
+  1. HART IN SADAH (score=0.05, 3 vote(s)) [SELECTED]
+  -> Selected Guest Name: HART IN SADAH (score=0.05, 3 vote(s))",0.78,125,0,0.10,1.80,0,0.05
+13,26,27,0.3752,0.2781,0.4722,9.24,0,0,P1Z3GSGAA,AARTINK SADAH,PPCANAARTINK<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<,P1Z3GSGAA2CAN9008010F3301144<<<<<<8<<<<06<<<,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : AARTINK SADAH
+  Given names       : -
+  Guest name (MRZ)  : AARTINK SADAH
+  Passport number   : P1Z3GSGAA  (check digit 2 (OK))
+  -> passport_id used : P1Z3GSGAA
+  -> guest_name used  : AARTINK SADAH
+--- Passport ID consensus ---
+  1. P1Z3GSGAA (score=0.01, 2 vote(s), 2 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P1Z3GSGAA (score=0.01, 2 vote(s), 2 check-digit pass(es))
+--- Guest Name consensus ---
+  1. AARTINK SADAH (score=0.01, 2 vote(s)) [SELECTED]
+  -> Selected Guest Name: AARTINK SADAH (score=0.01, 2 vote(s))",0.88,155,0,0.10,1.80,0,0.05
+14,12,27,0.3233,0.1744,0.4722,9.14,0,0,P1ZI4SGAA,6 HART NK SADAH,PPCANHART<NK<SADAH<<<<<<<<6<<<<<<<<<<<<<<<<<,P1ZI4SGAA1CAN9008010F3301144<<<<<<<06<P1ZI4S,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HART NK SADAH
+  Given names       : 6
+  Guest name (MRZ)  : 6 HART NK SADAH
+  Passport number   : P1ZI4SGAA  (check digit 1 (OK))
+  -> passport_id used : P1ZI4SGAA
+  -> guest_name used  : 6 HART NK SADAH
+--- Passport ID consensus ---
+  1. P1ZI4SGAA (score=0.09, 3 vote(s), 3 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: P1ZI4SGAA (score=0.09, 3 vote(s), 3 check-digit pass(es))
+--- Guest Name consensus ---
+  1. 6 HART NK SADAH (score=0.09, 3 vote(s)) [SELECTED]
+  -> Selected Guest Name: 6 HART NK SADAH (score=0.09, 3 vote(s))",0.83,125,0,0.10,2.00,0,0.05
+15,14,27,0.1639,0.2444,0.0833,9.90,0,0,OCAN9OOBO,4 HARTINK SARAH,PPCANHARTINK<SARAH<<<<<<<<<4<<<<<<<<<<<<<<<<,OCAN9OOBO10F330T141<<<<<<<<<<<<00<P1Z34S6AA0,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HARTINK SARAH
+  Given names       : 4
+  Guest name (MRZ)  : 4 HARTINK SARAH
+  Passport number   : OCAN9OOBO  (check digit 1 (OK))
+  -> passport_id used : OCAN9OOBO
+  -> guest_name used  : 4 HARTINK SARAH
+--- Passport ID consensus ---
+  1. OCAN9OOBO (score=0.07, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: OCAN9OOBO (score=0.07, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  1. 4 HARTINK SARAH (score=0.07, 1 vote(s)) [SELECTED]
+  -> Selected Guest Name: 4 HARTINK SARAH (score=0.07, 1 vote(s))",0.83,140,0,0.10,1.80,0,0.05
+16,20,27,0.1562,0.2291,0.0833,9.02,0,0,OCAN9OOBO,4T HARTINK SARAH,PPCANHARTINK<SARAH<<<<<<<<4T<<<<<<<<<<<<<<<<,OCAN9OOBO10F330T141<<<<<<<<<<<<00<P1Z34SGAA0,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HARTINK SARAH
+  Given names       : 4T
+  Guest name (MRZ)  : 4T HARTINK SARAH
+  Passport number   : OCAN9OOBO  (check digit 1 (OK))
+  -> passport_id used : OCAN9OOBO
+  -> guest_name used  : 4T HARTINK SARAH
+--- Passport ID consensus ---
+  1. OCAN9OOBO (score=0.07, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: OCAN9OOBO (score=0.07, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  1. 4T HARTINK SARAH (score=0.07, 1 vote(s)) [SELECTED]
+  -> Selected Guest Name: 4T HARTINK SARAH (score=0.07, 1 vote(s))",0.88,125,0,0.10,1.80,0,0.05
+17,21,27,0.1562,0.2291,0.0833,9.19,0,0,OCAN9OOBO,4T HARTINK SARAH,PPCANHARTINK<SARAH<<<<<<<<4T<<<<<<<<<<<<<<<<,OCAN9OOBO10F330T141<<<<<<<<<<<<00<P1Z34SGAA0,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"  Surname           : HARTINK SARAH
+  Given names       : 4T
+  Guest name (MRZ)  : 4T HARTINK SARAH
+  Passport number   : OCAN9OOBO  (check digit 1 (OK))
+  -> passport_id used : OCAN9OOBO
+  -> guest_name used  : 4T HARTINK SARAH
+--- Passport ID consensus ---
+  1. OCAN9OOBO (score=0.07, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: OCAN9OOBO (score=0.07, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  1. 4T HARTINK SARAH (score=0.07, 1 vote(s)) [SELECTED]
+  -> Selected Guest Name: 4T HARTINK SARAH (score=0.07, 1 vote(s))",0.88,125,0,0.10,2.00,0,0.05
+18,3,27,0.0964,0.0775,0.1154,7.54,0,0,I00P,None,[none],I<<<<00<P1Z3456AA0CAN9008010E33O1UE<ALAAEN<E,C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     17. [easyocr_combined/v6_lab_clahe] conf=0.100  'P1z3456aa0cAn90obo10e3Jo1.<K<db'
+=== MRZ winner (consensus) ===
+L1: [none]
+L2: I<<<<00<P1Z3456AA0CAN9008010E33O1UE<ALAAEN<E
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : I00P
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  1. I00P (score=0.10, 1 vote(s), 1 check-digit pass(es)) [SELECTED]
+  -> Selected Passport ID: I00P (score=0.10, 1 vote(s), 1 check-digit pass(es))
+--- Guest Name consensus ---
+  (no candidates passed gating — 4 raw pool entries)",0.78,125,0,0.10,2.00,0,0.05
+19,1,27,0.0388,0.0775,0.0000,8.42,0,0,None,None,PPCANHARTIN<<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     16. [easyocr_combined/v6_lab_clahe] conf=0.846  '<06'
+     17. [easyocr_combined/v6_lab_clahe] conf=0.466  'P1ZI4SGAAOCAN900BO10F330T1<<06'
+=== MRZ winner (consensus) ===
+L1: PPCANHARTIN<<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 17 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.78,125,0,0.10,1.50,0,0.05
+20,7,27,0.0388,0.0775,0.0000,8.49,0,0,None,None,PPCANHARTINGSARAH<<<<<<<<<<<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     17. [easyocr_combined/v6_lab_clahe] conf=0.665  '<06'
+     18. [easyocr_combined/v6_lab_clahe] conf=0.379  'P1Z3456AAOcAN9OOBO10F33OTE<<06'
+=== MRZ winner (consensus) ===
+L1: PPCANHARTINGSARAH<<<<<<<<<<<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 18 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.78,155,0,0.10,1.50,0,0.05
+21,8,27,0.0388,0.0775,0.0000,8.36,0,0,None,None,PPCANHARTINGSARAH<<<<<<<<<<<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     17. [easyocr_combined/v6_lab_clahe] conf=0.665  '<06'
+     18. [easyocr_combined/v6_lab_clahe] conf=0.379  'P1Z3456AAOcAN9OOBO10F33OTE<<06'
+=== MRZ winner (consensus) ===
+L1: PPCANHARTINGSARAH<<<<<<<<<<<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 18 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.78,155,0,0.10,1.80,0,0.05
+22,13,27,0.0388,0.0775,0.0000,9.20,0,0,None,None,PPCANHARTING<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     17. [easyocr_combined/v6_lab_clahe] conf=0.647  '<06'
+     18. [easyocr_combined/v6_lab_clahe] conf=0.372  'P1Z34SGAAOCAN9OOBO10F330T1<<06'
+=== MRZ winner (consensus) ===
+L1: PPCANHARTING<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 18 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.83,140,0,0.10,1.50,0,0.05
+23,19,27,0.0388,0.0775,0.0000,9.80,0,0,None,None,PPCANHARTIN<<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     16. [easyocr_combined/v6_lab_clahe] conf=0.742  '<06'
+     17. [easyocr_combined/v6_lab_clahe] conf=0.404  'P1Z3456AAOCAN90O8O10F330T1<<06'
+=== MRZ winner (consensus) ===
+L1: PPCANHARTIN<<SADAH<<<<<<<<<<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 17 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.88,125,0,0.10,1.50,0,0.05
+24,22,27,0.0388,0.0775,0.0000,10.06,0,0,None,None,PPCANHARTING<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     17. [easyocr_combined/v6_lab_clahe] conf=0.681  '<06'
+     18. [easyocr_combined/v6_lab_clahe] conf=0.363  'P1Z3456AA0cAN90O8010F330T1<<06'
+=== MRZ winner (consensus) ===
+L1: PPCANHARTING<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 18 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.88,140,0,0.10,1.50,0,0.05
+25,23,27,0.0388,0.0775,0.0000,10.13,0,0,None,None,PPCANHARTING<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     17. [easyocr_combined/v6_lab_clahe] conf=0.681  '<06'
+     18. [easyocr_combined/v6_lab_clahe] conf=0.363  'P1Z3456AA0cAN90O8010F330T1<<06'
+=== MRZ winner (consensus) ===
+L1: PPCANHARTING<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 18 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.88,140,0,0.10,1.80,0,0.05
+26,25,27,0.0388,0.0775,0.0000,9.75,0,0,None,None,PPCANAARTIN<<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     17. [easyocr_combined/v6_lab_clahe] conf=0.156  '(<06'
+     18. [easyocr_combined/v6_lab_clahe] conf=0.090  'P1Z3456AOcAN9008O10F3301<(<06'
+=== MRZ winner (consensus) ===
+L1: PPCANAARTIN<<SARAH<<<<<<<<<<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 18 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.88,155,0,0.10,1.50,0,0.05
+27,27,27,0.0388,0.0775,0.0000,9.16,0,0,None,None,PPCANAARTIN<<SARAH<<<<<<<<6<<<<<<<<<<<<<<<<<,[none],C:\Users\Jolie\gedi-hotel-assistant\camera-and-nfc\Identification-and-payment-app\test_images\test.png,"     15. [easyocr_combined/v6_lab_clahe] conf=0.262  '<06'
+     16. [easyocr_combined/v6_lab_clahe] conf=0.152  'P1z3gsgaaocAn900bo10e33011<<06'
+=== MRZ winner (consensus) ===
+L1: PPCANAARTIN<<SARAH<<<<<<<<6<<<<<<<<<<<<<<<<<
+L2: [none]
+[MRZ_DEBUG] Cannot parse structured MRZ fields (need two 44-char lines).
+  -> passport_id used : -
+  -> guest_name used  : -
+--- Passport ID consensus ---
+  (no candidates passed gating — 16 raw pool entries)
+--- Guest Name consensus ---
+  (no candidates passed gating — 10 raw pool entries)",0.88,155,0,0.10,2.00,0,0.05

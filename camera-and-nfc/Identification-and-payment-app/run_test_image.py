@@ -1,70 +1,133 @@
-"""Run the full scan pipeline using a JPG/PNG as if it were the camera.
+"""Run the passport scan pipeline using a JPG/PNG or a live camera grab.
 
-Option A (default): test.jpg runs only the passport pipeline; test_credit.png runs only the card pipeline.
-Option 3: Passport uses 1060×660 frames (crop 1040×640); card uses 580×420 frames (crop 560×400) so the card is not zoomed/cropped.
-Single image via CLI: runs both pipelines, each with the correct frame size for that pipeline.
+**Resolution:** Frames are passed through at **native pixel size** (no resize to 1060×660).
+The scanner applies the same steps as production: center alignment crop **1040×640** from each
+frame inside ``scan_passport_from_frames`` (unless ``SCAN_FULL_FRAME=1`` in ``.env``).
+
+Use a full camera frame (e.g. 1920×1080) so the alignment crop keeps maximum detail on the MRZ.
+
+Capture mode (--capture): SPACE saves ``test_images/last_capture.png`` (raw frame) then runs the pipeline.
 
 Usage:
   python run_test_image.py
-    (default: test.jpg → passport only; test_credit.png → card only)
   python run_test_image.py [path_to_image.jpg]
-    (runs both passport and card pipelines on that image, with correct frame sizes)
-
-Output:
-  - Passport and card results printed to console.
-  - Debug images: debug/variants/passport/ and debug/variants/card/ (each pipeline writes only to its folder).
-  - Six variants per detected ROI in each subdir: f*_v1_orig.png ... f*_v6_thresh.png
+  python run_test_image.py --capture
 """
 
+import argparse
 import logging
-import os
 import sys
+import time
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 import numpy as np
 
-# Project root for imports
 _PROJECT_ROOT = Path(__file__).resolve().parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-# Load .env so OCR_TIMING is set before core.scanner is imported
 from dotenv import load_dotenv
+
 load_dotenv(_PROJECT_ROOT / ".env")
 
 import cv2
 from core.scanner import (
-    scan_passport_from_frames,
-    scan_card_from_frames,
+    CAMERA_HEIGHT,
+    CAMERA_WIDTH,
+    HAS_OPENCV,
     _OCR_TIMING,
+    _capture_fresh_frame,
+    _esp32_flash_off,
+    _esp32_guide_off,
+    _esp32_guide_on,
+    _esp32_prepare_passport_flash,
+    _esp32_passport_flash_enabled,
+    _open_camera,
+    scan_passport_from_frames,
 )
+
 if _OCR_TIMING:
     logging.basicConfig(level=logging.INFO)
 
-# Default test images: passport and credit card (each runs only its own pipeline — Option A)
-TEST_IMAGES = [
-    (_PROJECT_ROOT / "test_images" / "test.jpg", "Passport"),
-    (_PROJECT_ROOT / "test_images" / "test_credit.png", "Credit card"),
+_PASSPORT_TEST_CANDIDATES = [
+    _PROJECT_ROOT / "test_images" / "test.jpg",
+    _PROJECT_ROOT / "test_images" / "test.png",
 ]
-DEFAULT_IMAGE = TEST_IMAGES[0][0]  # backward compat when single path is used
-NUM_FRAMES = 2  # Same as camera: top-2 frames
-FRAME_MARGIN = 20  # scanner uses min(rect, width-20); we want crop = rect size
+_LAST_CAPTURE_PATH = _PROJECT_ROOT / "test_images" / "last_capture.png"
 
-# Option 3: two frame sizes so each pipeline gets correctly sized input (no zoomed/cropped card).
-# Passport pipeline: frame 1060×660 → center crop 1040×640.
-PASSPORT_CROP_SIZE = (1040, 640)
-PASSPORT_FRAME_SIZE = (PASSPORT_CROP_SIZE[0] + FRAME_MARGIN, PASSPORT_CROP_SIZE[1] + FRAME_MARGIN)  # 1060×660
-# Card pipeline: frame 580×420 → center crop 560×400 (full card in frame).
-CARD_CROP_SIZE = (560, 400)
-CARD_FRAME_SIZE = (CARD_CROP_SIZE[0] + FRAME_MARGIN, CARD_CROP_SIZE[1] + FRAME_MARGIN)  # 580×420
+
+def _pick_default_passport_image():
+    for p in _PASSPORT_TEST_CANDIDATES:
+        if p.exists():
+            return p
+    return _PASSPORT_TEST_CANDIDATES[0]
+
+
+TEST_IMAGES = [
+    (_pick_default_passport_image(), "Passport"),
+]
+# Mirror passport camera flow: one selected frame enters MRZ OCR.
+NUM_FRAMES = 1
+# If a single side exceeds this, downscale with INTER_AREA first (memory / speed). Does not affect normal 1080p.
+_MAX_PASSPORT_INPUT_EDGE = 3200
+def _capture_frame_from_camera() -> Tuple[Optional[np.ndarray], Optional[str]]:
+    if not HAS_OPENCV:
+        return None, "OpenCV not available"
+    cap, _idx = _open_camera()
+    if cap is None:
+        return None, "Could not open camera (check CAMERA_INDEX in .env)"
+    try:
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+    except Exception:
+        pass
+    window = "Capture — SPACE: grab frame | Q: quit"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    print("\n--- Camera capture ---")
+    print("Preprocessing is controlled by .env (see .env.example). Align document, SPACE to capture, Q to quit.\n")
+    last_ok: Optional[np.ndarray] = None
+    _esp32_guide_on()
+    try:
+        while True:
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                last_ok = frame
+                cv2.imshow(window, frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord(" ") and last_ok is not None:
+                if _esp32_passport_flash_enabled():
+                    _esp32_prepare_passport_flash()
+                    fresh = _capture_fresh_frame(cap, discard_frames=3, interval_ms=30)
+                    shot = fresh if fresh is not None else last_ok.copy()
+                else:
+                    shot = last_ok.copy()
+                try:
+                    _LAST_CAPTURE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    cv2.imwrite(str(_LAST_CAPTURE_PATH), shot)
+                    print(f"Saved raw frame to {_LAST_CAPTURE_PATH}\n")
+                except Exception as e:
+                    print(f"(Could not save last_capture.png: {e})\n")
+                return shot, None
+            if key in (ord("q"), ord("Q")):
+                return None, "Capture cancelled"
+    finally:
+        try:
+            cap.release()
+        except Exception:
+            pass
+        _esp32_flash_off()
+        _esp32_guide_off()
+        try:
+            cv2.destroyWindow(window)
+        except Exception:
+            cv2.destroyAllWindows()
 
 
 def load_image(path: Path):
-    """Load image as BGR; support paths with non-ASCII characters on Windows."""
     path = Path(path).resolve()
     if not path.exists():
         return None, f"File not found: {path}"
-    # cv2.imread can fail on Windows with non-ASCII paths; use imdecode if needed
     try:
         img = cv2.imread(str(path))
     except Exception:
@@ -81,101 +144,66 @@ def load_image(path: Path):
     return img, None
 
 
-def shrink_to_fit(img, size: tuple):
-    """Resize image to size (width, height). Shrink only; uses INTER_AREA for quality."""
-    w, h = size
-    h_src, w_src = img.shape[:2]
-    if (w_src, h_src) == (w, h):
+def _clamp_large_input(img: np.ndarray) -> np.ndarray:
+    """Only shrink enormous inputs; keep 1080p/4K webcams at full resolution."""
+    h, w = img.shape[:2]
+    m = max(h, w)
+    if m <= _MAX_PASSPORT_INPUT_EDGE:
         return img
-    return cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
-
-
-def _print_card_result(card_data):
-    """Display card scan results with per-field pass/fail indicators."""
-    if not card_data:
-        print("Card: no fields detected at all.")
-        return
-    fields = [
-        ("Card number", card_data.get("card_no")),
-        ("Expiry", card_data.get("expiry")),
-        ("Cardholder", card_data.get("cardholder_name")),
-    ]
-    found = sum(1 for _, v in fields if v)
-    total = len(fields)
-    for name, value in fields:
-        status = "[OK]" if value else "[MISSING]"
-        print(f"  {status} {name}: {value or '—'}")
-    if found < total:
-        print(f"Card: {found}/{total} fields found — guest may edit or retry.")
-    else:
-        print(f"Card: all {total} fields found.")
+    scale = _MAX_PASSPORT_INPUT_EDGE / float(m)
+    nw = max(1, int(round(w * scale)))
+    nh = max(1, int(round(h * scale)))
+    return cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
 
 
 def run_pipeline_for_image(path: Path, label: str):
-    """Load image, build frames at the right size for each pipeline, run the relevant pipeline(s).
-
-    Option A: Passport image runs only passport pipeline; Credit card image runs only card pipeline.
-    Option 3: Passport uses 1060×660 frames (crop 1040×640); card uses 580×420 frames (crop 560×400).
-    Custom (single CLI image): runs both pipelines, each with its own frame size.
-    Returns True if image loaded.
-    """
     print("Loading image:", path)
     img, err = load_image(path)
     if err:
         print("Error:", err)
         return False
+    return _run_pipeline_for_bgr(img, label)
 
-    if label == "Passport":
-        img_p = shrink_to_fit(img, PASSPORT_FRAME_SIZE)
-        print(f"Resized to {PASSPORT_FRAME_SIZE[0]}x{PASSPORT_FRAME_SIZE[1]} px (passport crop {PASSPORT_CROP_SIZE[0]}x{PASSPORT_CROP_SIZE[1]}).")
-        frames = [img_p.copy() for _ in range(NUM_FRAMES)]
-        print(f"Using {NUM_FRAMES} frame(s) for passport pipeline.\n")
-        print("--- Passport pipeline ---")
-        passport_data = scan_passport_from_frames(frames)
-        if passport_data:
-            print("Passport ID:", passport_data.get("passport_id"))
-            print("Guest name:", passport_data.get("guest_name"))
-        else:
-            print("Passport: no result (image may not contain a passport MRZ or crop failed).")
-        return True
 
-    if label == "Credit card":
-        img_c = shrink_to_fit(img, CARD_FRAME_SIZE)
-        print(f"Resized to {CARD_FRAME_SIZE[0]}x{CARD_FRAME_SIZE[1]} px (card crop {CARD_CROP_SIZE[0]}x{CARD_CROP_SIZE[1]}).")
-        frames = [img_c.copy() for _ in range(NUM_FRAMES)]
-        print(f"Using {NUM_FRAMES} frame(s) for card pipeline.\n")
-        print("--- Card pipeline ---")
-        card_data = scan_card_from_frames(frames)
-        _print_card_result(card_data)
-        return True
-
-    # Custom: single image from CLI — run both pipelines with correct frame size for each (Option 3)
-    img_p = shrink_to_fit(img, PASSPORT_FRAME_SIZE)
-    img_c = shrink_to_fit(img, CARD_FRAME_SIZE)
-    passport_frames = [img_p.copy() for _ in range(NUM_FRAMES)]
-    card_frames = [img_c.copy() for _ in range(NUM_FRAMES)]
-    print(f"Passport frames: {PASSPORT_FRAME_SIZE[0]}x{PASSPORT_FRAME_SIZE[1]} (crop {PASSPORT_CROP_SIZE[0]}x{PASSPORT_CROP_SIZE[1]}).")
-    print(f"Card frames: {CARD_FRAME_SIZE[0]}x{CARD_FRAME_SIZE[1]} (crop {CARD_CROP_SIZE[0]}x{CARD_CROP_SIZE[1]}).")
-    print(f"Using {NUM_FRAMES} frame(s) per pipeline.\n")
+def _run_pipeline_for_bgr(img: np.ndarray, label: str) -> bool:
+    del label  # same path for default test image, CLI path, and --capture
+    img_p = _clamp_large_input(img)
+    h, w = img_p.shape[:2]
+    print(
+        f"Passport pipeline input: {w}×{h} px ({NUM_FRAMES} identical frame(s)). "
+        "Scanner applies center crop 1040×640 unless SCAN_FULL_FRAME=1.\n"
+    )
     print("--- Passport pipeline ---")
+    passport_frames = [img_p.copy() for _ in range(NUM_FRAMES)]
     passport_data = scan_passport_from_frames(passport_frames)
     if passport_data:
         print("Passport ID:", passport_data.get("passport_id"))
         print("Guest name:", passport_data.get("guest_name"))
     else:
         print("Passport: no result (image may not contain a passport MRZ or crop failed).")
-    print("\n--- Card pipeline ---")
-    card_data = scan_card_from_frames(card_frames)
-    _print_card_result(card_data)
     return True
 
 
 def main():
-    if len(sys.argv) > 1:
-        # Single image from CLI
-        paths_to_run = [(Path(sys.argv[1]).resolve(), "Custom")]
+    ap = argparse.ArgumentParser(description="Run the passport OCR pipeline on test images or camera capture.")
+    ap.add_argument("--capture", "-c", "--camera", action="store_true", help="Grab one frame from camera (SPACE) then run the passport pipeline")
+    ap.add_argument("image", nargs="?", default=None, help="Image path (runs the passport pipeline at the correct size)")
+    args = ap.parse_args()
+
+    if args.capture:
+        shot, err = _capture_frame_from_camera()
+        if err:
+            print(err)
+            sys.exit(1)
+        print("[Camera capture] Running passport pipeline only (preprocessing from .env).\n")
+        if not _run_pipeline_for_bgr(shot, "Custom"):
+            sys.exit(1)
+        print("\nDebug outputs: debug/variants/passport/")
+        return
+
+    if args.image:
+        paths_to_run = [(Path(args.image).resolve(), "Custom")]
     else:
-        # Default: run both passport and credit card test images
         paths_to_run = TEST_IMAGES
 
     ran_any = False
@@ -188,11 +216,10 @@ def main():
 
     if not ran_any:
         print("No image could be loaded.")
-        if not paths_to_run or paths_to_run == TEST_IMAGES:
-            print("Ensure test_images/test.jpg and test_images/test_credit.png exist, or run: python run_test_image.py <your_image.jpg>")
+        print("Add test images or run: python run_test_image.py <image.jpg> or python run_test_image.py --capture")
         sys.exit(1)
 
-    print("\nDebug outputs: debug/variants/passport/ and debug/variants/card/ (6 variants each at crop size).")
+    print("\nDebug outputs: debug/variants/passport/")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ Usage:
 Output:
   - Passport and card results printed to console.
   - Debug images: debug/variants/passport/ and debug/variants/card/ (each pipeline writes only to its folder).
-  - Six variants per detected ROI in each subdir: f*_v1_orig.png ... f*_v6_thresh.png
+  - Five OCR variants per ROI: f*_v1_orig.png … f*_v6_lab_clahe.png (v5/v6 = LAB L + CLAHE).
 """
 
 import sys
@@ -168,7 +168,7 @@ def main():
             print("Ensure test_images/test.jpg and test_images/test_credit.png exist, or run: python run_test_image.py <your_image.jpg>")
         sys.exit(1)
 
-    print("\nDebug outputs: debug/variants/passport/ and debug/variants/card/ (6 variants each at crop size).")
+    print("\nDebug outputs: debug/variants/passport/ and debug/variants/card/ (5 OCR variants each; v5/v6 LAB+CLAHE).")
 
 
 if __name__ == "__main__":

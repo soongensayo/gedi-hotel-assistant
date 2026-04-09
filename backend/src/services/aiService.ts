@@ -11,6 +11,7 @@ import {
   lookupReservationByName,
   getRoomWaypointId,
 } from './hotelService';
+import { passportScannerWorker } from './passportScannerWorker';
 import { navigateToWaypoint } from './sestoService';
 
 // =============================================================================
@@ -315,6 +316,9 @@ async function executeToolCall(
 
     // --- Action tools (side-effects for frontend) ---
     case 'trigger_passport_scan':
+      void passportScannerWorker.guideOn().catch((err) => {
+        console.error('[AI Service] Failed to turn on passport guide:', err);
+      });
       return {
         result: { success: true, message: 'Passport scanner UI is now displayed. STOP calling tools — respond to the guest and wait for them to confirm they have scanned.' },
         action: { type: 'show_passport_scanner' },
@@ -335,6 +339,11 @@ async function executeToolCall(
         action: { type: 'show_key_card' },
       };
     case 'set_checkin_step':
+      if (args.step === 'passport-scan') {
+        void passportScannerWorker.guideOn().catch((err) => {
+          console.error('[AI Service] Failed to turn on passport guide for passport-scan step:', err);
+        });
+      }
       return {
         result: { success: true, message: `Check-in step set to: ${args.step}` },
         action: { type: 'set_step', payload: { step: args.step } },

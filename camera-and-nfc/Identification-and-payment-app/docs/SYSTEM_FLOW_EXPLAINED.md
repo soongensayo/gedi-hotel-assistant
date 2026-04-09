@@ -4,6 +4,8 @@ A modular Python project for hotel guest check-in: passport scan (MRZ), stay loo
 
 This document gives a **quick start** (overview, install, config) and then describes **everything that happens** in the application so you can ask follow-up questions (e.g. to Gemini) about specific steps, modules, or flows.
 
+For a **detailed technical audit** of the passport scanner pipeline (capture, filters, EasyOCR usage, MRZ regions, passport number extraction, and correction flows), see [PASSPORT_SCANNER_PIPELINE_AUDIT.md](PASSPORT_SCANNER_PIPELINE_AUDIT.md).
+
 ---
 
 ## Project overview and quick start
@@ -37,7 +39,7 @@ This document gives a **quick start** (overview, install, config) and then descr
 ### Features
 
 - **Linear check-in flow:** Passport scan (compulsory) → confirm details → fetch stay from server → show stay → credit card → review & submit.
-- **Passport:** Multi-frame capture, deskew, MRZ zone detection (OCR-driven or fixed), multi-variant OCR, TD3 decode, consensus voting; passport image always saved (base64 in `CheckInData`) and uploaded to a private Supabase Storage bucket on submit. Guests can edit **name** or **passport number** individually on the confirmation screen.
+- **Passport:** Multi-frame capture, MRZ line detection on alignment crop, **MRZ-strip-only** deskew, multi-variant OCR on that strip, TD3 decode, consensus voting; full-page alignment image always saved (base64 in `CheckInData`, not globally deskewed) and uploaded to a private Supabase Storage bucket on submit. Guests can edit **name** or **passport number** individually on the confirmation screen.
 - **Credit card:** Multi-frame scan with zone OCR and Luhn/expiry/name consensus, manual entry, or NFC UID linking + manual details.
 - **Supabase backend:** Fetch guest by passport_id (GET); upsert into `guests` table (PATCH then POST fallback) with `first_name`, `last_name`, `guest_name`, `passport_id`, `card_details`, and optional `passport_path` (file path into private `passports` Storage bucket) and `nfc_uid`.
 - **Mock mode:** If camera/OCR or Jetson GPIO is unavailable, app runs in mock mode (simulated scan, no real hardware).
@@ -86,7 +88,7 @@ See `.env.example` and [DEPLOYMENT.md](../DEPLOYMENT.md) for the full list.
 - **guest_name** – Full name.
 - **passport_id** – Passport number.
 - **card_details** – Dict: `card_no`, `expiry`, `cvv`, `cardholder_name`.
-- **passport_image_base64** – Deskewed passport image as base64 PNG (saved on every scan, kept in memory; on submit it is uploaded to Supabase Storage and only the file path is stored in the database).
+- **passport_image_base64** – Full passport **alignment crop** as base64 PNG (gamma/contrast preprocessed; **not** globally deskewed). MRZ deskew applies only to the combined MRZ strip during OCR. Saved on every scan; on submit it is uploaded to Supabase Storage and only the file path is stored in the database.
 - **nfc_uid** – Hex UID of the NFC card linked to this guest (when NFC is used).
 
 ### Logging
@@ -101,7 +103,7 @@ See `.env.example` and [DEPLOYMENT.md](../DEPLOYMENT.md) for the full list.
 |------|---------|
 | `main.py` | Entry point – runs linear check-in flow (`run_check_in_flow`): passport scan → confirm → fetch stay → card → review & submit. No main menu; one fixed sequence. |
 | `core/data_model.py` | Defines `CheckInData` – holds `guest_name`, `passport_id`, `card_details`, `passport_image_base64`, `nfc_uid`. `to_dict()`, `update_from_dict()`, `is_complete()`. |
-| `core/scanner.py` | Camera + OCR: capture (alignment box, multi-frame), deskew, MRZ/card zone detection, multi-variant OCR (Tesseract + EasyOCR), consensus. `scan_passport()`, `scan_card()`, `capture_passport_image_only()`, `detect_hardware()`. |
+| `core/scanner.py` | Camera + OCR: capture (alignment box, multi-frame), passport MRZ detect + **MRZ-strip-only** deskew, card full-crop deskew, MRZ/card zone detection, multi-variant OCR (EasyOCR-only), consensus. `scan_passport()`, `scan_card()`, `capture_passport_image_only()`, `detect_hardware()`. |
 | `core/validator.py` | Validation: guest name, passport ID, card number (Luhn), expiry (MM/YY), CVV. `validate_check_in_data()` for full check before submit. |
 | `core/manual_input.py` | Manual entry / touch screen (if used); can override or correct scanned data. |
 | `network/transmitter.py` | Supabase + Storage: `fetch_guest_by_passport_id()` (GET `guests`), `link_nfc_uid_to_guest()` (PATCH `guests.nfc_uid`), `upload_passport_image()` (POST to Storage `passports` bucket), `get_passport_image()` (POST signed URL), `send_data()` (PATCH/POST upsert into `guests` with `passport_path`), `send_data_mock()`. URL and keys from `.env`. |
@@ -115,7 +117,7 @@ In both scan and manual flows: **capture** → **validate** → **show** data �
 - **`Optional[str]`** – value can be a string or `None` (“not set yet”).
 - **`Dict[str, Any]`** – dictionary with string keys and values of any type.
 - **`Tuple[bool, str]`** – e.g. `(True, "")` or `(False, "error message")` from validators.
-- **`try/except`** – used for optional libraries (OpenCV, Tesseract, EasyOCR) and camera/OCR so the app doesn’t crash; mock mode when hardware is missing.
+- **`try/except`** – used for optional libraries (OpenCV, EasyOCR) and camera/OCR so the app doesn’t crash; mock mode when hardware is missing.
 - **`@dataclass`** – generates `__init__` and helpers for a data-holding class (e.g. `CheckInData`).
 - **JSON** – text format for sending data over the network; `json.dumps()` turns a Python dict into a JSON string.
 - **HTTPS** – HTTP with encryption; required for the transmitter (non-HTTPS URLs are rejected).
@@ -183,15 +185,11 @@ No option to skip scanning; manual entry is only offered after at least one scan
 
    For each frame:
 
-   - **Crop:** `_crop_passport_alignment_region(frame)` – center passport alignment region.
-   - **Detection + optional deskew (Pass 1):** `_text_based_deskew(crop, label="passport")`:
-     - Always builds a CLAHE-enhanced master image and runs EasyOCR once to get **detection boxes** (text locations) on the cropped frame.
-     - If `DESKEW_ENABLE=true` (set in `.env`), uses those boxes (and a Hough-line fallback) to compute a median tilt angle and rotates the **original** crop so the page is level. If `DESKEW_ENABLE=false`, no tilt/rotation is applied and the cropped image is used as-is.
-     - OCR text from this step is not used for MRZ content; it only drives the optional rotation and debug overlays. When `DEBUG_ACTIVATE=true`, debug images such as `deskew_debug_passport_frame_*.png`, `deskew_tilt_passport_frame_*.png`, `deskew_debug_zone_passport.png`, and `detection_boxes_passport_frame_*.png` are written under `debug/variants/passport/`.
-   - **MRZ line detection (Pass 2):** `_detect_mrz_lines_with_easyocr(deskewed)` – run a **dedicated** EasyOCR `readtext()` on the bottom 45% of the **deskewed (or raw, if deskew disabled)** image (CLAHE-enhanced) to find two 44-character MRZ lines. Uses P&lt; anchor and chevron density to pick Line 1 and Line 2 boxes. Returns bounding boxes; caller expands them to full width and crops each line ROI from the deskewed image.
-   - **MRZ-only 6-variant OCR per line ROI:** For each MRZ ROI, `_shotgun_ocr_on_mrz_roi(line_roi)` builds 6 variants and runs Tesseract + EasyOCR. For EasyOCR it also **stitches split boxes** into full-line candidates (left→right ordering; special handling for `P<...` plus a nearby name fragment).
-   - **Band fallback:** If line detection fails, a multi-band strip from the bottom region is OCR’d and its results are added to both line pools.
-   - Output of this step is two pools: `(line1_pool, line2_pool)` i.e. many `(text, confidence)` entries per line.
+   - **Crop + preprocess:** `_crop_passport_alignment_region(frame)` then `_preprocess_passport_alignment_crop` (gamma / global tone). **No full-page deskew** — the saved passport image and Pass 2 detection use this same alignment crop (may be tilted).
+   - **MRZ line detection (Pass 2):** `_detect_mrz_lines_with_easyocr(passport_page)` – dedicated EasyOCR `readtext()` on the **full** alignment crop (CLAHE-enhanced) to find two MRZ line boxes. Uses P&lt; anchor and chevron density. Caller expands boxes to nearly full width, then **vertical union** = one combined MRZ strip.
+   - **MRZ-strip deskew + 5-variant OCR:** `_passport_mrz_ocr_combined_strip` crops that union, then `_deskew_passport_mrz_combined_roi` (when `DESKEW_ENABLE` is on) measures tilt **only on the strip** and rotates it; when deskew is off, variants are built on the **original** combined strip. `_build_six_variants` runs **only** on that strip (never the full page), then `_shotgun_ocr_mrz_on_variant_images`. Y-bands scale if strip height changes after deskew. Debug (when `DEBUG_ACTIVATE` + `DEBUG_SAVE_VARIANTS`): `f*_mrzroi_*` variant PNGs plus strip deskew artifacts (`mrz_strip_*`, `deskew_*passport_mrz*`).
+   - **No alternate-band OCR:** If Pass 2 finds no lines (and `require_detection` is true in polling), no MRZ recognition pass runs. Multi-frame scans may still use remembered `fallback_boxes` from a prior successful detection (same combined-union OCR only).
+   - Output per frame: `(line1_pool, line2_pool, passport_alignment_bgr, detected_boxes)` — third value is the full alignment crop for `passport_image_base64` / API (not globally rotated).
 
 3. **Gate (assemble + validate, still no “field parsing” yet)**
    - `_gate_mrz_from_pools(line1_pool, line2_pool)` builds TD3 candidates:
@@ -206,10 +204,10 @@ No option to skip scanning; manual entry is only offered after at least one scan
    - For debugging, `_print_consensus("Passport ID", ...)` and `_print_consensus("Guest Name", ...)` show ranked candidates (ID from valid_line2s; name from winning_l1 paired with each valid_l2).
 
 5. **If no frame yielded a valid MRZ**
-   - Still save image: crop + deskew the **last (or first confirmed) frame**, encode to base64, store as `passport_image_base64`. Return passport_id/guest_name as `None` but with image so manual entry can still proceed.
+   - Still save image: **preprocessed alignment crop** from the last processed frame (or first frame fallback), encode to base64, store as `passport_image_base64`. Return passport_id/guest_name as `None` but with image so manual entry can still proceed.
 
 6. **Encode image for submission**
-   - `_passport_image_to_base64(deskewed)` → PNG encode deskewed image, base64 string. That string is stored in `CheckInData.passport_image_base64`; when the guest submits, the app uploads it to the private Supabase Storage bucket and stores only the resulting file path (`passport_path`) in the `guests` table.
+   - `_passport_image_to_base64(alignment_crop)` → PNG encode, base64 string. Stored in `CheckInData.passport_image_base64`; on submit, uploaded to private Supabase Storage; DB stores `passport_path` only.
 
 ---
 
@@ -217,28 +215,23 @@ No option to skip scanning; manual entry is only offered after at least one scan
 
 **Functions:** `_build_six_variants(roi)` and `_shotgun_ocr_on_roi(roi)` in `core/scanner.py`
 
-- **Preprocessing per ROI:**
-  - Start from a fresh copy of the ROI (`v1_orig`).
-  - Build 6 variants:
-    - v1: original crop.
-    - v2: sharpened (`_sharpen_for_ocr`).
-    - v3: median blur (`cv2.medianBlur(..., 5)`) + sharpen.
-    - v4: grayscale of v3.
-    - v5: Otsu threshold of v3.
-    - v6: CLAHE on v3 (clipLimit ≈ 1.2, grid 8×8).
-- **Shotgun OCR:** `_shotgun_ocr(image)` runs, for each variant:
-  - Tesseract: `image_to_string` with PSM 6 and PSM 7 (each result stored as `(text, 0.5)` – fixed confidence for Tesseract).
-  - EasyOCR: `OCR_READER.readtext(image, detail=1)`; each detection contributes `(text, real_confidence)`.
-- `_shotgun_ocr_on_roi(roi)` calls `_build_six_variants(roi)` and `_shotgun_ocr` on each variant, returning a big list of `(text, confidence)` pairs.
+- **Preprocessing per ROI** (`_build_six_variants` — name kept, returns **5** images):
+  - **v1_orig:** original crop.
+  - **One sharp:** either v2-style `_sharpen_for_ocr(v1)` or v3-style median blur + sharpen (`OCR_USE_V3_BASE`); only one is kept as the base for gray and LAB+CLAHE.
+  - **v4_gray:** grayscale of that sharp base.
+  - **v5_lab_clahe:** grayscale → BGR, then **LAB**; CLAHE on **L** only (`SCAN_CLAHE_CLIP`, grid 8×8); **LAB2BGR**.
+  - **v6_lab_clahe:** same LAB L-channel CLAHE on the **color** sharp BGR (no grayscale step).
+- **Shotgun OCR:** for each variant image, EasyOCR `readtext(..., detail=1)`; MRZ path uses `_shotgun_ocr_mrz` stitching; card uses `_shotgun_ocr` / PAN-specific helpers.
+- `_shotgun_ocr_on_roi(roi)` calls `_build_six_variants(roi)` and `_shotgun_ocr` on each variant.
 
 So for both **MRZ** and **card fields** (PAN, expiry, name), the system:
-- Detects the ROI(s) once per frame (using EasyOCR for card ROI detection, fixed band positions for MRZ).
-- Runs the 6-variant × 3-engine shotgun OCR on each ROI.
-- Collects all `(text, confidence)` results into raw pools and then applies **strict gates** and **confidence-weighted voting** to pick winners.
+- Detects the ROI(s) once per frame (EasyOCR for card; combined MRZ strip from Pass 2 for passport).
+- Runs **5-variant** shotgun OCR on each ROI (per variant: EasyOCR; card PAN path uses its own stitching).
+- Collects `(text, confidence)` into raw pools, then **gates** and **confidence-weighted voting**.
 
-### Switching the base for v4, v5, v6 (v2 vs v3)
+### Switching the base for v4, v5, and v6 (v2 vs v3)
 
-By default, **v4** (and therefore v5, v6) is built from **v2** (sharpen only). Switch to **v3** (median blur + sharpen) when the image is too noisy.
+By default **v4**, **v5**, and **v6** are built from the **v2**-style sharp image. Set **`OCR_USE_V3_BASE=1`** to derive them from the **v3**-style (median blur + sharpen) base when the image is noisy.
 
 Set **`OCR_USE_V3_BASE`** in `.env` (recommended) or in the terminal before running. `.env` values override terminal values.
 
@@ -262,8 +255,8 @@ Set **`OCR_USE_V3_BASE`** in `.env` (recommended) or in the terminal before runn
 2. **Per frame:** `scan_card_from_frame(frame, frame_index)`:
    - Crop to card alignment region, deskew (`_text_based_deskew` then 2× upscale), sharpen. Pass 2: CLAHE master + EasyOCR to detect PAN and expiry ROIs; fall back to fixed `CARD_ZONES` if detection fails.
    - Derive ROIs: `num_roi` (number line), `exp_roi` (expiry), `name_roi` (name), and `strip` (band under the number row). All ROIs are cropped from the processed card, not from the CLAHE master.
-   - For each ROI, run the **6-variant shotgun OCR** via `_shotgun_ocr_on_roi(roi)`, producing rich raw pools for PAN, expiry, and name.
-   - Debug: save `deskewed_frame_{index}.png`, `name_roi_debug_frame_{index}.png`, and for the first frame, the 6 variants into `debug/variants/`.
+   - For each ROI, run the **5-variant shotgun OCR** via `_shotgun_ocr_on_roi(roi)` (or PAN-specific variant loop), producing raw pools for PAN, expiry, and name.
+   - Debug: save `deskewed_frame_{index}.png`, `name_roi_debug_frame_{index}.png`, and for the first frame, the **5** full-card variants into `debug/variants/` (`f1_v1_orig.png` … `f1_v6_lab_clahe.png`).
 3. **Mass consensus (global across frames):**
    - All `(text, confidence)` results from all frames are combined into global raw pools: `all_pan`, `all_expiry`, `all_name`.
    - **Strict gates:** `_gate_pan`, `_gate_expiry`, `_gate_name` filter each pool, returning only valid `(value, confidence)` pairs:
@@ -348,10 +341,9 @@ Set **`OCR_USE_V3_BASE`** in `.env` (recommended) or in the terminal before runn
 When `DEBUG_ACTIVATE=true`, debug images are saved under `debug/variants/` and are cleared at startup by `_clear_roi_debug_images()`. They are grouped by document type:
 
 - **Passport (`debug/variants/passport/`):**
-  - `deskew_debug_passport_frame_*.png`, `deskew_tilt_passport_frame_*.png`, `deskew_debug_zone_passport.png` – show the alignment crop with detection boxes, tilt angle text, and horizontal lines for the bottom 45%/35%/25%/15% zones used to reason about the MRZ band.
-  - `detection_boxes_passport_frame_*.png` – alignment crop with all EasyOCR detection boxes drawn, useful even when `DESKEW_ENABLE=false`.
-  - `crop_debug_region_frame_*.png` – the MRZ bottom-strip crop used by the MRZ detection pass.
-  - `f1_v1_orig.png` … `f1_v6_*.png` – the six variants for the first MRZ ROI, showing how v1–v6 look (original, sharpened, clean-sharp, grayscale, CLAHE, thresholded).
+  - `mrz_strip_detection_boxes_frame_*.png`, `mrz_strip_deskew_debug_frame_*.png`, `deskew_tilt_passport_mrz_frame_*.png`, `deskew_debug_zone_passport_mrz_frame_*.png` – MRZ **strip** tilt and rotation (full strip or cached path). Compare `*_frame_N` with `fN_mrzroi_*`.
+  - **No** passport full-frame `f*_v1_orig.png` … stack — OCR variants exist only as `f*_mrzroi_*_combined_*` on the combined MRZ strip (deskewed or not per `DESKEW_ENABLE`).
+  - `fN_mrzroi_*_combined_v*.png` – five variants on the combined MRZ strip only (deskewed strip if `DESKEW_ENABLE`, else the raw strip; v5/v6 = LAB L + CLAHE).
 
 - **Card (`debug/variants/card/`):**
   - `deskewed_frame_*.png` – deskewed card alignment crop (or raw if `DESKEW_ENABLE=false`).
@@ -367,7 +359,7 @@ Older root-level debug PNGs (`passport_mrz_debug*.png`, `ocr_roi_frame_*.png`, e
 | When | Main steps |
 |------|------------|
 | App start | Load .env, setup logging, clear debug images, detect hardware, create CheckInData, run_check_in_flow. |
-| Passport step | Capture 2 frames (burst, top-2 sharpest) → verify → per frame: crop (800×500), deskew, find MRZ (bands or fixed zone), multi-variant OCR, normalize to 2×44 chars, parse TD3 → consensus on passport_id and guest_name → save image (always), store in CheckInData. |
+| Passport step | Capture 2 frames (burst, top-2 sharpest) → verify → per frame: alignment crop + preprocess, MRZ line detect, combined strip + strip deskew, 5-variant MRZ OCR, TD3 gating → consensus → save **alignment** image (always), store in CheckInData. |
 | Confirm passport | Show name + passport number; y/e/c; if edit, open submenu to change either guest name or passport number, then validate and re-show. |
 | After confirm | GET guest by passport_id (Supabase); show stay details; on failure use mock. |
 | Card step | Options: (1) camera OCR (2-shot capture + deskew + zones + multi-OCR + Luhn/expiry/name) → consensus; (2) manual entry with validation; (3) NFC tap to link `nfc_uid` to booking, then manual card entry. |

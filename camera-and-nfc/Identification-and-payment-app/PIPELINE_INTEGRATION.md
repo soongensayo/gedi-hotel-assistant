@@ -107,7 +107,7 @@ If you **provide frames** to `scan_passport_from_frames()` or `scan_card_from_fr
 |-------------|---------|
 | **Format** | BGR image (OpenCV `cv2.imread` / `cv2.VideoCapture` format) |
 | **Type** | `numpy.ndarray` (uint8) |
-| **Size** | Recommended: passport ~1060×660 px or larger; card ~580×420 px or larger. The scanner crops to 1040×640 (passport) and 560×400 (card) internally. |
+| **Size** | **Prefer full camera resolution** (e.g. 1920×1080): the scanner crops to 1040×640 (passport) and 560×400 (card) internally. Avoid downscaling first — that wastes MRZ detail. Card ROI ~580×420+ is fine. |
 | **Count** | 2 frames recommended (same as camera capture; improves consensus) |
 | **Quality** | Clear, well-lit; document aligned in frame |
 
@@ -117,9 +117,8 @@ If you **provide frames** to `scan_passport_from_frames()` or `scan_card_from_fr
 import cv2
 import numpy as np
 
-# Load or resize your image
+# Load at native resolution (do not resize down before scan unless the file is huge)
 img = cv2.imread("path/to/image.jpg")
-img = cv2.resize(img, (1060, 660), interpolation=cv2.INTER_AREA)
 
 # Duplicate to 2 frames (same as camera top-2)
 frames = [img.copy() for _ in range(2)]
@@ -142,6 +141,7 @@ card_data = scan_card_from_frames(frames, skip_clear_roi=True)
 | `scan_card()` | Camera capture + card scan | — | Same as above |
 | `detect_hardware()` | Check if camera/OCR available | — | `bool` |
 | `capture_passport_image_only()` | Capture image only (no MRZ decode) | — | `str` (base64) |
+| `reset_deskew_angle_cache(label=None)` | Clear cached deskew tilt. `"passport"` clears both legacy `passport` and **`passport_mrz`** (combined MRZ strip angle). `"card"` / `None` (all) as before. | — | — |
 | `_clear_roi_debug_images()` | Clear debug output from previous run | — | — |
 
 ---
@@ -156,7 +156,7 @@ from core.data_model import CheckInData
 data = CheckInData()
 data.guest_name = "John Doe"
 data.passport_id = "AB1234567"
-data.passport_image_base64 = "..."  # base64 PNG string (uploaded to Supabase Storage on submit)
+data.passport_image_base64 = "..."  # base64 PNG: full alignment crop (not globally deskewed); MRZ deskew is strip-only during OCR
 data.nfc_uid = "A1B2C3D4"           # NFC card UID (optional, set when NFC tap is used)
 data.card_details = {
     "card_no": "4111111111111111",
@@ -181,10 +181,10 @@ Before running, ensure:
 
 2. **Dependencies** installed (`pip install -r requirements.txt`):
    - `opencv-python`, `numpy`, `Pillow`
-   - `pytesseract`, `easyocr`
+   - `easyocr`
    - `requests`, `python-dotenv`, `supabase`, `pyserial`
 
-3. **Tesseract** installed and on PATH (see the Tesseract Setup section in [DEPLOYMENT.md](DEPLOYMENT.md))
+3. (Historical) Earlier versions also required Tesseract; the current pipeline is EasyOCR-only.
 
 ---
 
