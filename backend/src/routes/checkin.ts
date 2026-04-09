@@ -207,7 +207,7 @@ router.post('/start-passport-scan', async (_req: Request, res: Response) => {
       scannerState.attempts = 0;
       scannerState.process = null;
 
-      const delay = 3000 + Math.random() * 2000;
+      const delay = 20000;
       setTimeout(async () => {
         if (scannerState.status !== 'scanning') return;
 

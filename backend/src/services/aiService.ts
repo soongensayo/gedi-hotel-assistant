@@ -9,8 +9,10 @@ import {
   lookupReservation,
   lookupReservationByPassport,
   lookupReservationByName,
+  getRoomWaypointId,
 } from './hotelService';
 import { passportScannerWorker } from './passportScannerWorker';
+import { navigateToWaypoint } from './sestoService';
 
 // =============================================================================
 // Types
@@ -24,7 +26,8 @@ export interface AIAction {
     | 'skip_passport_scanner'
     | 'show_payment'
     | 'show_key_card'
-    | 'store_reservation';
+    | 'store_reservation'
+    | 'move_to_room';
   /** Optional payload — e.g. the step name for set_step, or reservation data */
   payload?: Record<string, unknown>;
 }
@@ -195,6 +198,24 @@ const CONCIERGE_TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'move_to_room',
+      description:
+        'Start navigating the robot to escort the guest to their room. Call this ONLY when the guest explicitly agrees to be escorted. The room ID is available in the reservation context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          roomId: {
+            type: 'string',
+            description: 'The room ID from the current reservation (e.g. the id field of the room object in context).',
+          },
+        },
+        required: ['roomId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'set_checkin_step',
       description:
         'Update the check-in progress bar to a specific step. Use this to keep the UI in sync with the conversation flow.',
@@ -327,6 +348,19 @@ async function executeToolCall(
         result: { success: true, message: `Check-in step set to: ${args.step}` },
         action: { type: 'set_step', payload: { step: args.step } },
       };
+
+    case 'move_to_room': {
+      const roomId = args.roomId as string;
+      const waypointId = await getRoomWaypointId(roomId);
+      if (!waypointId) {
+        return { result: { success: false, error: `No robot waypoint configured for room ${roomId}. The guest can walk to their room instead.` } };
+      }
+      const navResult = await navigateToWaypoint(waypointId);
+      return {
+        result: { success: navResult.success, message: navResult.message, waypointId },
+        action: { type: 'move_to_room', payload: { roomId, waypointId } },
+      };
+    }
 
     default:
       return { result: { error: `Unknown tool: ${name}` } };

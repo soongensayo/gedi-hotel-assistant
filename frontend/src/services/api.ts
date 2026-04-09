@@ -18,7 +18,8 @@ export interface AIAction {
     | 'skip_passport_scanner'
     | 'show_payment'
     | 'show_key_card'
-    | 'store_reservation';
+    | 'store_reservation'
+    | 'move_to_room';
   payload?: Record<string, unknown>;
 }
 

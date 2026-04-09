@@ -25,6 +25,7 @@ import voiceRoutes from './routes/voice';
 import avatarRoutes from './routes/avatar';
 import hotelRoutes from './routes/hotel';
 import checkinRoutes from './routes/checkin';
+import videocallRoutes from './routes/videocall';
 
 const app = express();
 const server = http.createServer(app);
@@ -45,6 +46,7 @@ app.use('/api/voice', voiceRoutes);
 app.use('/api/avatar', avatarRoutes);
 app.use('/api/hotel', hotelRoutes);
 app.use('/api/checkin', checkinRoutes);
+app.use('/api/videocall', videocallRoutes);
 
 // --- Health check ---
 app.get('/api/health', (_req, res) => {

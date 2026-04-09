@@ -9,6 +9,7 @@ import { ReservationFoundScreen } from './components/checkin/ReservationFoundScr
 import { UpgradeOfferScreen } from './components/checkin/UpgradeOfferScreen';
 import { PaymentScreen } from './components/checkin/PaymentScreen';
 import { KeyCardScreen } from './components/checkin/KeyCardScreen';
+import { VideoCallScreen } from './components/checkin/VideoCallScreen';
 
 /**
  * Steps that show as a centered overlay panel on top of the avatar.
@@ -37,7 +38,17 @@ function CheckinOverlayContent() {
 function App() {
   const currentStep = useCheckinStore((s) => s.currentStep);
   const isWelcome = currentStep === 'welcome';
+  const isVideoCall = currentStep === 'video-call';
   const showOverlay = OVERLAY_STEPS.includes(currentStep);
+
+  // Video call gets the entire viewport — no progress bar, no chat panel
+  if (isVideoCall) {
+    return (
+      <div className="h-full w-full bg-hotel-dark overflow-hidden">
+        <VideoCallScreen />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full w-full flex flex-col bg-hotel-dark overflow-hidden">
@@ -57,7 +68,7 @@ function App() {
 
             {/* Floating overlay for wizard step content */}
             {showOverlay && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-30 p-4">
+              <div className="absolute inset-0 flex items-center justify-center z-30 p-4 bg-black/60">
                 <div className="glass-panel w-full max-w-2xl max-h-[75vh] overflow-y-auto">
                   <CheckinOverlayContent />
                 </div>

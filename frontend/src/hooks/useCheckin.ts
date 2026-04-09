@@ -41,7 +41,7 @@ export function useCheckin() {
     }
 
     setPendingMessage(
-      `Passport scanned successfully. Name on passport: ${firstName} ${lastName}. Passport number: ${passportNumber}. Please confirm the reservation details.`
+      `Passport scanned successfully. Please confirm the reservation details.`
     );
   }, [setPassportScan, setPendingMessage, guestId]);
 
