@@ -35,6 +35,9 @@ export const config = {
   // Hardware
   hardwareMode: (process.env.HARDWARE_MODE || 'mock') as 'mock' | 'jetson',
 
+  // ESP32 Flash Light
+  esp32FlashIp: (process.env.ESP32_FLASH_IP || process.env.ESP32_IP || '').trim(),
+
   // Passport Scanner
   passportScannerMode: (process.env.PASSPORT_SCANNER_MODE || 'mock') as 'mock' | 'live',
   passportScannerEngine: (process.env.PASSPORT_SCANNER_ENGINE || 'tesseract') as 'tesseract' | 'easyocr',

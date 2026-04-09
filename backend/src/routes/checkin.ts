@@ -16,6 +16,19 @@ import { config } from '../config';
 
 const router = Router();
 
+function esp32Request(reqPath: string): void {
+  const ip = config.esp32FlashIp;
+  if (!ip) {
+    console.log(`[ESP32] Skipping ${reqPath} — ESP32_FLASH_IP not configured`);
+    return;
+  }
+  const url = `http://${ip}/${reqPath}`;
+  console.log(`[ESP32] GET ${url}`);
+  fetch(url, { signal: AbortSignal.timeout(3000) })
+    .then((r) => console.log(`[ESP32] ${url} → ${r.status}`))
+    .catch((e) => console.error(`[ESP32] ${url} failed:`, e.message || e));
+}
+
 // In-memory store for NFC UIDs received from ESP32, keyed by timestamp
 const nfcUidStore: { uid: string; last4: string; receivedAt: number }[] = [];
 
@@ -206,10 +219,16 @@ router.post('/start-passport-scan', async (_req: Request, res: Response) => {
       scannerState.startedAt = Date.now();
       scannerState.attempts = 0;
       scannerState.process = null;
+      esp32Request('guide/on');
+      setTimeout(() => {
+        if (scannerState.status === 'scanning') esp32Request('on');
+      }, 3000);
 
       const delay = 20000;
       setTimeout(async () => {
         if (scannerState.status !== 'scanning') return;
+        esp32Request('guide/off');
+        esp32Request('off');
 
         const guest = await getGuestByPassport('E1234567A');
         scannerState.attempts = Math.floor(delay / 1000);
@@ -339,7 +358,11 @@ router.get('/passport-scan-status', (_req: Request, res: Response) => {
  */
 router.post('/passport-guide-on', async (_req: Request, res: Response) => {
   try {
-    await passportScannerWorker.guideOn();
+    if (config.passportScannerMode === 'mock') {
+      esp32Request('guide/on');
+    } else {
+      await passportScannerWorker.guideOn();
+    }
     res.json({ success: true });
   } catch (error) {
     console.error('[Passport Scanner] Guide on error:', error);
@@ -354,6 +377,8 @@ router.post('/passport-guide-on', async (_req: Request, res: Response) => {
 router.post('/stop-passport-scan', (_req: Request, res: Response) => {
   console.log(`[Passport Scanner] Stopping scan (was: ${scannerState.status})`);
   resetScannerState();
+  esp32Request('guide/off');
+  esp32Request('off');
   passportScannerWorker.guideOff();
   res.json({ success: true });
 });
