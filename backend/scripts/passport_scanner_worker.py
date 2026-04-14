@@ -52,6 +52,7 @@ def _load_scanner_api() -> Dict[str, Any]:
     if _scanner_api is None:
         from core.scanner import (
             _capture_fresh_frame,
+            _clear_roi_debug_images,
             _debug_mrz_plain_variants_saved_tags,
             _esp32_flash_off,
             _esp32_guide_off,
@@ -61,13 +62,13 @@ def _load_scanner_api() -> Dict[str, Any]:
             _get_easyocr_reader,
             _passport_image_to_base64,
             _sharpness_score,
-            detect_passport_mrz,
             reset_deskew_angle_cache,
             scan_passport_from_frame,
         )
 
         _scanner_api = {
             "_capture_fresh_frame": _capture_fresh_frame,
+            "_clear_roi_debug_images": _clear_roi_debug_images,
             "_debug_mrz_plain_variants_saved_tags": _debug_mrz_plain_variants_saved_tags,
             "_esp32_flash_off": _esp32_flash_off,
             "_esp32_guide_off": _esp32_guide_off,
@@ -77,7 +78,6 @@ def _load_scanner_api() -> Dict[str, Any]:
             "_get_easyocr_reader": _get_easyocr_reader,
             "_passport_image_to_base64": _passport_image_to_base64,
             "_sharpness_score": _sharpness_score,
-            "detect_passport_mrz": detect_passport_mrz,
             "reset_deskew_angle_cache": reset_deskew_angle_cache,
             "scan_passport_from_frame": scan_passport_from_frame,
         }
@@ -165,6 +165,7 @@ def _run_scan(timeout: float) -> None:
         return
 
     api = _load_scanner_api()
+    api["_clear_roi_debug_images"]("passport")
     cap = _open_camera()
     if cap is None:
         _emit("scan_result", success=False, error="Could not open camera")
@@ -199,16 +200,21 @@ def _run_scan(timeout: float) -> None:
                 time.sleep(0.1)
                 continue
 
-            # Lightweight detection: only checks if MRZ lines are visible (no variant OCR).
+            # First pass: try OCR on the ambient (non-flashed) frame to check
+            # if a passport with MRZ lines is actually in view.
             try:
-                detected_boxes = api["detect_passport_mrz"](frame, frame_index=attempt + 1)
+                ambient_result = api["scan_passport_from_frame"](
+                    frame,
+                    frame_index=attempt + 1,
+                    require_detection=True,
+                )
             except Exception as e:
                 attempt += 1
                 _emit("scan_progress", attempt=attempt, elapsed=round(elapsed, 1), error=str(e))
                 time.sleep(0.5)
                 continue
 
-            if detected_boxes is None:
+            if ambient_result is None:
                 no_mrz_count += 1
                 if no_mrz_count % 5 == 1:
                     _emit("scan_waiting", elapsed=round(elapsed, 1), no_mrz_frames=no_mrz_count)
@@ -230,7 +236,7 @@ def _run_scan(timeout: float) -> None:
                 result = api["scan_passport_from_frame"](
                     frame_to_process,
                     frame_index=attempt + 1,
-                    fallback_boxes=detected_boxes,
+                    require_detection=False,
                 )
             except Exception as e:
                 attempt += 1
@@ -238,12 +244,12 @@ def _run_scan(timeout: float) -> None:
                 time.sleep(0.5)
                 continue
 
+            if result is None:
+                result = ambient_result
+
             attempt += 1
             no_mrz_count = 0
             _emit("scan_progress", attempt=attempt, elapsed=round(elapsed, 1), sharpness=round(sharpness, 1))
-
-            if result is None:
-                continue
 
             if result.get("passport_id") or result.get("guest_name"):
                 if flash_enabled:
