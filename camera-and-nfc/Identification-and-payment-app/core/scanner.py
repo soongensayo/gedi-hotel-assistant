@@ -3263,6 +3263,8 @@ def _collect_passport_raw_pool(
             extra_bottom = _LINE2_EXTRA_BOTTOM_PX if box_idx == 1 else 0
             used_boxes.append(_expand_mrz_box_full_width(dx1, dy1, dx2, dy2, img_w, img_h, extra_bottom_px=extra_bottom))
         detection_source = "easyocr"
+        if require_detection:
+            return [], [], passport_page, used_boxes
     elif require_detection:
         logger.debug("Frame %s: no MRZ detected (require_detection=True), skipping frame", frame_index)
         return [], [], passport_page, []
@@ -3302,10 +3304,24 @@ def _collect_passport_raw_pool(
     return line1_pool, line2_pool, passport_page, line_boxes
 
 
+def detect_passport_mrz(
+    frame: "np.ndarray",
+    frame_index: Optional[int] = None,
+) -> Optional[List[Tuple[int, int, int, int]]]:
+    """Lightweight MRZ detection: run EasyOCR detection on *frame* and return
+    the expanded MRZ bounding boxes if found, or ``None`` if no MRZ is visible.
+    Does NOT run variant OCR — use for the ambient gating pass."""
+    _l1, _l2, _deskewed, boxes = _collect_passport_raw_pool(
+        frame, frame_index=frame_index, require_detection=True
+    )
+    return boxes if boxes else None
+
+
 def scan_passport_from_frame(
     frame: "np.ndarray",
     frame_index: Optional[int] = None,
     require_detection: bool = False,
+    fallback_boxes: Optional[List[Tuple[int, int, int, int]]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Process one passport frame through the unified mass consensus pipeline (Stages 1-4).
 
@@ -3315,13 +3331,18 @@ def scan_passport_from_frame(
     require_detection=True returns None immediately when Pass 2 finds no MRZ lines (no OCR).
     Use in the poll loop to avoid EasyOCR on frames where no passport is visible.
 
+    *fallback_boxes* — pre-detected MRZ boxes from a prior ``detect_passport_mrz`` call;
+    forwarded to ``_collect_passport_raw_pool`` so it can skip re-running EasyOCR detection
+    when the boxes are already known.
+
     The returned ``deskewed_image`` key is the **full preprocessed passport alignment crop**
     (not globally deskewed). MRZ deskew applies only to the combined MRZ strip inside the pipeline.
     """
     if frame is None or frame.size == 0 or not HAS_EASYOCR:
         return None
     l1_pool, l2_pool, deskewed, _boxes = _collect_passport_raw_pool(
-        frame, frame_index=frame_index, require_detection=require_detection
+        frame, frame_index=frame_index, require_detection=require_detection,
+        fallback_boxes=fallback_boxes,
     )
     if not l1_pool and not l2_pool:
         return None

@@ -52,6 +52,7 @@ def _load_scanner_api() -> Dict[str, Any]:
     if _scanner_api is None:
         from core.scanner import (
             _capture_fresh_frame,
+            _debug_mrz_plain_variants_saved_tags,
             _esp32_flash_off,
             _esp32_guide_off,
             _esp32_guide_on,
@@ -60,12 +61,14 @@ def _load_scanner_api() -> Dict[str, Any]:
             _get_easyocr_reader,
             _passport_image_to_base64,
             _sharpness_score,
+            detect_passport_mrz,
             reset_deskew_angle_cache,
             scan_passport_from_frame,
         )
 
         _scanner_api = {
             "_capture_fresh_frame": _capture_fresh_frame,
+            "_debug_mrz_plain_variants_saved_tags": _debug_mrz_plain_variants_saved_tags,
             "_esp32_flash_off": _esp32_flash_off,
             "_esp32_guide_off": _esp32_guide_off,
             "_esp32_guide_on": _esp32_guide_on,
@@ -74,6 +77,7 @@ def _load_scanner_api() -> Dict[str, Any]:
             "_get_easyocr_reader": _get_easyocr_reader,
             "_passport_image_to_base64": _passport_image_to_base64,
             "_sharpness_score": _sharpness_score,
+            "detect_passport_mrz": detect_passport_mrz,
             "reset_deskew_angle_cache": reset_deskew_angle_cache,
             "scan_passport_from_frame": scan_passport_from_frame,
         }
@@ -173,9 +177,6 @@ def _run_scan(timeout: float) -> None:
     no_mrz_count = 0
     flash_enabled = bool(api["_esp32_passport_flash_enabled"]())
 
-    if flash_enabled:
-        api["_esp32_guide_on"]()
-
     try:
         while not _shutdown:
             elapsed = time.time() - start_time
@@ -198,43 +199,57 @@ def _run_scan(timeout: float) -> None:
                 time.sleep(0.1)
                 continue
 
-            frame_to_process = frame
-            if flash_enabled:
-                api["_esp32_prepare_passport_flash"]()
-                flashed_frame = api["_capture_fresh_frame"](cap, discard_frames=3, interval_ms=30)
-                if flashed_frame is not None:
-                    frame_to_process = flashed_frame
-
+            # Lightweight detection: only checks if MRZ lines are visible (no variant OCR).
             try:
-                result = api["scan_passport_from_frame"](
-                    frame_to_process,
-                    frame_index=attempt + 1,
-                    require_detection=True,
-                )
+                detected_boxes = api["detect_passport_mrz"](frame, frame_index=attempt + 1)
             except Exception as e:
-                if flash_enabled:
-                    api["_esp32_flash_off"]()
-                    api["_esp32_guide_on"]()
                 attempt += 1
                 _emit("scan_progress", attempt=attempt, elapsed=round(elapsed, 1), error=str(e))
                 time.sleep(0.5)
                 continue
 
-            if result is None:
-                if flash_enabled:
-                    api["_esp32_flash_off"]()
-                    api["_esp32_guide_on"]()
+            if detected_boxes is None:
                 no_mrz_count += 1
                 if no_mrz_count % 5 == 1:
                     _emit("scan_waiting", elapsed=round(elapsed, 1), no_mrz_frames=no_mrz_count)
                 time.sleep(0.1)
                 continue
 
+            # MRZ detected — fire flash and recapture for a cleaner read.
+            frame_to_process = frame
+            if flash_enabled:
+                api["_esp32_prepare_passport_flash"]()
+                flashed_frame = api["_capture_fresh_frame"](cap, discard_frames=3, interval_ms=30)
+                if flashed_frame is not None:
+                    frame_to_process = flashed_frame
+                api["_esp32_flash_off"]()
+
+            api["_debug_mrz_plain_variants_saved_tags"].clear()
+
+            try:
+                result = api["scan_passport_from_frame"](
+                    frame_to_process,
+                    frame_index=attempt + 1,
+                    fallback_boxes=detected_boxes,
+                )
+            except Exception as e:
+                attempt += 1
+                _emit("scan_progress", attempt=attempt, elapsed=round(elapsed, 1), error=str(e))
+                time.sleep(0.5)
+                continue
+
             attempt += 1
             no_mrz_count = 0
             _emit("scan_progress", attempt=attempt, elapsed=round(elapsed, 1), sharpness=round(sharpness, 1))
 
+            if result is None:
+                continue
+
             if result.get("passport_id") or result.get("guest_name"):
+                if flash_enabled:
+                    api["_esp32_flash_off"]()
+                    api["_esp32_guide_off"]()
+
                 deskewed = result.get("deskewed_image")
                 passport_image_base64 = ""
                 if deskewed is not None:

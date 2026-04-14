@@ -267,6 +267,8 @@ router.post('/start-passport-scan', async (_req: Request, res: Response) => {
     scannerState.error = undefined;
     scannerState.process = null;
 
+    esp32Request('guide/on');
+
     await passportScannerWorker.startScan(timeout, {
       onProgress: (progress) => {
         if (mySession !== scanSession) return;
@@ -288,6 +290,10 @@ router.post('/start-passport-scan', async (_req: Request, res: Response) => {
         }
 
         scannerState.process = null;
+        esp32Request('guide/off');
+        esp32Request('off');
+        passportScannerWorker.guideOff();
+
         if (result.success && result.data) {
           const nameParts = (result.data.guest_name || '').trim().split(/\s+/);
           const firstName = nameParts[0] || '';
@@ -358,10 +364,9 @@ router.get('/passport-scan-status', (_req: Request, res: Response) => {
  */
 router.post('/passport-guide-on', async (_req: Request, res: Response) => {
   try {
-    if (config.passportScannerMode === 'mock') {
-      esp32Request('guide/on');
-    } else {
-      await passportScannerWorker.guideOn();
+    esp32Request('guide/on');
+    if (config.passportScannerMode !== 'mock') {
+      void passportScannerWorker.guideOn().catch(() => {});
     }
     res.json({ success: true });
   } catch (error) {
