@@ -37,12 +37,6 @@ from core.scanner import (
     CAMERA_WIDTH,
     HAS_OPENCV,
     _OCR_TIMING,
-    _capture_fresh_frame,
-    _esp32_flash_off,
-    _esp32_guide_off,
-    _esp32_guide_on,
-    _esp32_prepare_passport_flash,
-    _esp32_passport_flash_enabled,
     _open_camera,
     scan_passport_from_frames,
 )
@@ -87,7 +81,6 @@ def _capture_frame_from_camera() -> Tuple[Optional[np.ndarray], Optional[str]]:
     print("\n--- Camera capture ---")
     print("Preprocessing is controlled by .env (see .env.example). Align document, SPACE to capture, Q to quit.\n")
     last_ok: Optional[np.ndarray] = None
-    _esp32_guide_on()
     try:
         while True:
             ok, frame = cap.read()
@@ -96,12 +89,7 @@ def _capture_frame_from_camera() -> Tuple[Optional[np.ndarray], Optional[str]]:
                 cv2.imshow(window, frame)
             key = cv2.waitKey(1) & 0xFF
             if key == ord(" ") and last_ok is not None:
-                if _esp32_passport_flash_enabled():
-                    _esp32_prepare_passport_flash()
-                    fresh = _capture_fresh_frame(cap, discard_frames=3, interval_ms=30)
-                    shot = fresh if fresh is not None else last_ok.copy()
-                else:
-                    shot = last_ok.copy()
+                shot = last_ok.copy()
                 try:
                     _LAST_CAPTURE_PATH.parent.mkdir(parents=True, exist_ok=True)
                     cv2.imwrite(str(_LAST_CAPTURE_PATH), shot)
@@ -116,8 +104,6 @@ def _capture_frame_from_camera() -> Tuple[Optional[np.ndarray], Optional[str]]:
             cap.release()
         except Exception:
             pass
-        _esp32_flash_off()
-        _esp32_guide_off()
         try:
             cv2.destroyWindow(window)
         except Exception:

@@ -17,8 +17,16 @@ import statistics
 import sys
 import time
 import re
+import warnings
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List, Set
+
+# Silence PyTorch / EasyOCR noise that is irrelevant for laptop-only use:
+#  - torch.ao.quantization deprecation warnings (internal torch warnings)
+#  - EasyOCR CUDA/MPS "defaulting to CPU" message
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"torch\.ao\.quantization")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"easyocr")
+logging.getLogger("easyocr").setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
@@ -68,65 +76,29 @@ def _open_camera() -> Tuple[Optional["cv2.VideoCapture"], int]:
     return None, -1
 
 
-try:
-    import requests
-
-    HAS_REQUESTS = True
-except ImportError:
-    HAS_REQUESTS = False
-
-_esp32_flash_warning_shown = False
-
-
-def _esp32_flash_ip() -> str:
-    """HTTP host for ESP32 fill light (e.g. 10.161.23.195). Empty disables flash calls."""
-    return (os.getenv("ESP32_FLASH_IP") or os.getenv("ESP32_IP") or "").strip()
-
-
 def _esp32_passport_flash_enabled() -> bool:
-    return bool(_esp32_flash_ip()) and HAS_REQUESTS
-
-
-def _esp32_flash_request(path: str) -> None:
-    global _esp32_flash_warning_shown
-    ip = _esp32_flash_ip()
-    if not ip or not HAS_REQUESTS:
-        return
-    url = f"http://{ip}/{path.lstrip('/')}"
-    try:
-        response = requests.get(url, timeout=2)
-        response.raise_for_status()
-    except Exception as e:
-        # Show at least one visible warning so network issues are not silently swallowed.
-        if not _esp32_flash_warning_shown:
-            logger.warning("ESP32 flash request failed for %s: %s", url, e)
-            _esp32_flash_warning_shown = True
+    """Passport-only build: no external HTTP fill-light / guide controller."""
+    return False
 
 
 def _esp32_flash_on() -> None:
-    _esp32_flash_request("on")
+    pass
 
 
 def _esp32_flash_off() -> None:
-    _esp32_flash_request("off")
+    pass
 
 
 def _esp32_guide_on() -> None:
-    _esp32_flash_request("guide/on")
+    pass
 
 
 def _esp32_guide_off() -> None:
-    _esp32_flash_request("guide/off")
+    pass
 
 
 def _esp32_prepare_passport_flash(preflash_ms: int = 250) -> None:
-    """Turn off the guide strip, then enable flash shortly before capture."""
-    if not _esp32_passport_flash_enabled():
-        return
-    _esp32_guide_off()
-    _esp32_flash_on()
-    if preflash_ms > 0:
-        time.sleep(preflash_ms / 1000.0)
+    pass
 
 
 # Bounding box size (pixels) for document alignment.
@@ -169,12 +141,7 @@ except ImportError:
     HAS_OPENCV = False
     logger.warning("OpenCV not available - will use mock mode")
 
-try:
-    import Jetson.GPIO as GPIO  # Only exists on Jetson robots
-    HAS_JETSON_GPIO = True
-except (ImportError, RuntimeError):
-    HAS_JETSON_GPIO = False
-    logger.warning("Jetson GPIO not available - will use mock mode")
+HAS_JETSON_GPIO = False  # Jetson GPIO not used in laptop/PC builds
 
 import importlib.util
 
@@ -187,65 +154,26 @@ OCR_READER = None
 EASYOCR_REQUIRED_FILES = ("craft_mlt_25k.pth", "english_g2.pth")
 
 
-def _get_easyocr_model_dir():
-    """Return (model_dir_path, download_enabled).
-
-    - If EASYOCR_MODULE_PATH is set and the dir exists with required .pth files, use it and disable download.
-    - Else if project easyocr_models/ exists with required files, use it and disable download.
-    - Else return (None, True) so Reader() uses default location and may download (needs network/SSL).
-    """
-    # 1. Explicit env (absolute or relative to cwd)
-    env_path = (os.getenv("EASYOCR_MODULE_PATH") or "").strip()
-    if env_path:
-        p = Path(env_path).resolve()
-        if p.is_dir() and all((p / f).is_file() for f in EASYOCR_REQUIRED_FILES):
-            return str(p), False
-        if p.is_dir():
-            logger.warning("EASYOCR_MODULE_PATH=%s missing required files %s; will use default (download if needed).", env_path, EASYOCR_REQUIRED_FILES)
-    # 2. Project-bundled folder (for edge/offline deployment)
-    bundled = _PROJECT_ROOT / "easyocr_models"
-    if bundled.is_dir() and all((bundled / f).is_file() for f in EASYOCR_REQUIRED_FILES):
-        return str(bundled), False
-    return None, True
-
-
 def _get_easyocr_reader():
-    """Return a cached EasyOCR reader, initializing it on first use.
+    """Return a cached EasyOCR Reader (English-only), initialising on first call.
 
-    Uses EASYOCR_MODULE_PATH or project easyocr_models/ if present (offline/edge); otherwise
-    default EasyOCR path (may download on first run; requires network and valid SSL).
-    Set DISABLE_EASYOCR=1 to force-disable EasyOCR entirely.
+    Models are loaded from EasyOCR's default local cache (~/.EasyOCR/).
+    No network calls are made after the first run — models are stored locally.
     """
     global OCR_READER, HAS_EASYOCR
     if OCR_READER is not None:
         return OCR_READER
     if not HAS_EASYOCR:
         return None
-    if (os.getenv("DISABLE_EASYOCR", "") or "").strip().lower() in ("1", "true", "yes", "y", "on"):
-        return None
     try:
-        import easyocr  # heavy import (torch); defer until needed
-
-        model_dir, download_ok = _get_easyocr_model_dir()
-        logger.info("Initializing EasyOCR reader (first use)...")
-        if model_dir:
-            logger.info("Using bundled/local EasyOCR models from %s (download_enabled=False).", model_dir)
-            OCR_READER = easyocr.Reader(
-                ["en"],
-                model_storage_directory=model_dir,
-                download_enabled=download_ok,
-            )
-        else:
-            OCR_READER = easyocr.Reader(["en"])  # English-only; may download if needed
+        import easyocr
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            OCR_READER = easyocr.Reader(["en"], gpu=False)
         return OCR_READER
     except Exception as e:
-        # Mark unavailable to avoid repeated slow failures.
         HAS_EASYOCR = False
-        logger.warning("EasyOCR not available - OCR will be limited (%s)", e)
-        if "CERTIFICATE_VERIFY_FAILED" in str(e) or "SSL" in str(e):
-            logger.warning(
-                "Tip: run 'python download_easyocr_models.py' once (with internet), or copy easyocr_models/ into the project for offline use."
-            )
+        logger.warning("EasyOCR failed to load: %s", e)
         return None
 
 
@@ -1182,6 +1110,16 @@ def _build_six_variants(base_roi: "np.ndarray") -> List["np.ndarray"]:
 
 _VARIANT_LABELS = ["v1_orig", "v2_or_v3_sharp", "v4_gray", "v5_lab_clahe", "v6_lab_clahe"]
 
+# Friendly labels used for **passport** OCR-input debug filenames (in pipeline order).
+# Card flow keeps the legacy `_VARIANT_LABELS` for backwards compat.
+_OCR_VARIANT_FRIENDLY_LABELS = [
+    "a_original",
+    "b_sharpened",
+    "c_grayscale",
+    "d_lab_clahe",
+    "e_lab_clahe_alt",
+]
+
 
 def _save_debug_variants(variants: List["np.ndarray"], frame_index: int, doc_type: str = "card") -> None:
     """Save full **card** alignment variants with zone boxes drawn to ``debug/variants/card/``.
@@ -1241,14 +1179,21 @@ def _save_debug_variants_plain(
         ddir = _get_debug_variants_dir(doc)
         ddir.mkdir(parents=True, exist_ok=True)
 
-        if len(variants) == len(_VARIANT_LABELS):
-            names = _VARIANT_LABELS
+        # Pick a name set: passport gets the friendly "a_original"/"b_sharpened"/... order
+        # so files sort in pipeline order; card keeps the legacy v1/v2/... names.
+        if doc == "passport" and len(variants) == len(_OCR_VARIANT_FRIENDLY_LABELS):
+            names = _OCR_VARIANT_FRIENDLY_LABELS
+            for name, img in zip(names, variants):
+                path = ddir / f"04_ocr_input_{name}.png"
+                cv2.imwrite(str(path.resolve()), img)
         else:
-            names = [f"v{i+1}" for i in range(len(variants))]
-
-        for name, img in zip(names, variants):
-            path = ddir / f"f{frame_index}_{tag}_{name}.png"
-            cv2.imwrite(str(path.resolve()), img)
+            if len(variants) == len(_VARIANT_LABELS):
+                names = _VARIANT_LABELS
+            else:
+                names = [f"v{i+1}" for i in range(len(variants))]
+            for name, img in zip(names, variants):
+                path = ddir / f"f{frame_index}_{tag}_{name}.png"
+                cv2.imwrite(str(path.resolve()), img)
 
         _debug_mrz_plain_variants_saved_tags.add(save_key)
     except Exception as e:
@@ -1268,7 +1213,7 @@ def _save_debug_passport_original_frame(frame: "np.ndarray", frame_index: Option
     try:
         ddir = _get_debug_variants_dir("passport")
         ddir.mkdir(parents=True, exist_ok=True)
-        path = ddir / f"original_passport_frame_{frame_index}.png"
+        path = ddir / "01_camera_frame.png"
         cv2.imwrite(str(path.resolve()), frame)
     except Exception as e:
         logger.debug("Could not save original passport frame: %s", e)
@@ -3920,41 +3865,13 @@ def _deskew_passport_mrz_combined_roi(
             try:
                 ddir = _get_debug_variants_dir("passport")
                 ddir.mkdir(parents=True, exist_ok=True)
-                dbg = base_image.copy()
-                if dbg.ndim == 2:
-                    dbg = cv2.cvtColor(dbg, cv2.COLOR_GRAY2BGR)
-                _warped = abs(float(rotation_angle)) > 0.05
-                cv2.putText(
-                    dbg,
-                    f"MRZ strip tilt={rotation_angle:+.2f} deg (reused)",
-                    (6, 22),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.55,
-                    (0, 255, 255),
-                    2,
-                )
-                cv2.putText(
-                    dbg,
-                    "warpAffine on MRZ strip | skipped EasyOCR remeasure"
-                    if _warped
-                    else "no warp (|tilt|<=0.05 deg) | skipped remeasure",
-                    (6, 44),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 255),
-                    2,
-                )
-                cv2.imwrite(
-                    str((ddir / f"mrz_strip_deskew_debug_frame_{frame_index}.png").resolve()),
-                    dbg,
-                )
-                _write_deskew_tilt_and_zone_debug(
-                    "passport_mrz",
-                    int(frame_index),
+                _write_mrz_strip_after_deskew_debug(
+                    ddir,
                     base_image,
-                    rotation_angle,
-                    applied_angle,
-                    zone_source_bgr=dbg,
+                    easyocr_results=[],
+                    rotation_angle=rotation_angle,
+                    applied_angle=applied_angle,
+                    weighted_block_count=0,
                     cached=True,
                 )
             except Exception:
@@ -3975,7 +3892,7 @@ def _deskew_passport_mrz_combined_roi(
                 cv2.polylines(vis, [pts], True, (0, 255, 0), 2)
             cv2.putText(
                 vis,
-                f"MRZ strip detection ({len(easyocr_results)} blocks)",
+                f"02 - MRZ strip BEFORE deskew  ({len(easyocr_results)} text blocks)",
                 (6, 22),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
@@ -3983,7 +3900,7 @@ def _deskew_passport_mrz_combined_roi(
                 2,
             )
             cv2.imwrite(
-                str((ddir / f"mrz_strip_detection_boxes_frame_{frame_index}.png").resolve()),
+                str((ddir / "02_mrz_strip_before_deskew.png").resolve()),
                 vis,
             )
         except Exception:
@@ -4055,51 +3972,15 @@ def _deskew_passport_mrz_combined_roi(
         try:
             ddir = _get_debug_variants_dir("passport")
             ddir.mkdir(parents=True, exist_ok=True)
-            vis = base_image.copy()
-            if vis.ndim == 2:
-                vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
-            if applied_angle != 0.0 and easyocr_results:
-                h, w = combined_roi.shape[:2]
-                center = (w / 2.0, h / 2.0)
-                M = cv2.getRotationMatrix2D(center, applied_angle, 1.0)
-                cos_a = abs(M[0, 0])
-                sin_a = abs(M[0, 1])
-                new_w = int(h * sin_a + w * cos_a)
-                new_h = int(h * cos_a + w * sin_a)
-                M[0, 2] += (new_w - w) / 2.0
-                M[1, 2] += (new_h - h) / 2.0
-                for bbox, _txt, _conf in easyocr_results:
-                    pts_src = np.array(bbox, dtype=np.float64)
-                    ones = np.ones((pts_src.shape[0], 1), dtype=np.float64)
-                    pts_h = np.hstack([pts_src, ones])
-                    pts_rot = (M @ pts_h.T).T.astype(np.int32)
-                    cv2.polylines(vis, [pts_rot], True, (0, 255, 0), 2)
-            else:
-                for bbox, _txt, _conf in easyocr_results:
-                    pts = np.array(bbox, dtype=np.int32)
-                    cv2.polylines(vis, [pts], True, (0, 255, 0), 2)
-            cv2.putText(
-                vis,
-                f"MRZ strip tilt={rotation_angle:+.2f} deg ({len(weighted_angles)} blocks)",
-                (6, 22),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 255),
-                2,
-            )
-            cv2.imwrite(
-                str((ddir / f"mrz_strip_deskew_debug_frame_{frame_index}.png").resolve()),
-                vis,
-            )
-            vis_bgr = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR) if vis.ndim == 2 else vis
-            _write_deskew_tilt_and_zone_debug(
-                "passport_mrz",
-                int(frame_index),
+            _write_mrz_strip_after_deskew_debug(
+                ddir,
                 base_image,
-                rotation_angle,
-                applied_angle,
-                zone_source_bgr=vis_bgr,
+                easyocr_results=easyocr_results,
+                rotation_angle=rotation_angle,
+                applied_angle=applied_angle,
+                weighted_block_count=len(weighted_angles),
                 cached=False,
+                source_shape=combined_roi.shape[:2],
             )
         except Exception:
             pass
@@ -4234,6 +4115,100 @@ def _build_clahe_and_detect_boxes(
         except Exception:
             pass
     return clahe_master, easyocr_results
+
+
+def _write_mrz_strip_after_deskew_debug(
+    ddir: Path,
+    base_image: "np.ndarray",
+    *,
+    easyocr_results: List[Tuple[Any, str, float]],
+    rotation_angle: float,
+    applied_angle: float,
+    weighted_block_count: int,
+    cached: bool,
+    source_shape: Optional[Tuple[int, int]] = None,
+) -> None:
+    """Write the consolidated ``03_mrz_strip_after_deskew.png`` debug image.
+
+    This single image replaces the previously-separate ``mrz_strip_deskew_debug``,
+    ``deskew_tilt`` and ``deskew_debug_zone`` files (which all showed the same
+    deskewed pixels with different overlays). It draws on the deskewed MRZ strip:
+      - green polylines: each detected text block (rotated to match the strip)
+      - cyan caption: estimated tilt + applied rotation + cached flag
+      - green arrow at center: visualises rotation direction (only if |angle| > 0.05 deg)
+    """
+    if not HAS_OPENCV or base_image is None or base_image.size == 0:
+        return
+
+    vis = base_image.copy()
+    if vis.ndim == 2:
+        vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
+
+    if easyocr_results and applied_angle != 0.0 and source_shape is not None:
+        src_h, src_w = source_shape
+        center = (src_w / 2.0, src_h / 2.0)
+        M = cv2.getRotationMatrix2D(center, applied_angle, 1.0)
+        cos_a = abs(M[0, 0])
+        sin_a = abs(M[0, 1])
+        new_w = int(src_h * sin_a + src_w * cos_a)
+        new_h = int(src_h * cos_a + src_w * sin_a)
+        M[0, 2] += (new_w - src_w) / 2.0
+        M[1, 2] += (new_h - src_h) / 2.0
+        for bbox, _txt, _conf in easyocr_results:
+            pts_src = np.array(bbox, dtype=np.float64)
+            ones = np.ones((pts_src.shape[0], 1), dtype=np.float64)
+            pts_h = np.hstack([pts_src, ones])
+            pts_rot = (M @ pts_h.T).T.astype(np.int32)
+            cv2.polylines(vis, [pts_rot], True, (0, 255, 0), 2)
+    else:
+        for bbox, _txt, _conf in easyocr_results:
+            pts = np.array(bbox, dtype=np.int32)
+            cv2.polylines(vis, [pts], True, (0, 255, 0), 2)
+
+    cached_tag = "  [reused tilt]" if cached else ""
+    blocks_tag = f"  ({weighted_block_count} blocks)" if weighted_block_count else ""
+    cv2.putText(
+        vis,
+        f"03 - MRZ strip AFTER deskew  tilt={rotation_angle:+.2f} deg{blocks_tag}{cached_tag}",
+        (6, 22),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (0, 255, 255),
+        2,
+    )
+    if abs(rotation_angle) > 0.05:
+        rot_dir = "anticlockwise" if rotation_angle > 0 else "clockwise"
+        cv2.putText(
+            vis,
+            f"applied rotation: {applied_angle:+.2f} deg ({rot_dir})",
+            (6, 44),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (0, 255, 255),
+            2,
+        )
+        h_t, w_t = vis.shape[:2]
+        x_mid, y_mid = w_t // 2, h_t // 2
+        length = max(40, w_t // 6)
+        if applied_angle < 0:
+            p1 = (x_mid - length, y_mid - length // 2)
+            p2 = (x_mid + length, y_mid + length // 2)
+        else:
+            p1 = (x_mid - length, y_mid + length // 2)
+            p2 = (x_mid + length, y_mid - length // 2)
+        cv2.arrowedLine(vis, p1, p2, (0, 255, 0), 3, tipLength=0.2)
+    else:
+        cv2.putText(
+            vis,
+            "applied rotation: 0.00 deg (none, |tilt| <= 0.05 deg)",
+            (6, 44),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (0, 255, 255),
+            2,
+        )
+
+    cv2.imwrite(str((ddir / "03_mrz_strip_after_deskew.png").resolve()), vis)
 
 
 def _write_deskew_tilt_and_zone_debug(

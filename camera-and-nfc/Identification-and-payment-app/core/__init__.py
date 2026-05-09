@@ -1,1 +1,1 @@
-"""Core modules for payment and identity system."""
+"""Passport / camera OCR core (`scanner`)."""
