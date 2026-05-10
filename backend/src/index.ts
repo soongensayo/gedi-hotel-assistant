@@ -31,8 +31,11 @@ const app = express();
 const server = http.createServer(app);
 
 // --- Middleware ---
+const isDev = config.nodeEnv !== 'production';
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  origin: isDev
+    ? true
+    : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
 }));
 app.use(express.json({ limit: '10mb' }));

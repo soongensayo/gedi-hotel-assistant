@@ -5,17 +5,21 @@
   "description": "AI Hotel Check-in Kiosk - Reimagining the hotel check-in experience",
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "stanford"
   ],
   "scripts": {
     "predev": "node -e \"if(process.platform!=='win32'){require('child_process').execSync('bash hardware/apply-audio.sh',{stdio:'inherit'})}\"",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:stanford\"",
+    "dev:stanford": "npm run dev --workspace=stanford",
+    "dev:nus": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
-    "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
+    "build": "npm run build --workspace=stanford && npm run build --workspace=frontend && npm run build --workspace=backend",
+    "build:stanford": "npm run build --workspace=stanford",
     "build:frontend": "npm run build --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
-    "lint": "npm run lint --workspace=frontend && npm run lint --workspace=backend"
+    "lint": "npm run lint --workspace=stanford && npm run lint --workspace=frontend && npm run lint --workspace=backend"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
