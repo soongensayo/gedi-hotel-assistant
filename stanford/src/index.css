@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --color-hotel-dark: #0c0a09;
+  --color-hotel-accent: #c5a059;
+  --color-hotel-gold: #d4b07a;
+  --color-hotel-text: #f0ebe3;
+  --color-hotel-text-dim: #8a7e72;
+  --color-hotel-border: rgba(196, 162, 101, 0.15);
+}
+
+html,
+body,
+#root {
+  @apply h-full w-full m-0 p-0 overflow-hidden;
+  background-color: var(--color-hotel-dark);
+  color: var(--color-hotel-text);
+  font-family: 'Georgia', 'Times New Roman', serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button {
+  font-family: inherit;
+}

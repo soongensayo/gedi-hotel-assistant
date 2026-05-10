@@ -12,12 +12,65 @@ import { speechToText } from './services/sttService';
  * The backend only handles AI chat, TTS, and STT.
  */
 export function setupSocketIO(server: HTTPServer): SocketIOServer {
+  const isDev = process.env.NODE_ENV !== 'production';
   const io = new SocketIOServer(server, {
     cors: {
-      origin: ['http://localhost:5173', 'http://localhost:3000'],
+      origin: isDev
+        ? (_origin, cb) => cb(null, true)
+        : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
       methods: ['GET', 'POST'],
     },
     transports: ['websocket', 'polling'],
+    maxHttpBufferSize: 10 * 1024 * 1024, // 10 MB for passport photo transfer
+  });
+
+  // Stanford showcase: concierge ↔ guest command relay (namespace /stanford)
+  const stanford = io.of('/stanford');
+  stanford.on('connection', (socket) => {
+    console.log(`[Stanford] New connection: ${socket.id}`);
+
+    socket.on(
+      'stanford:join',
+      (data: { role: 'guest' | 'staff'; roomId: string }) => {
+        const room = `stanford:${data.roomId}`;
+        void socket.join(room);
+        (socket.data as { stanfordRole?: string; stanfordRoomId?: string }).stanfordRole =
+          data.role;
+        (socket.data as { stanfordRole?: string; stanfordRoomId?: string }).stanfordRoomId =
+          data.roomId;
+        console.log(`[Stanford] ${data.role} joined ${room} (${socket.id})`);
+      }
+    );
+
+    socket.on(
+      'stanford:staff_command',
+      (payload: { roomId: string; command: unknown }) => {
+        const data = socket.data as { stanfordRole?: string };
+        if (data.stanfordRole !== 'staff') {
+          console.warn('[Stanford] Ignored staff_command from non-staff socket');
+          return;
+        }
+        const room = `stanford:${payload.roomId}`;
+        socket.to(room).emit('stanford:guest_command', payload.command);
+      }
+    );
+
+    socket.on(
+      'stanford:guest_event',
+      (payload: { roomId: string; event: unknown }) => {
+        const data = socket.data as { stanfordRole?: string };
+        if (data.stanfordRole !== 'guest') {
+          console.warn('[Stanford] Ignored guest_event from non-guest socket');
+          return;
+        }
+        const room = `stanford:${payload.roomId}`;
+        socket.to(room).emit('stanford:staff_event', payload.event);
+      }
+    );
+
+    socket.on('disconnect', () => {
+      console.log(`[Stanford] Disconnected: ${socket.id}`);
+    });
   });
 
   io.on('connection', (socket) => {
