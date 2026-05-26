@@ -103,11 +103,23 @@ VITE_STANFORD_USE_NFC=true
 STANFORD_ENCODER_URL=http://localhost:5000
 ```
 
-Then start the Stanford app/backend:
+Then start the Stanford app/backend. The one-command path is:
 
 ```bash
 npm run dev
 ```
+
+The lab-friendly split-terminal path is:
+
+```bash
+# Terminal 2, repo root
+npm run dev:backend
+
+# Terminal 3, repo root
+npm run dev:stanford
+```
+
+Use the split-terminal path when debugging because backend logs and Vite/frontend logs are easier to read separately.
 
 Open:
 
@@ -166,16 +178,139 @@ STANFORD_ENCODER_URL=http://192.168.x.x:5000
 
 Replace `192.168.x.x` with the hardware computer's actual IP.
 
-Then start the Stanford app/backend:
+Then start the Stanford app/backend. The one-command path is:
 
 ```bash
 npm run dev
 ```
 
+The lab-friendly split-terminal path is:
+
+```bash
+# Terminal 2, repo root
+npm run dev:backend
+
+# Terminal 3, repo root
+npm run dev:stanford
+```
+
+Use the split-terminal path when debugging because backend logs and Vite/frontend logs are easier to read separately.
+
+## Recommended Lab Runbook
+
+This is the current known-good lab setup when the interface machine is connected to the dispenser/NFC hardware and another laptop is used as the staff machine.
+
+### Interface Machine
+
+Terminal 1, Python encoder/dispenser service:
+
+```powershell
+cd stanford\hardware\card-encoder
+.venv\Scripts\activate
+$env:ENCODER_ARDUINO_PORT="COM3"
+py encoder.py
+```
+
+If `py` is not available but `python` is, use:
+
+```powershell
+python encoder.py
+```
+
+Terminal 2, backend:
+
+```powershell
+npm run dev:backend
+```
+
+Terminal 3, Stanford frontend:
+
+```powershell
+npm run dev:stanford
+```
+
+Open the guest interface on the interface machine:
+
+```text
+http://localhost:5174/
+```
+
+### Staff Laptop
+
+Open the staff panel using the interface machine's Vite network URL:
+
+```text
+http://<interface-machine-ip>:5174/staff
+```
+
+Example from one lab run:
+
+```text
+http://10.32.35.221:5174/staff
+```
+
+### Expected Ports
+
+```text
+Python encoder service: http://localhost:5000
+Node backend:           http://localhost:3001
+Stanford frontend:      http://localhost:5174
+```
+
+The guest/staff frontend must be able to reach the backend, and the backend must be able to reach the Python encoder service.
+
+### Root `.env` On Interface Machine
+
+The `.env` file should be in the repo root, next to `package.json`, not inside `stanford/`.
+
+```bash
+VITE_STANFORD_USE_NFC=true
+STANFORD_ENCODER_URL=http://localhost:5000
+VITE_STANFORD_KEY_GUEST=Test Guest
+VITE_STANFORD_KEY_ROOM=311
+```
+
+Restart `npm run dev:stanford` after changing any `VITE_` env var. Vite reads these at frontend startup time.
+
+### Quick Health Checks
+
+Check backend is running:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3001/api/health"
+```
+
+Check backend can trigger the encoder/dispenser:
+
+```powershell
+$body = @{
+  guestName = "Test Guest"
+  roomNumber = "311"
+  cardLabel = "Primary"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:3001/api/checkin/issue-key-card" -Method Post -ContentType "application/json" -Body $body
+```
+
+Check Python encoder directly:
+
+```powershell
+$body = @{
+  name = "Test Guest"
+  room = "311"
+  cardLabel = "Primary"
+  preload = $true
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:5000/api/issue_card" -Method Post -ContentType "application/json" -Body $body
+```
+
+Only test the UI flow after these checks work.
+
 ## Showcase Flow
 
 1. Start the Python encoder service on the hardware computer.
-2. Start `npm run dev` on the app/backend computer.
+2. Start the backend and Stanford frontend on the app/backend computer. Use either `npm run dev`, or the split path `npm run dev:backend` and `npm run dev:stanford`.
 3. Open guest tablet at `http://localhost:5174/` or the LAN URL shown by Vite.
 4. Open staff panel at `http://localhost:5174/staff`.
 5. In staff panel, optionally look up and push a reservation.
@@ -258,7 +393,8 @@ curl -X POST http://localhost:3001/api/checkin/issue-key-card \
 If this fails:
 
 - Check `STANFORD_ENCODER_URL`
-- Restart `npm run dev` after changing `.env`
+- Make sure the backend is running with `npm run dev:backend` or the combined `npm run dev`
+- Restart `npm run dev:backend` after changing backend env vars such as `STANFORD_ENCODER_URL`
 - Check backend logs for `[Stanford Encoder]`
 
 ### 4. Does the UI trigger the flow?
@@ -276,6 +412,27 @@ VITE_STANFORD_USE_NFC=true
 ```
 
 Then restart Vite. `VITE_` env vars are read at frontend startup/build time.
+
+If the staff button changes the guest screen to `key-card` but no request reaches the Python encoder service, check:
+
+- The guest page is open and refreshed after `VITE_STANFORD_USE_NFC=true`
+- `npm run dev:stanford` was restarted after editing `.env`
+- The frontend is not still using mock mode
+- Temporarily forcing `const useNfcHardware = true` in `stanford/src/screens/ConciergeCallScreen.tsx` can prove whether the remaining issue is only env loading
+
+If Vite logs a proxy error like `ECONNREFUSED ::1:3001`, Windows may be resolving `localhost` to IPv6 while the backend is listening on IPv4. In `stanford/vite.config.ts`, change both proxy targets from:
+
+```ts
+target: 'http://localhost:3001',
+```
+
+to:
+
+```ts
+target: 'http://127.0.0.1:3001',
+```
+
+Then restart `npm run dev:stanford`.
 
 ## Common Issues
 
