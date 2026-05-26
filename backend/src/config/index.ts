@@ -1,8 +1,25 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 
-// Load .env from project root
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+const envCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), '..', '.env'),
+  path.resolve(__dirname, '../../../.env'),
+  path.resolve(__dirname, '../../.env'),
+];
+
+const envPath = envCandidates.find((candidate) => fs.existsSync(candidate));
+if (envPath) {
+  const result = dotenv.config({ path: envPath });
+  if (result.error) {
+    console.warn(`[Config] Failed to load .env from ${envPath}: ${result.error.message}`);
+  } else {
+    console.log(`[Config] Loaded .env from ${envPath}`);
+  }
+} else {
+  console.warn(`[Config] No .env file found. Checked: ${envCandidates.join(', ')}`);
+}
 
 export const config = {
   // Server
