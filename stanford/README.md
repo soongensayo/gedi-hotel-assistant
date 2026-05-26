@@ -5,8 +5,12 @@
 ```bash
 # From repo root
 npm run dev        # backend + stanford (default)
+npm run dev:backend
+npm run dev:stanford
 npm run dev:nus    # backend + original NUS kiosk (port 5173)
 ```
+
+For lab debugging, prefer the split backend/frontend commands in separate terminals so backend, Supabase, and Vite logs are easier to read.
 
 - **Guest tablet:** http://localhost:5174/
 - **Concierge panel:** http://localhost:5174/staff

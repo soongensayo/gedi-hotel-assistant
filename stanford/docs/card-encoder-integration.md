@@ -264,13 +264,39 @@ The guest/staff frontend must be able to reach the backend, and the backend must
 The `.env` file should be in the repo root, next to `package.json`, not inside `stanford/`.
 
 ```bash
+OPENAI_API_KEY=...
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
 VITE_STANFORD_USE_NFC=true
 STANFORD_ENCODER_URL=http://localhost:5000
 VITE_STANFORD_KEY_GUEST=Test Guest
 VITE_STANFORD_KEY_ROOM=311
 ```
 
+Make sure the file is actually saved. In one lab session, VS Code showed `.env` open with values typed in, but PowerShell showed `Length 0` because the file had not been saved yet.
+
+Restart `npm run dev:backend` after changing backend env vars such as `OPENAI_API_KEY`, `SUPABASE_URL`, or `STANFORD_ENCODER_URL`.
+
 Restart `npm run dev:stanford` after changing any `VITE_` env var. Vite reads these at frontend startup time.
+
+The backend now logs which `.env` it loaded. On startup, terminal 2 should show something like:
+
+```text
+[Config] Loaded .env from C:\...\ai-checkin-robot\.env
+[Hotel Service] Supabase configured with service role key
+```
+
+If it says Supabase is not configured or OpenAI/Supabase credentials are missing, verify the actual file on disk:
+
+```powershell
+Get-Location
+Get-ChildItem -Force .env
+Get-Content .env | Select-String "OPENAI_API_KEY|SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY"
+```
+
+If `Get-ChildItem` shows `Length 0`, save the `.env` file or copy the real env values into the repo-root `.env`.
 
 ### Quick Health Checks
 
@@ -279,6 +305,20 @@ Check backend is running:
 ```powershell
 Invoke-RestMethod -Uri "http://localhost:3001/api/health"
 ```
+
+Check staff/reservation search through the backend:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3001/api/checkin/search?query=James&limit=8"
+```
+
+From the staff laptop, replace `localhost` with the interface machine IP:
+
+```powershell
+Invoke-RestMethod -Uri "http://<interface-machine-ip>:3001/api/checkin/search?query=James&limit=8"
+```
+
+If this works from PowerShell but not from the staff UI, the issue is frontend/socket/UI state. If it fails here, debug backend/env/Supabase before debugging the UI.
 
 Check backend can trigger the encoder/dispenser:
 
@@ -434,7 +474,73 @@ target: 'http://127.0.0.1:3001',
 
 Then restart `npm run dev:stanford`.
 
+### 5. Does staff search find Supabase guests?
+
+The staff "Guest profile" search calls:
+
+```text
+GET /api/checkin/search?query=<query>&limit=8
+```
+
+Backend search logs should say something like:
+
+```text
+[Hotel Service] Search "James" -> 1 result(s) via Supabase
+```
+
+If the UI says `No matching guest or reservation` and backend shows no useful output, run the direct `Invoke-RestMethod` search check from the previous section.
+
+If backend logs:
+
+```text
+[Hotel Service] Supabase not configured; using mock hotel data
+```
+
+then the backend did not load the real `.env`. Check that the repo-root `.env` is saved and non-empty.
+
+If backend logs:
+
+```text
+[Hotel Service] Search "..." -> 0 result(s) via Supabase
+```
+
+then Supabase is configured, but the searched value does not match the current data or the query needs adjustment.
+
+If backend logs a Supabase query error, fix that schema/query issue before debugging the staff UI.
+
 ## Common Issues
+
+### `.env` exists but backend cannot see credentials
+
+Confirm the `.env` file is in the repo root, not only open in VS Code:
+
+```powershell
+Get-Location
+Get-ChildItem -Force .env
+```
+
+If `Length` is `0`, the file is empty on disk. Save it in VS Code or paste the values again.
+
+The backend expects exact variable names:
+
+```bash
+OPENAI_API_KEY=...
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+After saving, restart:
+
+```powershell
+npm run dev:backend
+```
+
+Frontend `VITE_` vars also require restarting:
+
+```powershell
+npm run dev:stanford
+```
 
 ### Wrong Arduino port
 
