@@ -19,7 +19,7 @@ type Props = {
   stanford: StanfordGuest;
 };
 
-const useNfcHardware = import.meta.env.VITE_STANFORD_USE_NFC === 'true';
+const useNfcHardware = true;
 const fallbackKeyGuest =
   (import.meta.env.VITE_STANFORD_KEY_GUEST as string | undefined) ?? 'Stanford Guest';
 const fallbackKeyRoom =

@@ -6,8 +6,12 @@ let supabase: SupabaseClient | null = null;
 
 if (config.supabaseUrl && config.supabaseServiceKey) {
   supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
+  console.log('[Hotel Service] Supabase configured with service role key');
 } else if (config.supabaseUrl && config.supabaseAnonKey) {
   supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
+  console.log('[Hotel Service] Supabase configured with anon key');
+} else {
+  console.log('[Hotel Service] Supabase not configured; using mock hotel data');
 }
 
 // =============================================================================
@@ -589,15 +593,18 @@ export async function searchReservations(query: string, limit = 8) {
     const codeFilters = [`confirmation_code.ilike.%${normalized}%`];
     if (isUuid(cleanQuery)) codeFilters.push(`id.eq.${cleanQuery}`);
 
-    const { data: directRows } = await supabase
+    const { data: directRows, error: directError } = await supabase
       .from('reservations')
       .select(RESERVATION_SELECT)
       .or(codeFilters.join(','))
       .order('check_in_date', { ascending: false })
       .limit(limit);
+    if (directError) {
+      console.error('[Hotel Service] Reservation search direct query failed:', directError.message);
+    }
     addRows(directRows);
 
-    const { data: guestRows } = await supabase
+    const { data: guestRows, error: guestError } = await supabase
       .from('guests')
       .select('id')
       .or([
@@ -608,23 +615,33 @@ export async function searchReservations(query: string, limit = 8) {
         `passport_number.ilike.%${normalized}%`,
       ].join(','))
       .limit(limit);
+    if (guestError) {
+      console.error('[Hotel Service] Reservation search guest query failed:', guestError.message);
+    }
 
     const guestIds = (guestRows ?? []).map((g) => g.id);
     if (guestIds.length > 0) {
-      const { data: guestReservationRows } = await supabase
+      const { data: guestReservationRows, error: guestReservationError } = await supabase
         .from('reservations')
         .select(RESERVATION_SELECT)
         .in('guest_id', guestIds)
         .order('check_in_date', { ascending: false })
         .limit(limit);
+      if (guestReservationError) {
+        console.error('[Hotel Service] Reservation search by guest IDs failed:', guestReservationError.message);
+      }
       addRows(guestReservationRows);
     }
 
-    return Array.from(found.values()).slice(0, limit);
+    const results = Array.from(found.values()).slice(0, limit);
+    console.log(
+      `[Hotel Service] Search "${cleanQuery}" -> ${results.length} result(s) via Supabase`
+    );
+    return results;
   }
 
   const lower = cleanQuery.toLowerCase();
-  return MOCK_RESERVATIONS
+  const results = MOCK_RESERVATIONS
     .map((reservation) => {
       const guest = MOCK_GUESTS.find((g) => g.id === reservation.guestId);
       const room = MOCK_ROOMS.find((r) => r.id === reservation.roomId);
@@ -642,6 +659,10 @@ export async function searchReservations(query: string, limit = 8) {
       );
     })
     .slice(0, limit);
+  console.log(
+    `[Hotel Service] Search "${cleanQuery}" -> ${results.length} result(s) via mock data`
+  );
+  return results;
 }
 
 export async function getReservationProfile(reservationIdOrCode: string): Promise<ReservationProfile | null> {
