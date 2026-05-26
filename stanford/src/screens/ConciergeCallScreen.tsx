@@ -34,10 +34,15 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
     customMessage,
     passportScanMode,
     sendToStaff,
+    setActiveScreen,
   } = stanford;
 
   const showOverlay = activeScreen !== 'video-only';
   const meetingRoom = jitsiRoomName(roomId);
+  const sendToStaffAndClose = (event: Parameters<typeof sendToStaff>[0]) => {
+    sendToStaff(event);
+    setActiveScreen('video-only');
+  };
 
   const overlayInner = () => {
     switch (activeScreen) {
@@ -46,7 +51,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
           <ReservationScreen
             reservation={reservation}
             onConfirm={() =>
-              sendToStaff({
+              sendToStaffAndClose({
                 type: 'reservation_confirmed',
                 reservationId: reservation.id,
               })
@@ -62,7 +67,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
           <PassportScanScreen
             mode={passportScanMode}
             onComplete={(passportNumber, photoDataUrl) =>
-              sendToStaff({ type: 'passport_scanned', passportNumber, photoDataUrl })
+              sendToStaffAndClose({ type: 'passport_scanned', passportNumber, photoDataUrl })
             }
           />
         );
@@ -71,7 +76,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
           <PaymentScreen
             qrValue={paymentQr.qrValue}
             instructions={paymentQr.instructions}
-            onPaidDemo={() => sendToStaff({ type: 'payment_complete' })}
+            onPaidDemo={() => sendToStaffAndClose({ type: 'payment_complete' })}
           />
         ) : (
           <p className="py-8 text-center text-white/70">Payment instructions loading…</p>
@@ -80,7 +85,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
         return (
           <SignatureScreen
             onSubmit={(dataUrl) =>
-              sendToStaff({ type: 'signature_submitted', dataUrl })
+              sendToStaffAndClose({ type: 'signature_submitted', dataUrl })
             }
           />
         );
@@ -94,7 +99,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
             useHardwareNfc={useNfcHardware}
             guestName={guestName}
             roomNumber={roomNumber}
-            onReceived={() => sendToStaff({ type: 'key_card_received' })}
+            onReceived={() => sendToStaffAndClose({ type: 'key_card_received' })}
           />
         );
       }
@@ -102,7 +107,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
         return (
           <PersonalizationScreen
             onSubmit={({ temperature, pillows, celebration }) =>
-              sendToStaff({
+              sendToStaffAndClose({
                 type: 'preferences_submitted',
                 temperature,
                 pillows,
@@ -116,7 +121,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
           <ServicesScreen
             services={services}
             onSelect={(s) =>
-              sendToStaff({
+              sendToStaffAndClose({
                 type: 'service_selected',
                 serviceId: s.id,
                 label: s.name,
@@ -130,7 +135,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
         return (
           <LuggageScreen
             onSubmit={(count, needsHelp, etaNote) =>
-              sendToStaff({
+              sendToStaffAndClose({
                 type: 'luggage_info',
                 count,
                 needsHelp,

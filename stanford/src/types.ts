@@ -25,11 +25,18 @@ export interface Guest {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
-  phone: string;
-  nationality: string;
-  passportNumber: string;
-  dateOfBirth: string;
+  email?: string | null;
+  phone?: string | null;
+  nationality?: string | null;
+  passportNumber?: string | null;
+  passportPath?: string | null;
+  preferredName?: string | null;
+  languagePreference?: string | null;
+  loyaltyTier?: string | null;
+  vipNotes?: string | null;
+  accessibilityNotes?: string | null;
+  identityVerifiedAt?: string | null;
+  dateOfBirth?: string | null;
 }
 
 export interface Room {
@@ -43,6 +50,7 @@ export interface Room {
   bedType: string;
   amenities: string[];
   description: string;
+  roomForRobot?: string | null;
 }
 
 export interface Reservation {
@@ -59,6 +67,48 @@ export interface Reservation {
   specialRequests?: string;
   totalAmount: number;
   currency: string;
+  source?: string | null;
+  arrivalStatus?: string | null;
+  paymentStatus?: string | null;
+  scheduledArrivalAt?: string | null;
+  checkedInAt?: string | null;
+}
+
+export interface CheckinSession {
+  id: string;
+  reservationId: string | null;
+  guestId: string | null;
+  sessionKey: string | null;
+  channel: string;
+  status: string;
+  currentStep: string | null;
+  identityStatus: string | null;
+  paymentStatus: string | null;
+  keyStatus: string | null;
+  roomPreferences: Record<string, unknown>;
+  luggage: Record<string, unknown>;
+  selectedServices: unknown[];
+  artifacts: Record<string, unknown>;
+  staffNotes?: string | null;
+  startedAt?: string | null;
+  lastEventAt?: string | null;
+  completedAt?: string | null;
+}
+
+export interface CheckinEventRecord {
+  id: string;
+  sessionId: string | null;
+  reservationId: string | null;
+  guestId: string | null;
+  eventType: string;
+  eventPayload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ReservationProfile {
+  reservation: Reservation;
+  activeSession: CheckinSession | null;
+  recentEvents: CheckinEventRecord[];
 }
 
 /** Payloads for staff -> guest commands */

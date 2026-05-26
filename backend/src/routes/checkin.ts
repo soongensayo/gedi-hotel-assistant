@@ -2,8 +2,11 @@ import { Router, Request, Response } from 'express';
 import { execFile, ChildProcess } from 'child_process';
 import path from 'path';
 import {
+  getReservationProfile,
   lookupReservation,
   lookupReservationByPassport,
+  recordStanfordCheckinEvent,
+  searchReservations,
   getGuestByPassport,
   updateGuestPassportData,
 } from '../services/hotelService';
@@ -79,6 +82,22 @@ function resetScannerState() {
   scannerState.startedAt = undefined;
 }
 
+function sanitizeStanfordEventPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const safePayload = { ...payload };
+
+  if (typeof safePayload.photoDataUrl === 'string') {
+    safePayload.hasPassportPhoto = safePayload.photoDataUrl.length > 0;
+    delete safePayload.photoDataUrl;
+  }
+
+  if (typeof safePayload.dataUrl === 'string') {
+    safePayload.signatureCaptured = safePayload.dataUrl.length > 0;
+    delete safePayload.dataUrl;
+  }
+
+  return safePayload;
+}
+
 /**
  * GET /api/checkin/lookup
  * Look up a reservation by confirmation code or guest name.
@@ -95,6 +114,78 @@ router.get('/lookup', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[Checkin Route] Lookup error:', error);
     res.status(500).json({ error: 'Failed to lookup reservation' });
+  }
+});
+
+/**
+ * GET /api/checkin/search
+ * Smart staff search across confirmation code, guest name, email, phone, and passport.
+ */
+router.get('/search', async (req: Request, res: Response) => {
+  try {
+    const { query, limit } = req.query;
+    if (!query || typeof query !== 'string') {
+      res.status(400).json({ error: 'Query parameter is required' });
+      return;
+    }
+
+    const parsedLimit = typeof limit === 'string' ? Number.parseInt(limit, 10) : 8;
+    const results = await searchReservations(query, Number.isFinite(parsedLimit) ? parsedLimit : 8);
+    res.json({ results });
+  } catch (error) {
+    console.error('[Checkin Route] Search error:', error);
+    res.status(500).json({ error: 'Failed to search reservations' });
+  }
+});
+
+/**
+ * GET /api/checkin/profile/:reservationId
+ * Staff profile view: reservation + guest + room + latest Stanford session/events.
+ */
+router.get('/profile/:reservationId', async (req: Request, res: Response) => {
+  try {
+    const reservationId = Array.isArray(req.params.reservationId)
+      ? req.params.reservationId[0]
+      : req.params.reservationId;
+    const profile = await getReservationProfile(reservationId);
+    if (!profile) {
+      res.status(404).json({ error: 'Reservation profile not found' });
+      return;
+    }
+    res.json(profile);
+  } catch (error) {
+    console.error('[Checkin Route] Profile error:', error);
+    res.status(500).json({ error: 'Failed to load reservation profile' });
+  }
+});
+
+/**
+ * POST /api/checkin/stanford-event
+ * Persist high-value guest/staff events from the Stanford showcase.
+ */
+router.post('/stanford-event', async (req: Request, res: Response) => {
+  try {
+    const { reservationId, sessionKey, eventType, eventPayload } = req.body ?? {};
+    if (!eventType || typeof eventType !== 'string') {
+      res.status(400).json({ success: false, error: 'eventType is required' });
+      return;
+    }
+
+    const safePayload = sanitizeStanfordEventPayload(
+      eventPayload && typeof eventPayload === 'object' ? eventPayload as Record<string, unknown> : {}
+    );
+
+    const result = await recordStanfordCheckinEvent({
+      reservationId: typeof reservationId === 'string' ? reservationId : undefined,
+      sessionKey: typeof sessionKey === 'string' ? sessionKey : undefined,
+      eventType,
+      eventPayload: safePayload,
+    });
+
+    res.status(result.success ? 200 : 500).json(result);
+  } catch (error) {
+    console.error('[Checkin Route] Stanford event error:', error);
+    res.status(500).json({ success: false, error: 'Failed to persist Stanford event' });
   }
 });
 

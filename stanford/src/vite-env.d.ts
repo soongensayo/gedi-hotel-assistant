@@ -13,6 +13,7 @@ interface JitsiMeetExternalAPIOptions {
 declare class JitsiMeetExternalAPI {
   constructor(domain: string, options: JitsiMeetExternalAPIOptions);
   dispose(): void;
+  on(event: string, handler: (...args: unknown[]) => void): void;
   executeCommand(command: string, ...args: unknown[]): void;
 }
 

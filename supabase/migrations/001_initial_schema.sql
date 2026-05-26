@@ -34,6 +34,13 @@ CREATE TABLE IF NOT EXISTS guests (
   phone TEXT,
   nationality TEXT,
   passport_number TEXT UNIQUE,
+  passport_path TEXT,
+  preferred_name TEXT,
+  language_preference TEXT DEFAULT 'English',
+  loyalty_tier TEXT DEFAULT 'None',
+  vip_notes TEXT,
+  accessibility_notes TEXT,
+  identity_verified_at TIMESTAMPTZ,
   date_of_birth DATE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -53,6 +60,7 @@ CREATE TABLE IF NOT EXISTS rooms (
   image_url TEXT,
   is_available BOOLEAN DEFAULT true,
   description TEXT,
+  room_for_robot TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -70,6 +78,11 @@ CREATE TABLE IF NOT EXISTS reservations (
   special_requests TEXT,
   total_amount DECIMAL(10, 2) NOT NULL,
   currency TEXT DEFAULT 'SGD',
+  source TEXT DEFAULT 'webapp',
+  arrival_status TEXT DEFAULT 'expected' CHECK (arrival_status IN ('expected', 'en_route', 'arrived', 'checking_in', 'completed', 'needs_help')),
+  payment_status TEXT DEFAULT 'pending' CHECK (payment_status IN ('pending', 'authorized', 'paid', 'waived', 'failed')),
+  scheduled_arrival_at TIMESTAMPTZ,
+  checked_in_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

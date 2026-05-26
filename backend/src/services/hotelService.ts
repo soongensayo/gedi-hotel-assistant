@@ -53,6 +53,7 @@ const MOCK_ROOMS = [
     maxOccupancy: 2,
     bedType: 'King',
     amenities: ['City View', 'Mini Bar', 'Rain Shower', '55" Smart TV', 'Nespresso Machine'],
+    imageUrl: null,
     isAvailable: true,
     description: 'Elegant room with city skyline views and modern amenities.',
     roomForRobot: 'RM1204',
@@ -67,6 +68,7 @@ const MOCK_ROOMS = [
     maxOccupancy: 2,
     bedType: 'King',
     amenities: ['Marina Bay View', 'Mini Bar', 'Rainfall Shower', '65" Smart TV', 'Nespresso Machine', 'Bathrobe & Slippers', 'Turndown Service'],
+    imageUrl: null,
     isAvailable: true,
     description: 'Spacious room with panoramic Marina Bay views and premium touches.',
     roomForRobot: 'RM1508',
@@ -81,6 +83,7 @@ const MOCK_ROOMS = [
     maxOccupancy: 3,
     bedType: 'King + Sofa Bed',
     amenities: ['Panoramic Bay View', 'Separate Living Area', 'Walk-in Closet', 'Jacuzzi Tub', 'Premium Mini Bar', '75" Smart TV', 'Butler Service', 'Complimentary Breakfast'],
+    imageUrl: null,
     isAvailable: true,
     description: 'Luxurious suite with separate living area and butler service.',
     roomForRobot: 'RM2001',
@@ -95,6 +98,7 @@ const MOCK_ROOMS = [
     maxOccupancy: 4,
     bedType: 'King + Twin',
     amenities: ['360° Panoramic View', 'Private Terrace', 'Full Kitchen', 'Dining Room', 'Private Pool', 'Home Theater', 'Butler Service', 'Complimentary Spa', 'Airport Transfer'],
+    imageUrl: null,
     isAvailable: true,
     description: 'The pinnacle of luxury — a private penthouse with terrace pool and 360° views.',
     roomForRobot: 'RM2501',
@@ -149,6 +153,13 @@ const MOCK_GUESTS = [
     phone: '+65 9123 4567',
     nationality: 'Singapore',
     passportNumber: 'E1234567A',
+    passportPath: null,
+    preferredName: 'James',
+    languagePreference: 'English',
+    loyaltyTier: 'Gold',
+    vipNotes: 'Returning guest. Likes quiet rooms and early coffee.',
+    accessibilityNotes: null,
+    identityVerifiedAt: null,
     dateOfBirth: '1985-03-15',
   },
   {
@@ -159,6 +170,13 @@ const MOCK_GUESTS = [
     phone: '+44 7700 900123',
     nationality: 'United Kingdom',
     passportNumber: 'GB9876543',
+    passportPath: null,
+    preferredName: 'Sarah',
+    languagePreference: 'English',
+    loyaltyTier: 'Platinum',
+    vipNotes: 'Prefers minimal small talk and fast check-in.',
+    accessibilityNotes: null,
+    identityVerifiedAt: null,
     dateOfBirth: '1990-07-22',
   },
   {
@@ -169,6 +187,13 @@ const MOCK_GUESTS = [
     phone: '+81 90 1234 5678',
     nationality: 'Japan',
     passportNumber: 'TK5551234',
+    passportPath: null,
+    preferredName: 'Yuki',
+    languagePreference: 'Japanese',
+    loyaltyTier: 'Silver',
+    vipNotes: 'Offer Japanese newspaper if available.',
+    accessibilityNotes: null,
+    identityVerifiedAt: null,
     dateOfBirth: '1988-11-08',
   },
 ];
@@ -186,6 +211,11 @@ const MOCK_RESERVATIONS = [
     specialRequests: 'High floor, extra pillows',
     totalAmount: 1050,
     currency: 'SGD',
+    source: 'stanford-showcase',
+    arrivalStatus: 'arrived',
+    paymentStatus: 'pending',
+    scheduledArrivalAt: null,
+    checkedInAt: null,
   },
   {
     id: 'res-2',
@@ -199,6 +229,11 @@ const MOCK_RESERVATIONS = [
     specialRequests: null,
     totalAmount: 2600,
     currency: 'SGD',
+    source: 'webapp',
+    arrivalStatus: 'expected',
+    paymentStatus: 'pending',
+    scheduledArrivalAt: null,
+    checkedInAt: null,
   },
   {
     id: 'res-3',
@@ -212,6 +247,11 @@ const MOCK_RESERVATIONS = [
     specialRequests: 'Late check-in, Japanese newspaper',
     totalAmount: 1760,
     currency: 'SGD',
+    source: 'stanford-showcase',
+    arrivalStatus: 'arrived',
+    paymentStatus: 'pending',
+    scheduledArrivalAt: null,
+    checkedInAt: null,
   },
 ];
 
@@ -233,6 +273,13 @@ function normalizeGuest(row: any) {
     phone: row.phone,
     nationality: row.nationality,
     passportNumber: row.passport_number ?? row.passportNumber,
+    passportPath: row.passport_path ?? row.passportPath,
+    preferredName: row.preferred_name ?? row.preferredName,
+    languagePreference: row.language_preference ?? row.languagePreference,
+    loyaltyTier: row.loyalty_tier ?? row.loyaltyTier,
+    vipNotes: row.vip_notes ?? row.vipNotes,
+    accessibilityNotes: row.accessibility_notes ?? row.accessibilityNotes,
+    identityVerifiedAt: row.identity_verified_at ?? row.identityVerifiedAt,
     dateOfBirth: row.date_of_birth ?? row.dateOfBirth,
   };
 }
@@ -270,8 +317,51 @@ function normalizeReservation(row: any) {
     specialRequests: row.special_requests ?? row.specialRequests,
     totalAmount: Number(row.total_amount ?? row.totalAmount),
     currency: row.currency,
+    source: row.source,
+    arrivalStatus: row.arrival_status ?? row.arrivalStatus,
+    paymentStatus: row.payment_status ?? row.paymentStatus,
+    scheduledArrivalAt: row.scheduled_arrival_at ?? row.scheduledArrivalAt,
+    checkedInAt: row.checked_in_at ?? row.checkedInAt,
     guest: row.guest ? normalizeGuest(row.guest) : undefined,
     room: row.room ? normalizeRoom(row.room) : undefined,
+  };
+}
+
+function normalizeCheckinSession(row: any) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    reservationId: row.reservation_id,
+    guestId: row.guest_id,
+    sessionKey: row.session_key,
+    channel: row.channel,
+    status: row.status,
+    currentStep: row.current_step,
+    staffDisplayName: row.staff_display_name,
+    identityStatus: row.identity_status,
+    paymentStatus: row.payment_status,
+    keyStatus: row.key_status,
+    roomPreferences: row.room_preferences ?? {},
+    luggage: row.luggage ?? {},
+    selectedServices: row.selected_services ?? [],
+    artifacts: row.artifacts ?? {},
+    staffNotes: row.staff_notes,
+    startedAt: row.started_at,
+    lastEventAt: row.last_event_at,
+    completedAt: row.completed_at,
+  };
+}
+
+function normalizeCheckinEvent(row: any) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    reservationId: row.reservation_id,
+    guestId: row.guest_id,
+    eventType: row.event_type,
+    eventPayload: row.event_payload ?? {},
+    createdAt: row.created_at,
   };
 }
 
@@ -316,6 +406,16 @@ function normalizeHotelInfo(row: any) {
 // =============================================================================
 
 const FUZZY_MAX_DISTANCE = 4;
+const RESERVATION_SELECT = '*, guest:guests(*), room:rooms(*)';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+function sanitizePostgrestSearch(value: string): string {
+  return value.replace(/[%,()]/g, ' ').trim();
+}
 
 function levenshteinDistance(a: string, b: string): number {
   const m = a.length, n = b.length;
@@ -343,6 +443,19 @@ export interface NameSuggestion {
 export interface NameLookupResult {
   reservation: ReturnType<typeof normalizeReservation> | (typeof MOCK_RESERVATIONS[number] & { guest?: typeof MOCK_GUESTS[number]; room?: typeof MOCK_ROOMS[number] }) | null;
   suggestions: NameSuggestion[];
+}
+
+export interface StanfordCheckinEventInput {
+  reservationId?: string;
+  sessionKey?: string;
+  eventType: string;
+  eventPayload?: Record<string, unknown>;
+}
+
+export interface ReservationProfile {
+  reservation: ReturnType<typeof normalizeReservation>;
+  activeSession: ReturnType<typeof normalizeCheckinSession>;
+  recentEvents: Array<NonNullable<ReturnType<typeof normalizeCheckinEvent>>>;
 }
 
 /**
@@ -430,11 +543,18 @@ export async function getRoomUpgrades(currentRoomType: string) {
 
 export async function lookupReservation(query: string) {
   if (supabase) {
-    const { data, error } = await supabase
+    const cleanQuery = query.trim();
+    let dbQuery = supabase
       .from('reservations')
-      .select('*, guest:guests(*), room:rooms(*)')
-      .or(`confirmation_code.eq.${query},id.eq.${query}`)
-      .single();
+      .select(RESERVATION_SELECT);
+
+    if (isUuid(cleanQuery)) {
+      dbQuery = dbQuery.or(`confirmation_code.eq.${cleanQuery},id.eq.${cleanQuery}`);
+    } else {
+      dbQuery = dbQuery.eq('confirmation_code', cleanQuery);
+    }
+
+    const { data, error } = await dbQuery.single();
     if (!error && data) return normalizeReservation(data);
   }
 
@@ -448,6 +568,294 @@ export async function lookupReservation(query: string) {
     return { ...reservation, guest, room };
   }
   return null;
+}
+
+export async function searchReservations(query: string, limit = 8) {
+  const cleanQuery = query.trim();
+  if (!cleanQuery) return [];
+
+  if (supabase) {
+    const normalized = sanitizePostgrestSearch(cleanQuery);
+    const found = new Map<string, ReturnType<typeof normalizeReservation>>();
+
+    const addRows = (rows: unknown[] | null) => {
+      if (!rows) return;
+      for (const row of rows) {
+        const reservation = normalizeReservation(row);
+        if (reservation) found.set(reservation.id, reservation);
+      }
+    };
+
+    const codeFilters = [`confirmation_code.ilike.%${normalized}%`];
+    if (isUuid(cleanQuery)) codeFilters.push(`id.eq.${cleanQuery}`);
+
+    const { data: directRows } = await supabase
+      .from('reservations')
+      .select(RESERVATION_SELECT)
+      .or(codeFilters.join(','))
+      .order('check_in_date', { ascending: false })
+      .limit(limit);
+    addRows(directRows);
+
+    const { data: guestRows } = await supabase
+      .from('guests')
+      .select('id')
+      .or([
+        `first_name.ilike.%${normalized}%`,
+        `last_name.ilike.%${normalized}%`,
+        `email.ilike.%${normalized}%`,
+        `phone.ilike.%${normalized}%`,
+        `passport_number.ilike.%${normalized}%`,
+      ].join(','))
+      .limit(limit);
+
+    const guestIds = (guestRows ?? []).map((g) => g.id);
+    if (guestIds.length > 0) {
+      const { data: guestReservationRows } = await supabase
+        .from('reservations')
+        .select(RESERVATION_SELECT)
+        .in('guest_id', guestIds)
+        .order('check_in_date', { ascending: false })
+        .limit(limit);
+      addRows(guestReservationRows);
+    }
+
+    return Array.from(found.values()).slice(0, limit);
+  }
+
+  const lower = cleanQuery.toLowerCase();
+  return MOCK_RESERVATIONS
+    .map((reservation) => {
+      const guest = MOCK_GUESTS.find((g) => g.id === reservation.guestId);
+      const room = MOCK_ROOMS.find((r) => r.id === reservation.roomId);
+      return { ...reservation, guest, room };
+    })
+    .filter((reservation) => {
+      const guest = reservation.guest;
+      return (
+        reservation.confirmationCode.toLowerCase().includes(lower) ||
+        reservation.id.toLowerCase().includes(lower) ||
+        `${guest?.firstName ?? ''} ${guest?.lastName ?? ''}`.toLowerCase().includes(lower) ||
+        (guest?.email ?? '').toLowerCase().includes(lower) ||
+        (guest?.phone ?? '').toLowerCase().includes(lower) ||
+        (guest?.passportNumber ?? '').toLowerCase().includes(lower)
+      );
+    })
+    .slice(0, limit);
+}
+
+export async function getReservationProfile(reservationIdOrCode: string): Promise<ReservationProfile | null> {
+  const reservation = await lookupReservation(reservationIdOrCode);
+  if (!reservation) return null;
+
+  if (!supabase) {
+    return {
+      reservation,
+      activeSession: null,
+      recentEvents: [],
+    };
+  }
+
+  const { data: session } = await supabase
+    .from('checkin_sessions')
+    .select('*')
+    .eq('reservation_id', reservation.id)
+    .order('last_event_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const activeSession = normalizeCheckinSession(session);
+
+  const { data: events } = await supabase
+    .from('checkin_events')
+    .select('*')
+    .eq('reservation_id', reservation.id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  return {
+    reservation,
+    activeSession,
+    recentEvents: (events ?? [])
+      .map(normalizeCheckinEvent)
+      .filter((event): event is NonNullable<ReturnType<typeof normalizeCheckinEvent>> => Boolean(event)),
+  };
+}
+
+export async function recordStanfordCheckinEvent(input: StanfordCheckinEventInput) {
+  if (!input.eventType) return { success: false, error: 'eventType is required' };
+
+  const eventPayload = input.eventPayload ?? {};
+  const reservation = input.reservationId
+    ? await lookupReservation(input.reservationId)
+    : null;
+
+  if (!supabase) {
+    console.log('[Hotel Service] Mock Stanford event:', input.eventType, {
+      reservationId: input.reservationId,
+      sessionKey: input.sessionKey,
+      eventPayload,
+    });
+    return { success: true, session: null };
+  }
+
+  try {
+    let session = null;
+
+    if (reservation) {
+      let sessionQuery = supabase
+        .from('checkin_sessions')
+        .select('*')
+        .eq('reservation_id', reservation.id)
+        .eq('status', 'active')
+        .order('last_event_at', { ascending: false })
+        .limit(1);
+
+      if (input.sessionKey) {
+        sessionQuery = sessionQuery.eq('session_key', input.sessionKey);
+      }
+
+      const { data: existingSession } = await sessionQuery.maybeSingle();
+      session = existingSession;
+
+      if (!session) {
+        const { data: insertedSession, error: insertError } = await supabase
+          .from('checkin_sessions')
+          .insert({
+            reservation_id: reservation.id,
+            guest_id: reservation.guestId,
+            session_key: input.sessionKey,
+            channel: 'stanford-showcase',
+            current_step: deriveStepFromEvent(input.eventType),
+          })
+          .select('*')
+          .single();
+
+        if (insertError) throw insertError;
+        session = insertedSession;
+      }
+    }
+
+    const sessionPatch = deriveSessionPatch(input.eventType, eventPayload);
+    if (session) {
+      const { error: updateError } = await supabase
+        .from('checkin_sessions')
+        .update({
+          ...sessionPatch,
+          last_event_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', session.id);
+
+      if (updateError) throw updateError;
+    }
+
+    const { error: eventError } = await supabase
+      .from('checkin_events')
+      .insert({
+        session_id: session?.id ?? null,
+        reservation_id: reservation?.id ?? null,
+        guest_id: reservation?.guestId ?? null,
+        event_type: input.eventType,
+        event_payload: eventPayload,
+      });
+
+    if (eventError) throw eventError;
+
+    if (reservation && input.eventType === 'key_card_received') {
+      await supabase
+        .from('reservations')
+        .update({
+          status: 'checked-in',
+          arrival_status: 'completed',
+          payment_status: 'paid',
+          checked_in_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', reservation.id);
+    }
+
+    return { success: true, session: normalizeCheckinSession(session) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to record Stanford event';
+    console.error('[Hotel Service] Stanford event persistence failed:', message);
+    return { success: false, error: message };
+  }
+}
+
+function deriveStepFromEvent(eventType: string): string {
+  switch (eventType) {
+    case 'reservation_confirmed':
+      return 'reservation';
+    case 'passport_scanned':
+      return 'passport';
+    case 'payment_complete':
+      return 'payment';
+    case 'signature_submitted':
+      return 'signature';
+    case 'key_card_received':
+      return 'key-card';
+    case 'preferences_submitted':
+      return 'personalization';
+    case 'service_selected':
+      return 'services';
+    case 'luggage_info':
+      return 'luggage';
+    default:
+      return 'video-only';
+  }
+}
+
+function deriveSessionPatch(eventType: string, eventPayload: Record<string, unknown>) {
+  const currentStep = deriveStepFromEvent(eventType);
+  const patch: Record<string, unknown> = { current_step: currentStep };
+
+  switch (eventType) {
+    case 'passport_scanned':
+      patch.identity_status = eventPayload.passportNumber ? 'verified' : 'skipped';
+      patch.artifacts = {
+        passportNumber: eventPayload.passportNumber ?? null,
+        hasPassportPhoto: Boolean(eventPayload.photoDataUrl),
+      };
+      break;
+    case 'payment_complete':
+      patch.payment_status = 'paid';
+      break;
+    case 'signature_submitted':
+      patch.artifacts = {
+        signatureCaptured: true,
+      };
+      break;
+    case 'key_card_received':
+      patch.key_status = 'issued';
+      patch.status = 'completed';
+      patch.completed_at = new Date().toISOString();
+      break;
+    case 'preferences_submitted':
+      patch.room_preferences = {
+        temperature: eventPayload.temperature,
+        pillows: eventPayload.pillows,
+        celebration: eventPayload.celebration,
+      };
+      break;
+    case 'service_selected':
+      patch.selected_services = [{
+        id: eventPayload.serviceId,
+        label: eventPayload.label,
+      }];
+      break;
+    case 'luggage_info':
+      patch.luggage = {
+        count: eventPayload.count,
+        needsHelp: eventPayload.needsHelp,
+        etaNote: eventPayload.etaNote,
+      };
+      break;
+    default:
+      break;
+  }
+
+  return patch;
 }
 
 export async function lookupReservationByPassport(passportNumber: string) {
