@@ -32,6 +32,14 @@ function esp32Request(reqPath: string): void {
 // In-memory store for NFC UIDs received from ESP32, keyed by timestamp
 const nfcUidStore: { uid: string; last4: string; receivedAt: number }[] = [];
 
+interface EncoderIssueResponse {
+  ok?: boolean;
+  message?: string;
+  uid?: string;
+  code?: string;
+  guest?: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Async passport scanner state
 // ---------------------------------------------------------------------------
@@ -688,6 +696,101 @@ router.get('/nfc-status', (_req: Request, res: Response) => {
 router.post('/nfc-clear', (_req: Request, res: Response) => {
   nfcUidStore.length = 0;
   res.json({ success: true });
+});
+
+/**
+ * POST /api/checkin/issue-key-card
+ * Proxies Stanford showcase key-card requests to the Python encoder/dispenser.
+ */
+router.post('/issue-key-card', async (req: Request, res: Response) => {
+  try {
+    const guestName = typeof req.body?.guestName === 'string' ? req.body.guestName.trim() : '';
+    const roomNumber = typeof req.body?.roomNumber === 'string' ? req.body.roomNumber.trim() : '';
+    const cardLabel = typeof req.body?.cardLabel === 'string' ? req.body.cardLabel.trim() : 'Primary';
+
+    if (!guestName) {
+      res.status(400).json({ success: false, error: 'guestName is required' });
+      return;
+    }
+
+    const issueUrl = `${config.stanfordEncoderUrl}/api/issue_card`;
+    const issueResponse = await fetch(issueUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: guestName,
+        room: roomNumber,
+        cardLabel: cardLabel || 'Primary',
+        preload: true,
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+
+    if (issueResponse.status === 404) {
+      const preloadResponse = await fetch(`${config.stanfordEncoderUrl}/api/preload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(45_000),
+      });
+      const preloadPayload = await preloadResponse.json().catch(() => ({})) as EncoderIssueResponse;
+
+      if (!preloadResponse.ok || preloadPayload.ok === false) {
+        res.status(502).json({
+          success: false,
+          error: preloadPayload.message || `Encoder preload responded ${preloadResponse.status}`,
+        });
+        return;
+      }
+
+      const legacyResponse = await fetch(`${config.stanfordEncoderUrl}/api/issue_primary`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: guestName }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      const legacyPayload = await legacyResponse.json().catch(() => ({})) as EncoderIssueResponse;
+
+      if (!legacyResponse.ok || legacyPayload.ok === false) {
+        res.status(502).json({
+          success: false,
+          error: legacyPayload.message || `Encoder issue_primary responded ${legacyResponse.status}`,
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: legacyPayload.message || 'Key card issued.',
+        guest: legacyPayload.guest,
+      });
+      return;
+    }
+
+    const payload = await issueResponse.json().catch(() => ({})) as EncoderIssueResponse;
+
+    if (!issueResponse.ok || payload.ok === false) {
+      res.status(issueResponse.ok ? 502 : issueResponse.status).json({
+        success: false,
+        error: payload.message || `Encoder service responded ${issueResponse.status}`,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: payload.message || 'Key card issued.',
+      uid: payload.uid,
+      code: payload.code,
+      guest: payload.guest,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown encoder error';
+    console.error('[Stanford Encoder] Failed to issue key card:', message);
+    res.status(502).json({
+      success: false,
+      error: `Card encoder unavailable: ${message}`,
+    });
+  }
 });
 
 export default router;

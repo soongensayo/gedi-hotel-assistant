@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LuxeDrive | Guest Portal</title>
+    <script src="https://meet.jit.si/external_api.js"></script>
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.4.29.0.min.js"></script>
+    <style>
+        :root { --gold: #c5a059; --dark: #0a0a0a; }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: #000;
+            color: #fff;
+            font-family: 'Times New Roman', serif;
+            overflow: hidden;
+        }
+
+        #video-container {
+            height: 100vh;
+            width: 100vw;
+            background: #000;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            box-sizing: border-box;
+            z-index: 1000;
+        }
+
+        .status-text {
+            color: #888;
+            font-style: italic;
+        }
+
+        .controls-btn {
+            background: transparent;
+            border: 1px solid #444;
+            color: #999;
+            padding: 10px 20px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-size: 0.7rem;
+            transition: 0.3s;
+            min-width: 140px;
+            text-align: center;
+        }
+
+        .controls-btn:hover {
+            border-color: var(--gold);
+            color: var(--gold);
+        }
+
+        #dashboard-frame {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 50vh;
+            border: none;
+            border-top: 1px solid #222;
+            transform: translateY(100%);
+            transition: transform 0.5s ease-in-out;
+            z-index: 999;
+        }
+
+        #dashboard-frame.visible {
+            transform: translateY(0);
+        }
+
+        #payModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.97);
+            z-index: 1002;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="video-container" onclick="hideDashboardIfVisible()"></div>
+
+    <div class="status-bar">
+        <div id="status" class="status-text">Connecting to your personal concierge...</div>
+        <button id="toggle-dashboard-btn" class="controls-btn" onclick="toggleDashboard()">Vehicle Controls</button>
+    </div>
+
+    <iframe id="dashboard-frame" src="dashboard.html"></iframe>
+
+    <div id="payModal">
+        <div style="width: 85%; max-width: 400px; border: 1px solid var(--gold); padding: 40px; background: #0a0a0a;">
+            <h2 style="font-weight: 300; color: var(--gold);">Secure Payment</h2>
+            <p style="color: #666; font-size: 14px;">Tap card or mobile device against the sensor.</p>
+            <button style="background: var(--gold); color: #000; border: none; padding: 12px 30px; margin-top: 20px; cursor: pointer; font-weight: bold;" onclick="document.getElementById('payModal').style.display='none'">
+                Authorized
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let jitsiApi = null;
+
+        function startJitsiMeeting() {
+            const domain = "meet.jit.si";
+
+            const options = {
+                roomName: "LuxeDrive_Concierge_Stanford_123",
+                width: "100%",
+                height: "100%",
+                parentNode: document.querySelector('#video-container'),
+                configOverwrite: {
+                    prejoinPageEnabled: false,
+                    startWithAudioMuted: false,
+                    startWithVideoMuted: false
+                },
+                interfaceConfigOverwrite: {
+                    TOOLBAR_BUTTONS: [],
+                    SHOW_JITSI_WATERMARK: false,
+                    SHOW_WATERMARK_FOR_GUESTS: false,
+                    SHOW_BRAND_WATERMARK: false,
+                    SHOW_POWERED_BY: false,
+                    SHOW_CHROME_EXTENSION_BANNER: false,
+                    VERTICAL_FILMSTRIP: false,
+                    TILE_VIEW_ENABLED: false
+                }
+            };
+
+            jitsiApi = new JitsiMeetExternalAPI(domain, options);
+
+            jitsiApi.on('videoConferenceJoined', () => {
+                document.getElementById('status').innerText = 'Connected to Concierge';
+                jitsiApi.executeCommand('setVideoMute', false);
+            });
+        }
+
+        startJitsiMeeting();
+
+        const pubnub = new PubNub({
+            subscribeKey: 'sub-c-bca2b3c4-b5d9-4b0b-99d4-603b61418d66',
+            uuid: "guest_tablet"
+        });
+
+        const PUBNUB_CHANNEL = "luxedrive_actions";
+
+        pubnub.subscribe({
+            channels: [PUBNUB_CHANNEL]
+        });
+
+        pubnub.addListener({
+            message: function(event) {
+                const command = event.message.command;
+
+                if (command === 'GOTO_SCAN') {
+                    navigate('scan.html');
+                }
+
+                else if (command === 'SHOW_PAYMENT') {
+                    document.getElementById('payModal').style.display = 'flex';
+                }
+
+                else if (command === 'END_CHECKIN') {
+                    endSessionAndNavigate();
+                }
+            }
+        });
+
+        const dashboardFrame = document.getElementById('dashboard-frame');
+        const toggleBtn = document.getElementById('toggle-dashboard-btn');
+
+        function navigate(targetPage) {
+            window.parent.postMessage({
+                page: targetPage
+            }, '*');
+        }
+
+        function toggleDashboard() {
+            dashboardFrame.classList.toggle('visible');
+
+            toggleBtn.textContent = dashboardFrame.classList.contains('visible')
+                ? 'Hide Controls'
+                : 'Vehicle Controls';
+        }
+
+        function hideDashboardIfVisible() {
+            if (dashboardFrame.classList.contains('visible')) {
+                dashboardFrame.classList.remove('visible');
+                toggleBtn.textContent = 'Vehicle Controls';
+            }
+        }
+
+        function endSessionAndNavigate() {
+            if (jitsiApi) {
+                jitsiApi.dispose();
+            }
+
+            pubnub.unsubscribeAll();
+            navigate('dashboard.html');
+        }
+    </script>
+</body>
+</html>

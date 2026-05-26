@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LuxeDrive | Card Encoder</title>
+    <style>
+        :root {
+            --gold: #c5a059;
+            --dark: #0a0a0a;
+            --panel: #141414;
+            --border: #2a2a2a;
+            --muted: #888;
+            --success: #66bb6a;
+            --danger: #ef5350;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: radial-gradient(circle at top, #1d1d1d 0%, #000 55%);
+            color: #fff;
+            font-family: 'Times New Roman', serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .app {
+            width: 900px;
+            max-width: 95vw;
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 34px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .header h1 {
+            margin: 0;
+            color: var(--gold);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            font-size: 32px;
+        }
+
+        .header p {
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+
+        .search-row {
+            display: grid;
+            grid-template-columns: 1fr 140px;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px 16px;
+            background: #050505;
+            border: 1px solid var(--border);
+            color: #fff;
+            border-radius: 10px;
+            font-size: 17px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--gold);
+        }
+
+        button {
+            border: 2px solid var(--gold);
+            background: transparent;
+            color: var(--gold);
+            border-radius: 10px;
+            padding: 14px 16px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.25s;
+        }
+
+        button:hover:not(:disabled) {
+            background: var(--gold);
+            color: #000;
+        }
+
+        button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .guest-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 22px;
+            margin-bottom: 24px;
+        }
+
+        .guest-grid {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 12px 18px;
+            font-family: Arial, sans-serif;
+            font-size: 15px;
+        }
+
+        .label {
+            color: var(--muted);
+        }
+
+        .value {
+            color: #fff;
+            font-weight: bold;
+            word-break: break-word;
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .preload {
+            border-color: #42a5f5;
+            color: #64b5f6;
+        }
+
+        .preload:hover:not(:disabled) {
+            background: #64b5f6;
+            color: #000;
+        }
+
+        .clear {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .clear:hover:not(:disabled) {
+            background: var(--danger);
+            color: #000;
+        }
+
+        .status-box {
+            min-height: 120px;
+            background: #050505;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px;
+            font-family: Arial, sans-serif;
+        }
+
+        .status-title {
+            color: var(--gold);
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #status {
+            color: #ddd;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .ok {
+            color: var(--success);
+        }
+
+        .bad {
+            color: var(--danger);
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <h1>Card Encoder</h1>
+            <p>Preload card, encode guest key, and dispense through Arduino + NFC.</p>
+        </div>
+
+        <div class="search-row">
+            <input id="guestName" placeholder="Enter guest name">
+            <button onclick="findGuest()">Find</button>
+        </div>
+
+        <div class="guest-card">
+            <div class="guest-grid">
+                <div class="label">Guest</div>
+                <div class="value" id="guestValue">(none)</div>
+
+                <div class="label">Room</div>
+                <div class="value" id="roomValue">(empty)</div>
+
+                <div class="label">Primary Card</div>
+                <div class="value" id="primaryValue">(empty)</div>
+
+                <div class="label">Secondary Card</div>
+                <div class="value" id="secondaryValue">(empty)</div>
+
+                <div class="label">Primary Issued At</div>
+                <div class="value" id="primaryIssuedValue">(empty)</div>
+
+                <div class="label">Secondary Issued At</div>
+                <div class="value" id="secondaryIssuedValue">(empty)</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="preload" onclick="preloadCard()">Preload Card</button>
+            <button onclick="issueFirst()">Issue First</button>
+            <button onclick="issueSecond()">Issue Second</button>
+            <button class="clear" onclick="clearGuestCards()">Clear Guest Cards</button>
+        </div>
+
+        <div class="status-box">
+            <div class="status-title">Status</div>
+            <div id="status">Ready.</div>
+        </div>
+    </div>
+
+    <script>
+        let currentGuest = null;
+        let busy = false;
+
+        function setStatus(message, ok = null) {
+            const status = document.getElementById("status");
+            status.textContent = message;
+            status.className = "";
+
+            if (ok === true) {
+                status.classList.add("ok");
+            }
+
+            if (ok === false) {
+                status.classList.add("bad");
+            }
+        }
+
+        function setBusy(value) {
+            busy = value;
+            document.querySelectorAll("button").forEach(btn => {
+                btn.disabled = value;
+            });
+        }
+
+        function getGuestName() {
+            return document.getElementById("guestName").value.trim();
+        }
+
+        function displayGuest(guest) {
+            currentGuest = guest;
+
+            document.getElementById("guestValue").textContent = guest.Name || "(none)";
+            document.getElementById("roomValue").textContent = guest.Room || "(empty)";
+            document.getElementById("primaryValue").textContent = guest.PrimaryCardCode || "(empty)";
+            document.getElementById("secondaryValue").textContent = guest.SecondaryCardCode || "(empty)";
+            document.getElementById("primaryIssuedValue").textContent = guest.PrimaryIssuedAt || "(empty)";
+            document.getElementById("secondaryIssuedValue").textContent = guest.SecondaryIssuedAt || "(empty)";
+        }
+
+        async function postJson(url, body = {}) {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(body)
+            });
+
+            return await response.json();
+        }
+
+        async function findGuest() {
+            const name = getGuestName();
+
+            if (!name) {
+                setStatus("Please enter a guest name.", false);
+                return;
+            }
+
+            setBusy(true);
+            setStatus("Finding guest...");
+
+            try {
+                const data = await postJson("/api/find_guest", { name });
+
+                if (data.ok) {
+                    displayGuest(data.guest);
+                    setStatus(data.message, true);
+                } else {
+                    setStatus(data.message, false);
+                }
+            } catch (err) {
+                setStatus("Find guest failed: " + err, false);
+            }
+
+            setBusy(false);
+        }
+
+        async function preloadCard() {
+            setBusy(true);
+            setStatus("Preloading card...\nMotor1 pushing → waiting for card → Motor1 returning.");
+
+            try {
+                const data = await postJson("/api/preload", {});
+
+                setStatus(data.message, data.ok);
+            } catch (err) {
+                setStatus("Preload failed: " + err, false);
+            }
+
+            setBusy(false);
+        }
+
+        async function issueFirst() {
+            const name = getGuestName();
+
+            if (!name) {
+                setStatus("Please enter and find a guest first.", false);
+                return;
+            }
+
+            setBusy(true);
+            setStatus("Issuing first card...\nChecking card → encoding → ejecting → returning.");
+
+            try {
+                const data = await postJson("/api/issue_primary", { name });
+
+                if (data.ok && data.guest) {
+                    displayGuest(data.guest);
+                }
+
+                setStatus(data.message, data.ok);
+            } catch (err) {
+                setStatus("Issue first card failed: " + err, false);
+            }
+
+            setBusy(false);
+        }
+
+        async function issueSecond() {
+            const name = getGuestName();
+
+            if (!name) {
+                setStatus("Please enter and find a guest first.", false);
+                return;
+            }
+
+            setBusy(true);
+            setStatus("Issuing second card...\nChecking card → encoding → ejecting → returning.");
+
+            try {
+                const data = await postJson("/api/issue_secondary", { name });
+
+                if (data.ok && data.guest) {
+                    displayGuest(data.guest);
+                }
+
+                setStatus(data.message, data.ok);
+            } catch (err) {
+                setStatus("Issue second card failed: " + err, false);
+            }
+
+            setBusy(false);
+        }
+
+        async function clearGuestCards() {
+            const name = getGuestName();
+
+            if (!name) {
+                setStatus("Please enter and find a guest first.", false);
+                return;
+            }
+
+            const confirmed = confirm("Clear this guest's Primary and Secondary card records?");
+
+            if (!confirmed) {
+                return;
+            }
+
+            setBusy(true);
+            setStatus("Clearing guest card records...");
+
+            try {
+                const data = await postJson("/api/clear_guest_cards", { name });
+
+                if (data.ok && data.guest) {
+                    displayGuest(data.guest);
+                }
+
+                setStatus(data.message, data.ok);
+            } catch (err) {
+                setStatus("Clear failed: " + err, false);
+            }
+
+            setBusy(false);
+        }
+
+        document.getElementById("guestName").addEventListener("keydown", function(event) {
+            if (event.key === "Enter") {
+                findGuest();
+            }
+        });
+    </script>
+</body>
+</html>

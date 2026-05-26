@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <style>
+        :root { --gold: #c5a059; --white: #ffffff; --bg: #050505; }
+        body { background: var(--bg); color: var(--white); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 40px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding-bottom: 20px; margin-bottom: 30px; }
+        .guest-status { color: var(--gold); letter-spacing: 2px; text-transform: uppercase; font-size: 12px; }
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+        .tile { background: #111; border: 1px solid #222; border-radius: 8px; padding: 25px; text-align: center; transition: 0.3s; }
+        .tile:hover { border-color: var(--gold); }
+        .tile h3 { color: var(--gold); font-size: 12px; margin-top: 0; letter-spacing: 2px; text-transform: uppercase; }
+        .temp-display { font-size: 3rem; margin: 10px 0; font-weight: 300; }
+        .btn-circle { background: none; border: 1px solid #444; color: white; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; margin: 0 10px; }
+        .btn-circle:hover { border-color: var(--gold); color: var(--gold); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="guest-status">Check-in Complete</div>
+            <h2 style="margin:0; font-weight: 300;">Suite 402 • Mr. Sterling</h2>
+        </div>
+        <div style="text-align: right;">
+            <div class="guest-status">Destination</div>
+            <div style="font-size: 14px;">The Stanford Park Hotel</div>
+        </div>
+    </div>
+    <div class="grid">
+        <div class="tile">
+            <h3>Cabin Climate</h3>
+            <div class="temp-display" id="temp-display">21°C</div>
+            <button class="btn-circle" onclick="adjustTemp(-1)">−</button>
+            <button class="btn-circle" onclick="adjustTemp(1)">+</button>
+        </div>
+        <div class="tile">
+            <h3>Media System</h3>
+            <p style="font-style: italic;">Now Playing: Jazz Essentials</p>
+            <button class="btn-circle">⏮</button>
+            <button class="btn-circle">⏯</button>
+            <button class="btn-circle">⏭</button>
+        </div>
+        <div class="tile">
+            <h3>In-Suite Requests</h3>
+            <p style="font-size: 14px; color: #888;">Order amenities before arrival</p>
+            <button style="background: var(--gold); border:none; padding: 10px 20px; font-weight:bold; cursor:pointer;">OPEN MINIBAR</button>
+        </div>
+        <div class="tile">
+            <h3>Lighting</h3>
+            <div style="display:flex; justify-content:center; gap: 10px; margin-top:15px;">
+                <button class="btn-circle" style="width:auto; border-radius:4px; padding: 0 15px;">Relax</button>
+                <button class="btn-circle" style="width:auto; border-radius:4px; padding: 0 15px;">Work</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tempDisplay = document.getElementById('temp-display');
+        let currentTemp;
+
+        // 1. Load state from localStorage when the page loads
+        function loadState() {
+            const savedTemp = localStorage.getItem('cabinTemp');
+            // Use saved temp, or default to 21 if nothing is saved
+            currentTemp = savedTemp ? parseInt(savedTemp, 10) : 21;
+            updateTempDisplay();
+        }
+
+        // 2. Function to update the display
+        function updateTempDisplay() {
+            tempDisplay.textContent = `${currentTemp}°C`;
+        }
+
+        // 3. Function to adjust temp, update display, and save state
+        function adjustTemp(amount) {
+            currentTemp += amount;
+            updateTempDisplay();
+            // Save the new temperature to localStorage
+            localStorage.setItem('cabinTemp', currentTemp);
+        }
+
+        // Run the load function on page start
+        document.addEventListener('DOMContentLoaded', loadState);
+    </script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LuxeDrive | Tablet OS</title>
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.4.29.0.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background: #000;
+            overflow: hidden;
+            font-family: 'Times New Roman', serif;
+        }
+
+        #content-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            opacity: 1;
+            transition: opacity 0.4s ease-in-out;
+        }
+
+        .fade-out {
+            opacity: 0 !important;
+        }
+    </style>
+</head>
+<body>
+    <iframe
+        id="content-frame"
+        src="greeting.html"
+        allow="camera *; microphone *; fullscreen; display-capture">
+    </iframe>
+
+    <script>
+        const frame = document.getElementById('content-frame');
+
+        function navigate(targetPage) {
+            frame.classList.add('fade-out');
+
+            setTimeout(() => {
+                frame.src = targetPage;
+
+                frame.onload = () => {
+                    frame.classList.remove('fade-out');
+                };
+            }, 400);
+        }
+
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.page) {
+                navigate(event.data.page);
+            }
+        });
+
+        const pubnub = new PubNub({
+            subscribeKey: 'sub-c-bca2b3c4-b5d9-4b0b-99d4-603b61418d66',
+            uuid: "guest_tablet_index"
+        });
+
+        const PUBNUB_CHANNEL = "luxedrive_actions";
+
+        pubnub.subscribe({ channels: [PUBNUB_CHANNEL] });
+
+        pubnub.addListener({
+            message: function(event) {
+                const command = event.message.command;
+
+                if (command === 'START_MEETING') {
+                    navigate('guest.html');
+                }
+
+                else if (command === 'GOTO_SCAN') {
+                    navigate('scan.html');
+                }
+
+                else if (command === 'END_CHECKIN') {
+                    navigate('dashboard.html');
+                }
+            }
+        });
+    </script>
+</body>
+</html>

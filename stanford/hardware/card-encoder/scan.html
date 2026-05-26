@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LuxeDrive | Passport Scanner</title>
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.4.29.0.min.js"></script>
+
+    <style>
+        :root {
+            --gold: #c5a059;
+            --white: #ffffff;
+            --bg: #000000;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background: var(--bg);
+            color: var(--white);
+            font-family: 'Times New Roman', serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .scanner-box {
+            width: 90%;
+            max-width: 600px;
+            border: 1px solid var(--gold);
+            padding: 40px;
+            background: #0a0a0a;
+            text-align: center;
+        }
+
+        h2 {
+            font-weight: 300;
+            color: var(--gold);
+            margin-top: 0;
+        }
+
+        #instructions {
+            color: #777;
+            font-size: 14px;
+        }
+
+        .scanner-container {
+            position: relative;
+            margin: 20px 0;
+            background: #111;
+            overflow: hidden;
+            width: 100%;
+            aspect-ratio: 135 / 95;
+            border-radius: 8px;
+        }
+
+        #id-scan-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        #id-guide-overlay {
+            position: absolute;
+            top: 6%;
+            left: 6%;
+            right: 6%;
+            bottom: 6%;
+            border: 3px solid #ff0000;
+            border-radius: 8px;
+            box-sizing: border-box;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        #id-guide-overlay::after {
+            content: "Align ID inside this red box";
+            position: absolute;
+            left: 50%;
+            bottom: -34px;
+            transform: translateX(-50%);
+            color: #ff0000;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #777;
+            border: 1px solid #333;
+            padding: 14px 28px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 50px;
+            margin-top: 18px;
+        }
+
+        .btn-secondary:hover {
+            color: var(--gold);
+            border-color: var(--gold);
+        }
+
+        #capture-canvas,
+        #preview-canvas {
+            display: none;
+        }
+
+        .loader {
+            border: 4px solid #333;
+            border-top: 4px solid var(--gold);
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scanner-box">
+        <h2 id="title">Passport Scanner</h2>
+        <p id="instructions">Position the guest's ID inside the red box. Staff will capture the image remotely.</p>
+
+        <div id="loader" class="loader"></div>
+
+        <div class="scanner-container">
+            <video id="id-scan-video" autoplay playsinline muted></video>
+            <div id="id-guide-overlay"></div>
+        </div>
+
+        <button class="btn-secondary" onclick="cancelScan()">Cancel</button>
+
+        <canvas id="capture-canvas"></canvas>
+        <canvas id="preview-canvas"></canvas>
+    </div>
+
+    <script>
+        const PUBNUB_CHANNEL = "luxedrive_actions";
+
+        const pubnub = new PubNub({
+            publishKey: 'pub-c-ec785e30-e697-4716-a8d9-c3c6ca1a2ea0',
+            subscribeKey: 'sub-c-bca2b3c4-b5d9-4b0b-99d4-603b61418d66',
+            uuid: "guest_scan_page"
+        });
+
+        pubnub.subscribe({
+            channels: [PUBNUB_CHANNEL]
+        });
+
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwC3Onc_QRWcDb88ZDlI0OXm4WkWN5PewVX-1r7pufosN-KOdbcvTl6eCtI_Nt6jV8J/exec";
+
+        const videoElement = document.getElementById("id-scan-video");
+        const captureCanvas = document.getElementById("capture-canvas");
+        const previewCanvas = document.getElementById("preview-canvas");
+        const instructions = document.getElementById("instructions");
+        const title = document.getElementById("title");
+        const loader = document.getElementById("loader");
+
+        let idStream = null;
+        let frameTimer = null;
+        let lastCapturedImage = null;
+        let lastUploadedFilename = "";
+        let lastOcrText = "";
+
+        async function startScanner() {
+            try {
+                idStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: "user" },
+                        aspectRatio: { ideal: 135 / 95 },
+                        width: { ideal: 1280 }
+                    }
+                });
+
+                videoElement.srcObject = idStream;
+
+                videoElement.onloadeddata = () => {
+                    instructions.textContent = "Position the ID inside the red frame. Staff can see this preview.";
+                    startPublishingPreview();
+                };
+            } catch (err) {
+                console.error("Camera Error:", err);
+                title.textContent = "Camera Error";
+                instructions.innerHTML = "Camera not found or access denied.<br>Please check browser camera permission.";
+                publishError("Camera not found or access denied.");
+            }
+        }
+
+        function startPublishingPreview() {
+            if (frameTimer) {
+                clearInterval(frameTimer);
+            }
+
+            frameTimer = setInterval(() => {
+                publishPreviewFrame();
+            }, 500);
+        }
+
+        function publishPreviewFrame() {
+            if (!videoElement.videoWidth || !videoElement.videoHeight) {
+                return;
+            }
+
+            const width = 360;
+            const height = Math.round(width * videoElement.videoHeight / videoElement.videoWidth);
+
+            previewCanvas.width = width;
+            previewCanvas.height = height;
+
+            const ctx = previewCanvas.getContext("2d");
+
+            ctx.save();
+            ctx.translate(width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(videoElement, 0, 0, width, height);
+            ctx.restore();
+
+            const previewImage = previewCanvas.toDataURL("image/jpeg", 0.45);
+
+            pubnub.publish({
+                channel: PUBNUB_CHANNEL,
+                message: {
+                    type: "SCAN_FRAME",
+                    image: previewImage
+                }
+            });
+        }
+
+        async function captureAndProcess() {
+            if (!videoElement.videoWidth || !videoElement.videoHeight) {
+                publishError("Camera is not ready.");
+                return;
+            }
+
+            if (frameTimer) {
+                clearInterval(frameTimer);
+                frameTimer = null;
+            }
+
+            loader.style.display = "block";
+            instructions.textContent = "Staff captured image. Sending to staff confirmation...";
+            title.textContent = "Processing ID";
+
+            captureCanvas.width = videoElement.videoWidth;
+            captureCanvas.height = videoElement.videoHeight;
+
+            const ctx = captureCanvas.getContext("2d");
+            ctx.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+            ctx.drawImage(videoElement, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            lastCapturedImage = captureCanvas.toDataURL("image/jpeg", 0.85);
+            lastUploadedFilename = `Passport_Dear-Guest_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+
+            const confirmWidth = 720;
+            const confirmHeight = Math.round(confirmWidth * videoElement.videoHeight / videoElement.videoWidth);
+
+            previewCanvas.width = confirmWidth;
+            previewCanvas.height = confirmHeight;
+
+            const previewCtx = previewCanvas.getContext("2d");
+            previewCtx.clearRect(0, 0, confirmWidth, confirmHeight);
+            previewCtx.drawImage(videoElement, 0, 0, confirmWidth, confirmHeight);
+
+            const staffConfirmImage = previewCanvas.toDataURL("image/jpeg", 0.55);
+
+            pubnub.publish({
+                channel: PUBNUB_CHANNEL,
+                message: {
+                    type: "ID_EXTRACTED",
+                    details: {
+                        name: "",
+                        dob: "",
+                        idNumber: ""
+                    },
+                    capturedImage: staffConfirmImage
+                }
+            });
+
+            loader.style.display = "none";
+            title.textContent = "Waiting for Staff Confirmation";
+            instructions.textContent = "Staff is confirming the captured ID image.";
+
+            try {
+                await fetch(SCRIPT_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        image: lastCapturedImage,
+                        filename: lastUploadedFilename,
+                        category: "ID",
+                        mainFolder: "Customer Vehicle Uploads"
+                    }),
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    mode: "no-cors"
+                });
+            } catch (err) {
+                console.error("Upload failed:", err);
+            }
+        }
+
+        async function saveConfirmedDetails(confirmedInfo) {
+            loader.style.display = "block";
+            title.textContent = "Saving Details";
+            instructions.textContent = "Saving confirmed details...";
+
+            try {
+                await fetch(SCRIPT_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        type: "confirmed_id_details",
+                        category: "ID Metadata",
+                        mainFolder: "Customer Vehicle Uploads",
+                        filename: `Confirmed_ID_Details_${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
+                        confirmedInfo: {
+                            ...confirmedInfo,
+                            sourceFilename: lastUploadedFilename,
+                            rawOcrText: lastOcrText
+                        }
+                    }),
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    mode: "no-cors"
+                });
+
+                pubnub.publish({
+                    channel: PUBNUB_CHANNEL,
+                    message: {
+                        type: "SCAN_COMPLETE"
+                    }
+                });
+
+                title.textContent = "Complete";
+                instructions.textContent = "ID details confirmed. Returning to concierge...";
+                setTimeout(navigateBack, 1200);
+            } catch (err) {
+                console.error(err);
+                publishError("Failed to save confirmed details.");
+            }
+        }
+
+        function publishError(message) {
+            pubnub.publish({
+                channel: PUBNUB_CHANNEL,
+                message: {
+                    type: "SCAN_ERROR",
+                    message: message
+                }
+            });
+        }
+
+        function cancelScan() {
+            pubnub.publish({
+                channel: PUBNUB_CHANNEL,
+                message: {
+                    type: "SCAN_CANCELLED"
+                }
+            });
+
+            navigateBack();
+        }
+
+        function navigateBack() {
+            if (frameTimer) {
+                clearInterval(frameTimer);
+                frameTimer = null;
+            }
+
+            if (idStream) {
+                idStream.getTracks().forEach(track => track.stop());
+            }
+
+            window.parent.postMessage({
+                page: "guest.html"
+            }, "*");
+        }
+
+        function resetForRetake() {
+            loader.style.display = "none";
+            title.textContent = "Passport Scanner";
+            instructions.textContent = "Position the ID inside the red frame. Staff can capture again.";
+
+            startPublishingPreview();
+        }
+
+        pubnub.addListener({
+            message: function(event) {
+                const msg = event.message;
+
+                if (msg.command === "CAPTURE_ID") {
+                    captureAndProcess();
+                }
+
+                if (msg.command === "CONFIRM_ID_DETAILS") {
+                    saveConfirmedDetails(msg.confirmedInfo);
+                }
+
+                if (msg.command === "RETAKE_SCAN") {
+                    resetForRetake();
+                }
+
+                if (msg.command === "CANCEL_SCAN") {
+                    navigateBack();
+                }
+            }
+        });
+
+        document.addEventListener("DOMContentLoaded", startScanner);
+    </script>
+</body>
+</html>

@@ -64,4 +64,27 @@ export async function clearNfcStatus(): Promise<void> {
   await api.post('/checkin/nfc-clear');
 }
 
+export interface IssueKeyCardRequest {
+  guestName: string;
+  roomNumber: string;
+  cardLabel?: 'Primary' | 'Secondary';
+}
+
+export interface IssueKeyCardResponse {
+  success: boolean;
+  message?: string;
+  uid?: string;
+  code?: string;
+  error?: string;
+}
+
+export async function issueKeyCard(
+  body: IssueKeyCardRequest
+): Promise<IssueKeyCardResponse> {
+  const { data } = await api.post('/checkin/issue-key-card', body, {
+    timeout: 120000,
+  });
+  return data;
+}
+
 export default api;
