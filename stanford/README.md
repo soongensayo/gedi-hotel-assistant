@@ -27,7 +27,10 @@ The Vite dev server binds to `0.0.0.0` so any device on the same network can rea
 | Variable | Purpose |
 |----------|---------|
 | `VITE_STANFORD_ROOM_ID` | Shared session id for Socket.IO + Jitsi room suffix (default: `luxe-demo`) |
-| `VITE_STANFORD_USE_NFC` | Set `true` to poll real NFC during key-card step |
+| `VITE_STANFORD_USE_NFC` | Set `true` to use the hardware card encoder/dispenser during the key-card step |
+| `STANFORD_ENCODER_URL` | Backend URL for the Python card encoder/dispenser service (default: `http://localhost:5000`) |
+| `VITE_STANFORD_KEY_GUEST` | Fallback guest name for key-card demos when no reservation has been pushed |
+| `VITE_STANFORD_KEY_ROOM` | Fallback room number for key-card demos when no reservation has been pushed |
 | `VITE_STANFORD_PAYMENT_QR` | URL/string encoded in the payment QR (staff default uses a demo URL) |
 | `VITE_STANFORD_YOUTUBE_EMBED` | Full embed URL for media mode video |
 | `VITE_SOCKET_URL` | Override Socket.IO origin (defaults to same host as the Vite dev server) |
@@ -49,3 +52,11 @@ Staff panel features:
 ## Architecture
 
 Guest tablet ↔ Socket.IO (`/stanford` namespace) ↔ Staff panel. Both embed Jitsi for video. Backend relays commands between the two roles within a shared room.
+
+## Card encoder / dispenser
+
+The integrated hardware service lives in `stanford/hardware/card-encoder`. Run it on the machine connected to the Arduino dispenser and NFC writer, then set `STANFORD_ENCODER_URL` on the backend machine if it is not `localhost`.
+
+The Stanford guest key-card screen calls backend `POST /api/checkin/issue-key-card`, which proxies to the Python encoder service. It prefers the new `POST /api/issue_card` endpoint and falls back to the original teammate endpoints (`/api/preload` + `/api/issue_primary`) for compatibility.
+
+Full setup, debugging, and handoff notes: [`docs/card-encoder-integration.md`](docs/card-encoder-integration.md)

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LuxeDrive | Greeting</title>
+    <style>
+        :root { --gold: #c5a059; --white: #ffffff; --bg: #000000; }
+
+        body {
+            background: var(--bg);
+            color: var(--white);
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Times New Roman', serif;
+        }
+
+        .welcome-label {
+            font-size: 0.9rem;
+            letter-spacing: 10px;
+            color: var(--gold);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            opacity: 0.8;
+        }
+
+        h1 {
+            font-size: 4.2rem;
+            font-weight: 300;
+            margin: 0 0 60px 0;
+            letter-spacing: 2px;
+        }
+
+        .cta-container {
+            width: 100%;
+            max-width: 580px;
+        }
+
+        .btn-primary {
+            background: var(--gold);
+            border: none;
+            color: #000;
+            width: 100%;
+            padding: 35px 20px;
+            cursor: pointer;
+            font-size: 1.4rem;
+            letter-spacing: 2px;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 25px;
+            text-transform: uppercase;
+            border-radius: 2px;
+        }
+
+        .btn-primary span {
+            display: block;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            margin-top: 10px;
+            text-transform: none;
+            font-style: italic;
+            opacity: 0.85;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #666;
+            border: 1px solid #1a1a1a;
+            width: 100%;
+            padding: 22px;
+            cursor: pointer;
+            font-size: 1rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            transition: 0.4s;
+            border-radius: 2px;
+        }
+
+        .btn-primary:hover {
+            background: #fff;
+            letter-spacing: 4px;
+            transform: scale(1.02);
+        }
+
+        .btn-secondary:hover {
+            color: var(--white);
+            border-color: var(--gold);
+            background: rgba(197, 160, 89, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="welcome-label">WELCOME</div>
+    <h1 id="guest-name">Dear Guest,</h1>
+
+    <div class="cta-container">
+        <button class="btn-primary" onclick="nav('guest.html')">
+            Check-In Early via Your Personal Concierge
+            <span>Your host is online and waiting to prepare your arrival.</span>
+        </button>
+
+        <button class="btn-secondary" onclick="nav('dashboard.html')">
+            Cabin Comforts & Media
+        </button>
+    </div>
+
+    <script>
+        function nav(targetFile) {
+            window.parent.postMessage({ page: targetFile }, '*');
+        }
+    </script>
+</body>
+</html>

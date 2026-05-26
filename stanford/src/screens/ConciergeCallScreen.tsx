@@ -20,6 +20,10 @@ type Props = {
 };
 
 const useNfcHardware = import.meta.env.VITE_STANFORD_USE_NFC === 'true';
+const fallbackKeyGuest =
+  (import.meta.env.VITE_STANFORD_KEY_GUEST as string | undefined) ?? 'Stanford Guest';
+const fallbackKeyRoom =
+  (import.meta.env.VITE_STANFORD_KEY_ROOM as string | undefined) ?? '311';
 
 export function ConciergeCallScreen({ roomId, stanford }: Props) {
   const {
@@ -80,13 +84,20 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
             }
           />
         );
-      case 'key-card':
+      case 'key-card': {
+        const guestName = reservation?.guest
+          ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim()
+          : fallbackKeyGuest;
+        const roomNumber = reservation?.room?.roomNumber ?? fallbackKeyRoom;
         return (
           <KeyCardScreen
             useHardwareNfc={useNfcHardware}
+            guestName={guestName}
+            roomNumber={roomNumber}
             onReceived={() => sendToStaff({ type: 'key_card_received' })}
           />
         );
+      }
       case 'personalization':
         return (
           <PersonalizationScreen

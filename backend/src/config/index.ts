@@ -60,6 +60,9 @@ export const config = {
     }
   })() as Record<string, string>,
 
+  // Stanford showcase card encoder/dispenser service
+  stanfordEncoderUrl: (process.env.STANFORD_ENCODER_URL || 'http://localhost:5000').replace(/\/$/, ''),
+
   // Sesto Robot
   sestoApiUrl: process.env.SESTO_API_URL || '',
 
