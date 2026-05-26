@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { GuestPhase, GuestScreenId, GuestToStaffEvent, StaffEventLogEntry } from '../types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { GuestPhase, GuestScreenId, GuestToStaffEvent, Reservation, StaffEventLogEntry } from '../types';
+import { recordStanfordEvent } from '../services/api';
 import { emitStaffCommand, getStanfordSocket, stanfordJoin } from '../services/socket';
 import type { StaffToGuestCommand } from '../types';
 
@@ -10,6 +11,8 @@ export function useStanfordStaff(roomId: string) {
   const [guestScreen, setGuestScreen] = useState<GuestScreenId | null>(null);
   const [lastGuestEvent, setLastGuestEvent] = useState<GuestToStaffEvent | null>(null);
   const [eventLog, setEventLog] = useState<StaffEventLogEntry[]>([]);
+  const [activeReservation, setActiveReservation] = useState<Reservation | null>(null);
+  const activeReservationRef = useRef<Reservation | null>(null);
 
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [passportPhotoUrl, setPassportPhotoUrl] = useState<string | null>(null);
@@ -28,6 +31,10 @@ export function useStanfordStaff(roomId: string) {
 
   const pushCommand = useCallback(
     (command: StaffToGuestCommand) => {
+      if (command.type === 'show_reservation') {
+        activeReservationRef.current = command.reservation;
+        setActiveReservation(command.reservation);
+      }
       emitStaffCommand(roomId, command);
     },
     [roomId]
@@ -46,6 +53,15 @@ export function useStanfordStaff(roomId: string) {
         event,
       };
       setEventLog((prev) => [entry, ...prev].slice(0, 100));
+
+      void recordStanfordEvent({
+        reservationId: activeReservationRef.current?.id,
+        sessionKey: roomId,
+        event,
+      }).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'unknown error';
+        console.warn('[Staff] Failed to persist Stanford event:', message);
+      });
 
       switch (event.type) {
         case 'screen_changed':
@@ -98,6 +114,7 @@ export function useStanfordStaff(roomId: string) {
   return {
     guestPhase,
     guestScreen,
+    activeReservation,
     lastGuestEvent,
     eventLog,
     pushCommand,

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Reservation } from '../types';
+import type { GuestToStaffEvent, Reservation, ReservationProfile } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -10,6 +10,51 @@ const api = axios.create({
 export async function lookupReservation(query: string): Promise<Reservation | null> {
   const { data } = await api.get('/checkin/lookup', { params: { query } });
   return data;
+}
+
+export async function searchReservations(query: string): Promise<Reservation[]> {
+  const { data } = await api.get<{ results: Reservation[] }>('/checkin/search', {
+    params: { query, limit: 8 },
+  });
+  return data.results;
+}
+
+export async function getReservationProfile(
+  reservationId: string
+): Promise<ReservationProfile> {
+  const { data } = await api.get<ReservationProfile>(
+    `/checkin/profile/${encodeURIComponent(reservationId)}`
+  );
+  return data;
+}
+
+export async function recordStanfordEvent(params: {
+  reservationId?: string;
+  sessionKey: string;
+  event: GuestToStaffEvent;
+}): Promise<{ success: boolean; error?: string }> {
+  const { data } = await api.post('/checkin/stanford-event', {
+    reservationId: params.reservationId,
+    sessionKey: params.sessionKey,
+    eventType: params.event.type,
+    eventPayload: sanitizeGuestEvent(params.event),
+  });
+  return data;
+}
+
+function sanitizeGuestEvent(event: GuestToStaffEvent): Record<string, unknown> {
+  if (event.type === 'passport_scanned') {
+    return {
+      passportNumber: event.passportNumber,
+      hasPassportPhoto: Boolean(event.photoDataUrl),
+    };
+  }
+
+  if (event.type === 'signature_submitted') {
+    return { signatureCaptured: Boolean(event.dataUrl) };
+  }
+
+  return { ...event };
 }
 
 export interface PassportScanStatus {

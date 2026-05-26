@@ -32,13 +32,33 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
         userInfo: { displayName },
         configOverwrite: {
           prejoinPageEnabled: false,
+          startWithAudioMuted: false,
+          startWithVideoMuted: false,
+          disableDeepLinking: true,
         },
         interfaceConfigOverwrite: {
           TOOLBAR_BUTTONS: isGuest
             ? []
             : ['microphone', 'camera', 'hangup', 'tileview'],
+          SHOW_JITSI_WATERMARK: false,
+          SHOW_WATERMARK_FOR_GUESTS: false,
+          SHOW_BRAND_WATERMARK: false,
+          SHOW_POWERED_BY: false,
+          SHOW_CHROME_EXTENSION_BANNER: false,
+          TILE_VIEW_ENABLED: !isGuest,
+          VERTICAL_FILMSTRIP: !isGuest,
         },
       });
+
+      if (isGuest) {
+        api.on('videoConferenceJoined', () => {
+          api.executeCommand('setTileView', false);
+        });
+        api.on('participantJoined', () => {
+          api.executeCommand('setTileView', false);
+        });
+      }
+
       apiRef.current = api;
     };
 
