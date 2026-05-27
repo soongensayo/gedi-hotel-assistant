@@ -4,6 +4,7 @@ import { jitsiRoomName, STANFORD_ROOM_ID } from '../config';
 import { useStanfordStaff } from '../hooks/useStanfordStaff';
 import { ActionPanel } from './ActionPanel';
 import { ArtifactViewer } from './ArtifactViewer';
+import { CheckinGuide } from './CheckinGuide';
 import { EventLog } from './EventLog';
 import { FlowTracker } from './FlowTracker';
 import { pushReservationCommand } from './reservationCommands';
@@ -20,7 +21,7 @@ export function StaffApp() {
   );
 
   return (
-    <div className="flex h-full flex-col gap-2 p-3 md:flex-row md:gap-4 md:p-4">
+    <div className="flex h-full flex-col gap-2 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-hidden md:p-4">
       {/* Left: video + flow tracker + event log */}
       <div className="flex min-h-[40vh] flex-1 flex-col gap-3 md:min-h-0">
         <p className="shrink-0 text-center text-xs text-[var(--color-hotel-text-dim)]">
@@ -48,9 +49,14 @@ export function StaffApp() {
       </div>
 
       {/* Right: controls + artifacts */}
-      <aside className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto md:w-[380px]">
+      <aside className="flex w-full shrink-0 flex-col gap-3 md:w-[380px] md:overflow-y-auto">
         <ReservationLookup
           onPushReservation={(r) => pushReservationCommand(staff.pushCommand, r)}
+        />
+        <CheckinGuide
+          guestPhase={staff.guestPhase}
+          guestScreen={staff.guestScreen}
+          completedEventTypes={completedEventTypes}
         />
         <ArtifactViewer
           signatureDataUrl={staff.signatureDataUrl}

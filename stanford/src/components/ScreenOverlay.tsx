@@ -10,7 +10,7 @@ type Props = {
 export function ScreenOverlay({ open, children, onClose }: Props) {
   if (!open) return null;
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col justify-end bg-black/35">
+    <div className="pointer-events-auto absolute inset-0 z-20 flex flex-col justify-end bg-black/45">
       {onClose && (
         <button
           type="button"
@@ -20,7 +20,7 @@ export function ScreenOverlay({ open, children, onClose }: Props) {
           Minimize
         </button>
       )}
-      <div className="max-h-[78vh] overflow-y-auto rounded-t-2xl border border-[var(--color-hotel-border)] border-b-0 bg-[var(--color-hotel-dark)] p-6 shadow-2xl">
+      <div className="max-h-[calc(100%-1.5rem)] overflow-y-auto rounded-t-2xl border border-[var(--color-hotel-border)] border-b-0 bg-[var(--color-hotel-dark)] p-5 shadow-2xl md:p-6">
         {children}
       </div>
     </div>
