@@ -84,8 +84,8 @@ export function KeyCardScreen({
           <p className="text-[var(--color-hotel-text-dim)]">
             The drawer will extend — please take your key card when it appears.
           </p>
-          <div className="mx-auto flex h-24 w-40 items-center justify-center rounded border border-[var(--color-hotel-accent)] bg-gradient-to-b from-[#2a2418] to-black shadow-lg">
-            <span className="text-xs tracking-widest text-[var(--color-hotel-accent)]">KEY</span>
+          <div className="mx-auto flex h-24 w-40 items-center justify-center rounded border border-[var(--color-hotel-accent)] bg-gradient-to-br from-[#f8f1df] via-[#d8c090] to-[#1f6a58] shadow-lg">
+            <span className="text-xs tracking-widest text-[#10251f]">KEY</span>
           </div>
         </>
       )}
@@ -102,7 +102,7 @@ export function KeyCardScreen({
       )}
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-black disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         disabled={useHardwareNfc && (phase === 'encoding' || phase === 'dispensing')}
         onClick={() => {
           setPhase('done');

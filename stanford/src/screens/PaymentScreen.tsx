@@ -21,7 +21,7 @@ export function PaymentScreen({ qrValue, instructions, onPaidDemo }: Props) {
       </p>
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-black"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
         onClick={onPaidDemo}
       >
         I’ve completed payment (demo)

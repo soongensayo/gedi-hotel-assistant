@@ -33,7 +33,7 @@ export function SwipeableWidgets() {
 
   return (
     <div
-      className="relative mx-auto w-full max-w-xl rounded-lg border border-[var(--color-hotel-border)] bg-black/45 px-4 py-5 shadow-2xl"
+      className="relative mx-auto w-full max-w-xl rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] px-4 py-5 shadow-[0_18px_48px_rgba(31,106,88,0.12)]"
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
@@ -44,7 +44,7 @@ export function SwipeableWidgets() {
             type="button"
             aria-label={`Show widget ${i + 1}`}
             className={`h-2 w-2 rounded-full transition-colors ${
-              i === index ? 'bg-[var(--color-hotel-accent)]' : 'bg-white/20'
+              i === index ? 'bg-[var(--color-hotel-accent)]' : 'bg-[var(--color-hotel-border)]'
             }`}
             onClick={() => setIndex(i)}
           />
@@ -103,7 +103,7 @@ function WeatherWidget() {
     <div className="text-center">
       <p className="text-5xl text-[var(--color-hotel-accent)]">31°C</p>
       <p className="mt-2 text-[var(--color-hotel-text-dim)]">Partly cloudy · Humid</p>
-      <p className="mt-4 text-sm text-white/70">
+      <p className="mt-4 text-sm text-[var(--color-hotel-text-dim)]">
         Showcase preview — connect a weather API later for live data.
       </p>
     </div>
@@ -112,12 +112,12 @@ function WeatherWidget() {
 
 function NewsWidget() {
   return (
-    <ul className="space-y-3 text-left text-sm text-white/85">
-      <li className="border-b border-white/10 pb-2">
+    <ul className="space-y-3 text-left text-sm text-[var(--color-hotel-text)]">
+      <li className="border-b border-[var(--color-hotel-border)] pb-2">
         <span className="text-[var(--color-hotel-accent)]">Local</span> — Marina Bay
         evening light show returns this week.
       </li>
-      <li className="border-b border-white/10 pb-2">
+      <li className="border-b border-[var(--color-hotel-border)] pb-2">
         <span className="text-[var(--color-hotel-accent)]">Travel</span> — Changi named
         best airport hub in Asia-Pacific.
       </li>

@@ -44,7 +44,7 @@ export function ReservationScreen({ reservation, onConfirm }: Props) {
       </p>
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-black"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
         onClick={onConfirm}
       >
         Yes, this is my reservation

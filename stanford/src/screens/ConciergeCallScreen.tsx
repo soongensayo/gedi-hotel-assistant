@@ -163,13 +163,13 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
 
   return (
     <GuestPortraitShell>
-      <div className="relative h-full w-full bg-black">
+      <div className="guest-call-surface relative h-full w-full bg-[var(--guest-deep)]">
         <JitsiMeeting
           roomName={meetingRoom}
           displayName={`Guest · ${roomId}`}
           isGuest
         />
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between bg-[linear-gradient(180deg,rgba(0,0,0,0.58),transparent_34%,rgba(0,0,0,0.68))] p-5 md:p-8">
+        <div className="guest-video-chrome pointer-events-none absolute inset-0 z-10 flex flex-col justify-between bg-[linear-gradient(180deg,rgba(16,37,31,0.64),transparent_34%,rgba(16,37,31,0.72))] p-5 md:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
@@ -179,11 +179,11 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
                 Your concierge is preparing the call.
               </h1>
             </div>
-            <span className="rounded-full border border-[var(--color-hotel-accent)]/40 bg-black/45 px-3 py-1 text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
+            <span className="rounded-full border border-white/30 bg-[#10251f]/45 px-3 py-1 text-[10px] uppercase tracking-widest text-white/85">
               Private session
             </span>
           </div>
-          <div className="max-w-xl rounded-lg border border-white/10 bg-black/35 p-4 backdrop-blur-sm">
+          <div className="max-w-xl rounded-lg border border-white/18 bg-[#10251f]/42 p-4 backdrop-blur-sm">
             <p className="text-sm leading-6 text-white/76">
               Keep this screen open. Your reservation, ID check, payment, signature, and
               key card steps will appear here while the concierge stays connected.
