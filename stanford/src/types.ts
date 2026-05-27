@@ -5,6 +5,7 @@ export type GuestPhase =
   | 'stub-front-desk'
   | 'stub-ai'
   | 'concierge'
+  | 'checkin-complete'
   | 'media';
 
 /** Screens the concierge can push onto the guest tablet */
