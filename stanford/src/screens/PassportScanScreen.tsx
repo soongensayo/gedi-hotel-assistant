@@ -8,14 +8,27 @@ import {
 
 type Props = {
   mode: 'camera' | 'hardware';
+  captureRequestId?: number;
+  onPreview?: (photoDataUrl: string) => void;
   onComplete: (passportNumber?: string, photoDataUrl?: string) => void;
 };
 
-export function PassportScanScreen({ mode, onComplete }: Props) {
+export function PassportScanScreen({
+  mode,
+  captureRequestId = 0,
+  onPreview,
+  onComplete,
+}: Props) {
   if (mode === 'hardware') {
     return <HardwarePassportScan onComplete={onComplete} />;
   }
-  return <CameraPassportScan onComplete={onComplete} />;
+  return (
+    <CameraPassportScan
+      captureRequestId={captureRequestId}
+      onPreview={onPreview}
+      onComplete={onComplete}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -23,15 +36,27 @@ export function PassportScanScreen({ mode, onComplete }: Props) {
 // ---------------------------------------------------------------------------
 
 function CameraPassportScan({
+  captureRequestId,
+  onPreview,
   onComplete,
 }: {
+  captureRequestId: number;
+  onPreview?: (photoDataUrl: string) => void;
   onComplete: (passportNumber?: string, photoDataUrl?: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const onCompleteRef = useRef(onComplete);
+  const onPreviewRef = useRef(onPreview);
+  const lastCaptureRequestRef = useRef(captureRequestId);
   const [cameraReady, setCameraReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [captured, setCaptured] = useState<string | null>(null);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+    onPreviewRef.current = onPreview;
+  }, [onComplete, onPreview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,22 +95,61 @@ function CameraPassportScan({
     };
   }, []);
 
-  const capture = useCallback(() => {
+  const captureFrame = useCallback((options?: { stopStream?: boolean }) => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
 
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return null;
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    setCaptured(dataUrl);
 
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+    if (options?.stopStream) {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
+    return dataUrl;
   }, []);
+
+  const capture = useCallback(() => {
+    const dataUrl = captureFrame({ stopStream: true });
+    if (!dataUrl) return;
+    setCaptured(dataUrl);
+  }, [captureFrame]);
+
+  useEffect(() => {
+    if (!cameraReady || captured || !onPreviewRef.current) return;
+
+    const interval = window.setInterval(() => {
+      const video = videoRef.current;
+      if (!video || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 420;
+      canvas.height = Math.round(420 * (video.videoHeight / video.videoWidth));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      onPreviewRef.current?.(canvas.toDataURL('image/jpeg', 0.45));
+    }, 650);
+
+    return () => window.clearInterval(interval);
+  }, [cameraReady, captured]);
+
+  useEffect(() => {
+    if (captureRequestId === lastCaptureRequestRef.current) return;
+    lastCaptureRequestRef.current = captureRequestId;
+    if (!cameraReady || captured) return;
+
+    const dataUrl = captureFrame({ stopStream: true });
+    if (!dataUrl) return;
+    setCaptured(dataUrl);
+    onCompleteRef.current(undefined, dataUrl);
+  }, [cameraReady, captureFrame, captureRequestId, captured]);
 
   const retake = useCallback(() => {
     setCaptured(null);
@@ -172,7 +236,7 @@ function CameraPassportScan({
           <button
             type="button"
             className="flex-1 rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
-            onClick={() => onComplete(undefined, captured)}
+            onClick={() => onCompleteRef.current(undefined, captured)}
           >
             Send to concierge
           </button>
@@ -182,7 +246,7 @@ function CameraPassportScan({
       <button
         type="button"
         className="w-full rounded-lg border border-white/20 py-2 text-xs text-white/50"
-        onClick={() => onComplete(undefined, undefined)}
+        onClick={() => onCompleteRef.current(undefined, undefined)}
       >
         Skip (demo)
       </button>

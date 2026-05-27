@@ -2,25 +2,30 @@ import { useState } from 'react';
 
 type Props = {
   signatureDataUrl: string | null;
+  passportLivePreviewUrl: string | null;
   passportPhotoUrl: string | null;
   passportNumber: string | null;
   preferences: { temperature: number; pillows: string; celebration?: string } | null;
   selectedServices: { id: string; label: string }[];
   luggageInfo: { count: number; needsHelp: boolean; etaNote?: string } | null;
+  onCapturePassportCamera: () => void;
 };
 
 export function ArtifactViewer({
   signatureDataUrl,
+  passportLivePreviewUrl,
   passportPhotoUrl,
   passportNumber,
   preferences,
   selectedServices,
   luggageInfo,
+  onCapturePassportCamera,
 }: Props) {
   const [expandedImg, setExpandedImg] = useState<string | null>(null);
 
   const hasAnything =
     signatureDataUrl ||
+    passportLivePreviewUrl ||
     passportPhotoUrl ||
     passportNumber ||
     preferences ||
@@ -34,6 +39,34 @@ export function ArtifactViewer({
       <p className="text-xs font-medium uppercase tracking-widest text-[var(--color-hotel-accent)]">
         Received from guest
       </p>
+
+      {/* Live passport camera */}
+      {passportLivePreviewUrl && !passportPhotoUrl && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] text-[var(--color-hotel-text-dim)]">
+              Live passport camera
+            </p>
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] uppercase tracking-widest text-emerald-200">
+              live
+            </span>
+          </div>
+          <button type="button" onClick={() => setExpandedImg(passportLivePreviewUrl)}>
+            <img
+              src={passportLivePreviewUrl}
+              alt="Live passport camera"
+              className="h-28 w-full rounded border border-[var(--color-hotel-border)] object-cover"
+            />
+          </button>
+          <button
+            type="button"
+            className="w-full rounded border border-[var(--color-hotel-accent)] bg-[var(--color-hotel-accent)]/10 py-2 text-xs font-medium uppercase tracking-wide text-[var(--color-hotel-accent)]"
+            onClick={onCapturePassportCamera}
+          >
+            Capture passport camera
+          </button>
+        </div>
+      )}
 
       {/* Passport photo */}
       {passportPhotoUrl && (

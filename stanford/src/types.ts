@@ -117,6 +117,7 @@ export type StaffToGuestCommand =
   | { type: 'show_screen'; screen: GuestScreenId }
   | { type: 'show_reservation'; reservation: Reservation }
   | { type: 'activate_passport_scan'; mode?: 'camera' | 'hardware' }
+  | { type: 'capture_passport_camera' }
   | { type: 'show_payment_qr'; qrValue: string; instructions?: string }
   | { type: 'request_signature' }
   | { type: 'dispense_key_card' }
@@ -128,6 +129,7 @@ export type StaffToGuestCommand =
 export type GuestToStaffEvent =
   | { type: 'screen_changed'; phase: GuestPhase; screen: GuestScreenId }
   | { type: 'reservation_confirmed'; reservationId: string }
+  | { type: 'passport_camera_preview'; photoDataUrl: string }
   | { type: 'passport_scanned'; passportNumber?: string; photoDataUrl?: string }
   | { type: 'payment_complete' }
   | { type: 'signature_submitted'; dataUrl: string }

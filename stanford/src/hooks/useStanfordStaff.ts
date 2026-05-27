@@ -15,6 +15,7 @@ export function useStanfordStaff(roomId: string) {
   const activeReservationRef = useRef<Reservation | null>(null);
 
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
+  const [passportLivePreviewUrl, setPassportLivePreviewUrl] = useState<string | null>(null);
   const [passportPhotoUrl, setPassportPhotoUrl] = useState<string | null>(null);
   const [passportNumber, setPassportNumber] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<{
@@ -35,6 +36,9 @@ export function useStanfordStaff(roomId: string) {
         activeReservationRef.current = command.reservation;
         setActiveReservation(command.reservation);
       }
+      if (command.type === 'activate_passport_scan' && command.mode === 'camera') {
+        setPassportLivePreviewUrl(null);
+      }
       emitStaffCommand(roomId, command);
     },
     [roomId]
@@ -45,6 +49,12 @@ export function useStanfordStaff(roomId: string) {
 
     const onGuestEvent = (event: GuestToStaffEvent) => {
       console.log('[Staff] Received guest event:', event.type, event);
+
+      if (event.type === 'passport_camera_preview') {
+        setPassportLivePreviewUrl(event.photoDataUrl);
+        return;
+      }
+
       setLastGuestEvent(event);
 
       const entry: StaffEventLogEntry = {
@@ -74,6 +84,7 @@ export function useStanfordStaff(roomId: string) {
         case 'passport_scanned':
           if (event.photoDataUrl) setPassportPhotoUrl(event.photoDataUrl);
           if (event.passportNumber) setPassportNumber(event.passportNumber);
+          setPassportLivePreviewUrl(null);
           break;
         case 'preferences_submitted':
           setPreferences({
@@ -119,6 +130,7 @@ export function useStanfordStaff(roomId: string) {
     eventLog,
     pushCommand,
     signatureDataUrl,
+    passportLivePreviewUrl,
     passportPhotoUrl,
     passportNumber,
     preferences,

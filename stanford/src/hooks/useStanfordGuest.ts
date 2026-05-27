@@ -31,6 +31,7 @@ export function useStanfordGuest(roomId: string) {
   const [services, setServices] = useState<ServiceOffer[]>([]);
   const [customMessage, setCustomMessage] = useState<CustomMessageState | null>(null);
   const [passportScanMode, setPassportScanMode] = useState<'camera' | 'hardware'>('camera');
+  const [passportCaptureRequestId, setPassportCaptureRequestId] = useState(0);
 
   const sendToStaff = useCallback(
     (event: GuestToStaffEvent) => {
@@ -64,6 +65,9 @@ export function useStanfordGuest(roomId: string) {
           setPassportScanMode(command.mode ?? 'camera');
           setActiveScreen('passport');
           setCustomMessage(null);
+          break;
+        case 'capture_passport_camera':
+          setPassportCaptureRequestId((current) => current + 1);
           break;
         case 'show_payment_qr':
           setPaymentQr({
@@ -137,6 +141,7 @@ export function useStanfordGuest(roomId: string) {
     services,
     customMessage,
     passportScanMode,
+    passportCaptureRequestId,
     sendToStaff,
   };
 }

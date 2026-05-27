@@ -60,11 +60,15 @@ export function StaffApp() {
         />
         <ArtifactViewer
           signatureDataUrl={staff.signatureDataUrl}
+          passportLivePreviewUrl={staff.passportLivePreviewUrl}
           passportPhotoUrl={staff.passportPhotoUrl}
           passportNumber={staff.passportNumber}
           preferences={staff.preferences}
           selectedServices={staff.selectedServices}
           luggageInfo={staff.luggageInfo}
+          onCapturePassportCamera={() =>
+            staff.pushCommand({ type: 'capture_passport_camera' })
+          }
         />
         <div>
           <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[var(--color-hotel-accent)]">
