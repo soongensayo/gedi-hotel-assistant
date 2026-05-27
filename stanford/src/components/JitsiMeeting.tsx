@@ -1,5 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { JITSI_DOMAIN } from '../config';
+import { useEffect, useRef, useState } from 'react';
+import {
+  JITSI_DOMAIN,
+  JITSI_JWT,
+  JITSI_PROVIDER_LABEL,
+  jitsiExternalApiUrl,
+} from '../config';
 
 type Props = {
   roomName: string;
@@ -7,13 +12,74 @@ type Props = {
   isGuest: boolean;
 };
 
+type MeetingState = 'loading' | 'connecting' | 'ready' | 'warning' | 'error';
+
+type VideoIssue = {
+  title: string;
+  body: string;
+  actions: string[];
+};
+
+function isLoopbackHost(hostname: string) {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname === '::1'
+  );
+}
+
+function getBrowserVideoIssue(): VideoIssue | null {
+  if (typeof window === 'undefined') return null;
+
+  const hasPeerConnection = 'RTCPeerConnection' in window;
+  const hasMediaDevices = Boolean(navigator.mediaDevices?.getUserMedia);
+  const isLocal = isLoopbackHost(window.location.hostname);
+  const isSecure = window.isSecureContext || isLocal;
+
+  if (!hasPeerConnection) {
+    return {
+      title: 'This browser does not expose WebRTC.',
+      body: 'The call needs a current Chrome, Edge, Firefox, or Safari build with WebRTC enabled.',
+      actions: ['Open the staff panel in Chrome or Edge.', 'Disable privacy extensions for this demo origin.'],
+    };
+  }
+
+  if (!isSecure || !hasMediaDevices) {
+    return {
+      title: 'Camera and microphone are blocked on this origin.',
+      body: `You are viewing ${window.location.origin}. Browsers only expose camera and microphone on HTTPS or localhost, even when site permissions look allowed.`,
+      actions: [
+        'Use https for the LAN demo URL.',
+        'Use localhost when staff runs on the same machine.',
+        'For a quick demo tunnel, use ngrok or a trusted local certificate.',
+      ],
+    };
+  }
+
+  return null;
+}
+
+function getInitialMeetingReadiness() {
+  const issue = getBrowserVideoIssue();
+  return {
+    issue,
+    state: (issue ? 'warning' : 'loading') as MeetingState,
+  };
+}
+
 export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<JitsiMeetExternalAPI | null>(null);
+  const [readiness] = useState(getInitialMeetingReadiness);
+  const [meetingState, setMeetingState] = useState<MeetingState>(readiness.state);
+  const videoIssue = readiness.issue;
+  const [errorDetail, setErrorDetail] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     const containerEl = containerRef.current;
+    const externalApiUrl = jitsiExternalApiUrl();
 
     const mount = () => {
       const Jitsi = window.JitsiMeetExternalAPI;
@@ -29,6 +95,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
         parentNode: el,
         width: '100%',
         height: '100%',
+        ...(JITSI_JWT ? { jwt: JITSI_JWT } : {}),
         userInfo: { displayName },
         configOverwrite: {
           prejoinPageEnabled: false,
@@ -50,6 +117,40 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
         },
       });
 
+      const iframe = el.querySelector('iframe');
+      iframe?.setAttribute(
+        'allow',
+        'camera; microphone; fullscreen; display-capture; autoplay'
+      );
+
+      setMeetingState(videoIssue ? 'warning' : 'ready');
+
+      api.on('videoConferenceJoined', () => {
+        if (!cancelled) setMeetingState('ready');
+      });
+      api.on('cameraError', (...details) => {
+        if (!cancelled) {
+          setMeetingState('error');
+          setErrorDetail(`Camera failed: ${details.map(String).join(' ')}`);
+        }
+      });
+      api.on('micError', (...details) => {
+        if (!cancelled) {
+          setMeetingState('error');
+          setErrorDetail(`Microphone failed: ${details.map(String).join(' ')}`);
+        }
+      });
+      api.on('errorOccurred', (event) => {
+        if (!cancelled) {
+          setMeetingState('error');
+          setErrorDetail(
+            typeof event === 'object' && event !== null
+              ? JSON.stringify(event)
+              : String(event)
+          );
+        }
+      });
+
       if (isGuest) {
         api.on('videoConferenceJoined', () => {
           api.executeCommand('setTileView', false);
@@ -67,9 +168,9 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
         mount();
         return;
       }
-      const existing = document.querySelector<HTMLScriptElement>(
-        'script[data-jitsi-external-api]'
-      );
+      const existing = Array.from(
+        document.querySelectorAll<HTMLScriptElement>('script[data-jitsi-external-api]')
+      ).find((script) => script.src === externalApiUrl);
       if (existing) {
         existing.addEventListener('load', () => {
           if (!cancelled) mount();
@@ -77,11 +178,17 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
         return;
       }
       const script = document.createElement('script');
-      script.src = `https://${JITSI_DOMAIN}/external_api.js`;
+      script.src = externalApiUrl;
       script.async = true;
       script.dataset.jitsiExternalApi = 'true';
       script.onload = () => {
         if (!cancelled) mount();
+      };
+      script.onerror = () => {
+        if (!cancelled) {
+          setMeetingState('error');
+          setErrorDetail(`Could not load ${externalApiUrl}`);
+        }
       };
       document.body.appendChild(script);
     };
@@ -94,7 +201,64 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
       apiRef.current = null;
       if (containerEl) containerEl.innerHTML = '';
     };
-  }, [roomName, displayName, isGuest]);
+  }, [roomName, displayName, isGuest, videoIssue]);
 
-  return <div ref={containerRef} className="h-full w-full min-h-[200px] bg-black" />;
+  const showBlockingOverlay = meetingState !== 'ready' && (videoIssue || meetingState === 'error');
+  const showSpinner = meetingState === 'loading' || meetingState === 'connecting';
+
+  return (
+    <div className="relative h-full w-full min-h-[200px] overflow-hidden bg-black">
+      <div ref={containerRef} className="h-full w-full" />
+
+      {!isGuest && (
+        <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-md border border-white/10 bg-black/70 px-2.5 py-1 text-[10px] uppercase tracking-widest text-white/55">
+          {JITSI_PROVIDER_LABEL}
+        </div>
+      )}
+
+      {showSpinner && !showBlockingOverlay && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/80 text-center">
+          <div className="h-10 w-10 rounded-full border-2 border-[var(--color-hotel-accent)]/25 border-t-[var(--color-hotel-accent)] animate-spin" />
+          <p className="text-sm text-white/65">
+            {meetingState === 'loading' ? 'Loading video bridge...' : 'Joining concierge call...'}
+          </p>
+        </div>
+      )}
+
+      {showBlockingOverlay && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/90 p-6">
+          <div className="w-full max-w-lg rounded-lg border border-[var(--color-hotel-border)] bg-[#15110d] p-5 shadow-2xl">
+            <p className="text-xs font-medium uppercase tracking-widest text-[var(--color-hotel-accent)]">
+              Video check
+            </p>
+            <h2 className="mt-3 text-xl text-white">
+              {meetingState === 'error'
+                ? 'The video call could not start.'
+                : videoIssue?.title}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-white/65">
+              {meetingState === 'error'
+                ? errorDetail || 'Jitsi reported a startup error.'
+                : videoIssue?.body}
+            </p>
+            {videoIssue && (
+              <ul className="mt-4 space-y-2 text-sm text-white/75">
+                {videoIssue.actions.map((action) => (
+                  <li key={action} className="flex gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-hotel-accent)]" />
+                    <span>{action}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-5 rounded-md border border-white/10 bg-black/40 p-3 text-xs text-white/45">
+              Room <span className="font-mono text-white/65">{roomName}</span>
+              <span className="mx-2 text-white/25">/</span>
+              Domain <span className="font-mono text-white/65">{JITSI_DOMAIN}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
