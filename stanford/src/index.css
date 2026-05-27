@@ -102,6 +102,10 @@ button {
   min-height: 0;
 }
 
+.guest-highlight-title {
+  overflow-wrap: anywhere;
+}
+
 .hotel-ambient-image {
   animation: hotel-ambient-pan 28s ease-in-out infinite alternate;
   transform-origin: center;
@@ -219,11 +223,13 @@ button {
     font-size: clamp(1.25rem, 2.15dvh, 1.65rem);
   }
 
-  .guest-showcase-content article {
-    padding: 0.8rem;
+  .guest-showcase-content .guest-feature-card,
+  .guest-showcase-content .guest-highlight-card {
+    padding: 0.78rem;
   }
 
-  .guest-showcase-content article p {
+  .guest-showcase-content .guest-feature-card p,
+  .guest-showcase-content .guest-highlight-card p {
     line-height: 1.45;
   }
 
@@ -231,15 +237,32 @@ button {
     display: none;
   }
 
-  .guest-showcase-content .hotel-float-card {
-    min-height: 0;
+  .guest-showcase-content .guest-highlight-card {
+    display: flex;
+    min-height: 76px;
+    flex-direction: column;
+    justify-content: center;
   }
 
-  .guest-showcase-content > div:nth-child(2) {
+  .guest-showcase-content .guest-highlight-body {
+    display: none;
+  }
+
+  .guest-showcase-content .guest-highlight-title {
+    display: -webkit-box;
+    margin-top: 0.35rem;
+    overflow: hidden;
+    font-size: 0.95rem;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .guest-showcase-content .guest-showcase-main {
     grid-template-columns: 1fr;
   }
 
-  .guest-showcase-content > div:nth-child(2) > div {
+  .guest-showcase-content .guest-highlight-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -261,8 +284,12 @@ button {
     display: none;
   }
 
-  .guest-showcase-content .hotel-float-card p:last-child,
-  .guest-showcase-content article p:not(:first-child) {
+  .guest-showcase-content .guest-feature-body,
+  .guest-showcase-content .guest-highlight-body {
     display: none;
+  }
+
+  .guest-showcase-content .guest-feature-card {
+    justify-content: center;
   }
 }
