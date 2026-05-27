@@ -34,6 +34,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
     services,
     customMessage,
     passportScanMode,
+    passportCaptureRequestId,
     sendToStaff,
     setActiveScreen,
   } = stanford;
@@ -67,6 +68,10 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
         return (
           <PassportScanScreen
             mode={passportScanMode}
+            captureRequestId={passportCaptureRequestId}
+            onPreview={(photoDataUrl) =>
+              sendToStaff({ type: 'passport_camera_preview', photoDataUrl })
+            }
             onComplete={(passportNumber, photoDataUrl) =>
               sendToStaffAndClose({ type: 'passport_scanned', passportNumber, photoDataUrl })
             }
