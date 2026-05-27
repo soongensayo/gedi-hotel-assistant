@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import { config } from '../config';
 
 const router = Router();
@@ -21,8 +22,17 @@ function base64url(value: Buffer | string) {
 
 function getPrivateKey() {
   if (config.jaasPrivateKey) return config.jaasPrivateKey;
-  if (config.jaasPrivateKeyPath && fs.existsSync(config.jaasPrivateKeyPath)) {
-    return fs.readFileSync(config.jaasPrivateKeyPath, 'utf8');
+  if (config.jaasPrivateKeyPath) {
+    const candidates = [
+      config.jaasPrivateKeyPath,
+      path.resolve(process.cwd(), config.jaasPrivateKeyPath),
+      path.resolve(process.cwd(), '..', config.jaasPrivateKeyPath),
+      path.resolve(__dirname, '../../../', config.jaasPrivateKeyPath),
+    ];
+    const keyPath = candidates.find((candidate) => fs.existsSync(candidate));
+    if (keyPath) {
+      return fs.readFileSync(keyPath, 'utf8');
+    }
   }
   return '';
 }
@@ -43,7 +53,12 @@ function signJaasJwt({
 }) {
   const privateKey = getPrivateKey();
   if (!config.jaasAppId || !config.jaasKid || !privateKey) {
-    throw new Error('JaaS is not configured. Set JAAS_APP_ID, JAAS_KID, and JAAS_PRIVATE_KEY or JAAS_PRIVATE_KEY_PATH.');
+    const missing = [
+      !config.jaasAppId && 'JAAS_APP_ID',
+      !config.jaasKid && 'JAAS_KID',
+      !privateKey && 'JAAS_PRIVATE_KEY or readable JAAS_PRIVATE_KEY_PATH',
+    ].filter(Boolean);
+    throw new Error(`JaaS is not configured. Missing: ${missing.join(', ')}.`);
   }
 
   const now = Math.floor(Date.now() / 1000);
