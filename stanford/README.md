@@ -24,7 +24,34 @@ The Vite dev server binds to `0.0.0.0` so any device on the same network can rea
 3. On the **staff laptop**: open `http://<LAN_IP>:5174/staff` (or just `localhost:5174/staff` if it's the same machine)
 4. Both devices share the same Jitsi room and Socket.IO room — concierge actions appear on the guest tablet in real time.
 
-> Camera-based passport scanning requires HTTPS on non-localhost origins. For a quick workaround you can use `ngrok http 5174` or Chrome's `chrome://flags/#unsafely-treat-insecure-origin-as-secure` flag on the tablet.
+> Camera, microphone, and camera-based passport scanning require HTTPS on non-localhost origins. A LAN URL like `http://192.168.x.x:5174/staff` can still show the app, but the browser may block WebRTC.
+
+### LAN HTTPS demo
+
+Your usual three-terminal demo runbook can stay the same, except the Stanford frontend should run over HTTPS:
+
+1. Once on the interface machine, generate a local cert:
+
+   ```bash
+   npm run setup:stanford-https
+   ```
+
+   If the detected IP is wrong, pass the exact interface-machine IP:
+
+   ```bash
+   npm run setup:stanford-https -- 192.168.x.x
+   ```
+
+2. Start the demo:
+   - Terminal 1: encoder Python service
+   - Terminal 2: `npm run dev:backend`
+   - Terminal 3: `npm run dev:stanford:https`
+
+3. Open the guest machine at `https://<LAN_IP>:5174/`.
+
+4. Open the staff laptop at `https://<LAN_IP>:5174/staff`.
+
+Because this uses a self-signed local certificate, each browser must accept/trust the certificate once. For a polished showcase, use a trusted local certificate or an HTTPS tunnel such as ngrok.
 
 ## Env (optional, in repo root `.env`)
 
@@ -38,6 +65,26 @@ The Vite dev server binds to `0.0.0.0` so any device on the same network can rea
 | `VITE_STANFORD_PAYMENT_QR` | URL/string encoded in the payment QR (staff default uses a demo URL) |
 | `VITE_STANFORD_YOUTUBE_EMBED` | Full embed URL for media mode video |
 | `VITE_SOCKET_URL` | Override Socket.IO origin (defaults to same host as the Vite dev server) |
+| `VITE_JITSI_DOMAIN` | Jitsi domain (default: `meet.jit.si`; use `8x8.vc` for JaaS) |
+| `VITE_JITSI_APP_ID` | JaaS app id / magic cookie. When set, rooms become `<app-id>/LuxeDrive_Stanford_<room>` |
+| `VITE_JITSI_JWT` | Optional JaaS JWT for the embedded meeting. For production, generate short-lived JWTs server-side instead of hard-coding them in frontend env |
+| `STANFORD_HTTPS` | Set `true` to run Vite over HTTPS for LAN staff-laptop camera/mic access |
+| `STANFORD_HTTPS_KEY` | Optional HTTPS key path (default: `stanford/certs/dev-key.pem`) |
+| `STANFORD_HTTPS_CERT` | Optional HTTPS cert path (default: `stanford/certs/dev-cert.pem`) |
+
+## Video provider
+
+By default the Stanford showcase embeds public Jitsi Meet at `meet.jit.si`, so it is fine for quick demos but not the most controlled production path.
+
+For 8x8 JaaS, set these in `.env` and restart the Vite server:
+
+```bash
+VITE_JITSI_DOMAIN=8x8.vc
+VITE_JITSI_APP_ID=vpaas-magic-cookie-your-jaas-app-id
+VITE_JITSI_JWT=your-short-lived-room-jwt
+```
+
+The app loads the correct JaaS `external_api.js`, prefixes the room with the JaaS app id, and passes the JWT into the iframe API.
 
 ## Concierge flow
 

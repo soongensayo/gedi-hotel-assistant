@@ -12,6 +12,8 @@
     "predev": "node -e \"if(process.platform!=='win32'){require('child_process').execSync('bash hardware/apply-audio.sh',{stdio:'inherit'})}\"",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:stanford\"",
     "dev:stanford": "npm run dev --workspace=stanford",
+    "dev:stanford:https": "STANFORD_HTTPS=true npm run dev --workspace=stanford",
+    "setup:stanford-https": "bash scripts/setup-stanford-https.sh",
     "dev:nus": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",

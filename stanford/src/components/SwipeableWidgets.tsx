@@ -33,7 +33,7 @@ export function SwipeableWidgets() {
 
   return (
     <div
-      className="relative mx-auto mt-6 w-full max-w-xl rounded-xl border border-[var(--color-hotel-border)] bg-black/40 px-4 py-6"
+      className="relative mx-auto w-full max-w-xl rounded-lg border border-[var(--color-hotel-border)] bg-black/45 px-4 py-5 shadow-2xl"
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
     >
@@ -55,10 +55,6 @@ export function SwipeableWidgets() {
       {w === 'maps' && <MapsWidget />}
       {w === 'weather' && <WeatherWidget />}
       {w === 'news' && <NewsWidget />}
-
-      <p className="mt-4 text-center text-xs text-[var(--color-hotel-text-dim)]">
-        Swipe or tap dots to change
-      </p>
     </div>
   );
 }

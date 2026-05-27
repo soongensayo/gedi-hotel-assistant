@@ -32,3 +32,4 @@ docker-compose.override.yml
 
 # Certificates (Apple Wallet, etc.)
 backend/certs/
+stanford/certs/

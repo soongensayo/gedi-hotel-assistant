@@ -2,6 +2,7 @@
 
 interface JitsiMeetExternalAPIOptions {
   roomName: string;
+  jwt?: string;
   width?: string | number;
   height?: string | number;
   parentNode: HTMLElement;
