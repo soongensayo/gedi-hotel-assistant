@@ -94,9 +94,9 @@ export function ActionPanel({ push }: Props) {
       />
       <hr className="border-[var(--color-hotel-border)]" />
       <FlowButton
-        label="End session → guest media mode"
+        label="Check-in complete"
         onClick={() => push({ type: 'end_session' })}
-        danger
+        complete
       />
     </div>
   );
@@ -106,16 +106,20 @@ function FlowButton({
   label,
   onClick,
   danger,
+  complete,
 }: {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  complete?: boolean;
 }) {
   return (
     <button
       type="button"
       className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium uppercase tracking-wide ${
-        danger
+        complete
+          ? 'border border-emerald-300/60 bg-emerald-900/45 text-emerald-100 hover:bg-emerald-800/55'
+          : danger
           ? 'border border-red-400/50 bg-red-950/40 text-red-200'
           : 'border border-[var(--color-hotel-border)] bg-white/5 text-[var(--color-hotel-text)] hover:border-[var(--color-hotel-accent)]'
       }`}

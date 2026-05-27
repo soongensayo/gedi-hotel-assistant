@@ -1,5 +1,6 @@
 import { STANFORD_ROOM_ID } from './config';
 import { useStanfordGuest } from './hooks/useStanfordGuest';
+import { CheckinCompleteScreen } from './screens/CheckinCompleteScreen';
 import { CheckinOptionsScreen } from './screens/CheckinOptionsScreen';
 import { ConciergeCallScreen } from './screens/ConciergeCallScreen';
 import { MediaScreen } from './screens/MediaScreen';
@@ -42,6 +43,15 @@ export function GuestApp() {
 
   if (phase === 'concierge') {
     return <ConciergeCallScreen roomId={roomId} stanford={stanford} />;
+  }
+
+  if (phase === 'checkin-complete') {
+    return (
+      <CheckinCompleteScreen
+        reservation={stanford.reservation}
+        onContinue={() => setPhase('media')}
+      />
+    );
   }
 
   if (phase === 'media') {

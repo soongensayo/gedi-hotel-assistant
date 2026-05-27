@@ -88,8 +88,8 @@ export function GuestShowcasePanel() {
           </p>
         </div>
 
-        <div className="grid min-h-0 gap-3 md:grid-cols-[1.05fr_1fr]">
-          <article className="relative flex min-h-0 flex-col justify-end overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] p-4 shadow-[0_18px_60px_rgba(31,106,88,0.12)] backdrop-blur-sm">
+        <div className="guest-showcase-main grid min-h-0 gap-3 md:grid-cols-[1.05fr_1fr]">
+          <article className="guest-feature-card relative flex min-h-0 flex-col justify-end overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] p-4 shadow-[0_18px_60px_rgba(31,106,88,0.12)] backdrop-blur-sm">
             <div className="absolute left-0 top-0 h-px w-full bg-[linear-gradient(90deg,transparent,var(--color-hotel-accent),transparent)] opacity-60" />
             <div
               key={activeExperience.title}
@@ -106,7 +106,7 @@ export function GuestShowcasePanel() {
               <h3 className="mt-2 text-xl text-[var(--color-hotel-accent)]">
                 {activeExperience.title}
               </h3>
-              <p className="mt-2 max-w-lg text-[15px] leading-6 text-[var(--color-hotel-text-dim)]">
+              <p className="guest-feature-body mt-2 max-w-lg text-[15px] leading-6 text-[var(--color-hotel-text-dim)]">
                 {activeExperience.body}
               </p>
             </div>
@@ -133,18 +133,18 @@ export function GuestShowcasePanel() {
             </div>
           </article>
 
-          <div className="grid min-h-0 grid-cols-3 gap-2">
+          <div className="guest-highlight-grid grid min-h-0 grid-cols-3 gap-2">
             {HIGHLIGHTS.map((item, index) => (
               <article
                 key={item.label}
-                className="hotel-float-card overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card)] p-3 backdrop-blur-sm"
+                className="guest-highlight-card hotel-float-card overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card)] p-3 backdrop-blur-sm"
                 style={{ animationDelay: `${index * 420}ms` }}
               >
                 <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
                   {item.label}
                 </p>
-                <h3 className="mt-2 text-[15px] leading-snug text-[var(--color-hotel-text)]">{item.title}</h3>
-                <p className="mt-2 line-clamp-3 text-xs leading-5 text-[var(--color-hotel-text-dim)]">
+                <h3 className="guest-highlight-title mt-2 text-[15px] leading-snug text-[var(--color-hotel-text)]">{item.title}</h3>
+                <p className="guest-highlight-body mt-2 line-clamp-3 text-xs leading-5 text-[var(--color-hotel-text-dim)]">
                   {item.body}
                 </p>
               </article>

@@ -91,7 +91,7 @@ export function useStanfordGuest(roomId: string) {
           setCustomMessage(null);
           break;
         case 'end_session':
-          setPhase('media');
+          setPhase('checkin-complete');
           setActiveScreen('video-only');
           setCustomMessage(null);
           break;
