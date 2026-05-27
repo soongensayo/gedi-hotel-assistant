@@ -24,3 +24,106 @@ body,
 button {
   font-family: inherit;
 }
+
+.hotel-ambient-image {
+  animation: hotel-ambient-pan 28s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+.hotel-light-sweep {
+  animation: hotel-light-sweep 9s ease-in-out infinite;
+}
+
+.hotel-card-reveal {
+  animation: hotel-card-reveal 620ms ease-out both;
+}
+
+.hotel-progress {
+  animation: hotel-progress 5.8s linear both;
+  transform-origin: left center;
+}
+
+.hotel-float-card {
+  animation: hotel-float-card 7.4s ease-in-out infinite;
+}
+
+.hotel-fact-ticker {
+  animation: hotel-fact-ticker 24s linear infinite;
+}
+
+@keyframes hotel-ambient-pan {
+  from {
+    transform: scale(1.05) translate3d(-1.5%, -1%, 0);
+  }
+  to {
+    transform: scale(1.11) translate3d(1.8%, 1%, 0);
+  }
+}
+
+@keyframes hotel-light-sweep {
+  0%,
+  28% {
+    transform: translateX(0) rotate(12deg);
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+  72%,
+  100% {
+    transform: translateX(285%) rotate(12deg);
+    opacity: 0;
+  }
+}
+
+@keyframes hotel-card-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hotel-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes hotel-float-card {
+  0%,
+  100% {
+    transform: translateY(0);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  50% {
+    transform: translateY(-4px);
+    border-color: rgba(197, 160, 89, 0.34);
+  }
+}
+
+@keyframes hotel-fact-ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotel-ambient-image,
+  .hotel-light-sweep,
+  .hotel-card-reveal,
+  .hotel-progress,
+  .hotel-float-card,
+  .hotel-fact-ticker {
+    animation: none;
+  }
+}
