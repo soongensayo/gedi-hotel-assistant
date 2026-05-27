@@ -68,6 +68,35 @@ function getInitialMeetingReadiness() {
   };
 }
 
+async function fetchJitsiToken({
+  roomName,
+  displayName,
+  isGuest,
+}: {
+  roomName: string;
+  displayName: string;
+  isGuest: boolean;
+}) {
+  if (JITSI_JWT || JITSI_DOMAIN !== '8x8.vc') return JITSI_JWT;
+
+  const response = await fetch('/api/jitsi/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      roomName,
+      displayName,
+      role: isGuest ? 'guest' : 'staff',
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Could not get JaaS token from backend.');
+  }
+
+  return String(data.token || '');
+}
+
 export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<JitsiMeetExternalAPI | null>(null);
@@ -81,7 +110,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
     const containerEl = containerRef.current;
     const externalApiUrl = jitsiExternalApiUrl();
 
-    const mount = () => {
+    const mount = async () => {
       const Jitsi = window.JitsiMeetExternalAPI;
       const el = containerRef.current;
       if (!Jitsi || !el) return;
@@ -90,12 +119,23 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
       apiRef.current = null;
       el.innerHTML = '';
 
+      let jwt = JITSI_JWT;
+      try {
+        jwt = await fetchJitsiToken({ roomName, displayName, isGuest });
+      } catch (error) {
+        if (!cancelled) {
+          setMeetingState('error');
+          setErrorDetail(error instanceof Error ? error.message : 'Could not prepare Jitsi token.');
+        }
+        return;
+      }
+
       const api = new Jitsi(JITSI_DOMAIN, {
         roomName,
         parentNode: el,
         width: '100%',
         height: '100%',
-        ...(JITSI_JWT ? { jwt: JITSI_JWT } : {}),
+        ...(jwt ? { jwt } : {}),
         userInfo: { displayName },
         configOverwrite: {
           prejoinPageEnabled: false,
@@ -165,7 +205,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
 
     const ensureScript = () => {
       if (window.JitsiMeetExternalAPI) {
-        mount();
+        void mount();
         return;
       }
       const existing = Array.from(
@@ -173,7 +213,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
       ).find((script) => script.src === externalApiUrl);
       if (existing) {
         existing.addEventListener('load', () => {
-          if (!cancelled) mount();
+          if (!cancelled) void mount();
         });
         return;
       }
@@ -182,7 +222,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
       script.async = true;
       script.dataset.jitsiExternalApi = 'true';
       script.onload = () => {
-        if (!cancelled) mount();
+        if (!cancelled) void mount();
       };
       script.onerror = () => {
         if (!cancelled) {

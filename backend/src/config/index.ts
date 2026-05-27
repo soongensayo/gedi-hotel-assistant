@@ -80,6 +80,13 @@ export const config = {
   // Stanford showcase card encoder/dispenser service
   stanfordEncoderUrl: (process.env.STANFORD_ENCODER_URL || 'http://localhost:5000').replace(/\/$/, ''),
 
+  // Jitsi as a Service (JaaS)
+  jaasAppId: process.env.JAAS_APP_ID || process.env.VITE_JITSI_APP_ID || '',
+  jaasKid: process.env.JAAS_KID || '',
+  jaasPrivateKey: (process.env.JAAS_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+  jaasPrivateKeyPath: process.env.JAAS_PRIVATE_KEY_PATH || '',
+  jaasTokenTtlSeconds: parseInt(process.env.JAAS_TOKEN_TTL_SECONDS || '7200', 10),
+
   // Sesto Robot
   sestoApiUrl: process.env.SESTO_API_URL || '',
 
