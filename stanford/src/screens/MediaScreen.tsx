@@ -20,7 +20,7 @@ export function MediaScreen({ onCallConcierge }: Props) {
           <button
             type="button"
             className={`rounded-lg px-4 py-2 text-sm ${
-              tab === 'music' ? 'bg-[var(--color-hotel-accent)] text-black' : 'text-white/70'
+              tab === 'music' ? 'bg-[var(--color-hotel-accent)] text-white' : 'text-[var(--color-hotel-text-dim)]'
             }`}
             onClick={() => setTab('music')}
           >
@@ -29,7 +29,7 @@ export function MediaScreen({ onCallConcierge }: Props) {
           <button
             type="button"
             className={`rounded-lg px-4 py-2 text-sm ${
-              tab === 'video' ? 'bg-[var(--color-hotel-accent)] text-black' : 'text-white/70'
+              tab === 'video' ? 'bg-[var(--color-hotel-accent)] text-white' : 'text-[var(--color-hotel-text-dim)]'
             }`}
             onClick={() => setTab('video')}
           >
@@ -42,7 +42,7 @@ export function MediaScreen({ onCallConcierge }: Props) {
             <div className="flex h-full flex-col items-center justify-center text-center">
               <p className="text-[var(--color-hotel-text-dim)]">Now playing (demo)</p>
               <p className="mt-2 text-xl text-[var(--color-hotel-accent)]">Jazz Essentials</p>
-              <p className="mt-4 text-sm text-white/50">
+              <p className="mt-4 text-sm text-[var(--color-hotel-text-dim)]">
                 Wire your audio source or streaming API for the showcase.
               </p>
             </div>
@@ -65,7 +65,7 @@ export function MediaScreen({ onCallConcierge }: Props) {
         <div className="shrink-0 p-6">
           <button
             type="button"
-            className="w-full animate-pulse rounded-full border border-[var(--color-hotel-accent)] bg-[var(--color-hotel-accent)]/20 py-4 text-[var(--color-hotel-accent)] shadow-[0_0_20px_rgba(197,160,89,0.35)]"
+            className="w-full animate-pulse rounded-full border border-[var(--color-hotel-accent)] bg-[var(--color-hotel-accent)] py-4 font-medium text-white shadow-[0_18px_44px_rgba(31,106,88,0.22)]"
             onClick={onCallConcierge}
           >
             Call Concierge

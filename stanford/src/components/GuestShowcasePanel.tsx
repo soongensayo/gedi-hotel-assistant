@@ -62,51 +62,51 @@ export function GuestShowcasePanel() {
   }, []);
 
   return (
-    <section className="relative h-[36vh] min-h-[300px] shrink-0 overflow-hidden border-t border-[var(--color-hotel-border)] bg-[#090706]">
+    <section className="guest-showcase-panel relative shrink-0 overflow-hidden border-t border-[var(--color-hotel-border)] bg-[#eee5d5]">
       <img
         src="/images/luxury-arrival-showcase.png"
         alt=""
-        className="hotel-ambient-image absolute inset-0 h-full w-full scale-105 object-cover opacity-60"
+        className="hotel-ambient-image absolute inset-0 h-full w-full scale-105 object-cover opacity-28 mix-blend-multiply"
       />
-      <div className="hotel-light-sweep absolute inset-y-0 left-[-35%] w-1/2 rotate-12 bg-[linear-gradient(90deg,transparent,rgba(212,176,122,0.12),transparent)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(12,10,9,0.92),rgba(12,10,9,0.58)_48%,rgba(12,10,9,0.86))]" />
-      <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(12,10,9,0.9),rgba(12,10,9,0.2)_58%,rgba(12,10,9,0.78))]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_30%,rgba(197,160,89,0.16),transparent_28%),radial-gradient(circle_at_78%_58%,rgba(255,255,255,0.08),transparent_30%)]" />
+      <div className="hotel-light-sweep absolute inset-y-0 left-[-35%] w-1/2 rotate-12 bg-[linear-gradient(90deg,transparent,rgba(255,252,244,0.46),transparent)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(244,239,228,0.96),rgba(244,239,228,0.76)_48%,rgba(237,226,207,0.92))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(244,239,228,0.96),rgba(244,239,228,0.54)_58%,rgba(244,239,228,0.9))]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_30%,rgba(31,106,88,0.12),transparent_28%),radial-gradient(circle_at_78%_58%,rgba(181,138,74,0.14),transparent_30%)]" />
 
-      <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)_auto] gap-3 px-5 py-4 md:px-10 md:py-5">
+      <div className="guest-showcase-content relative grid h-full grid-rows-[auto_minmax(0,1fr)_auto] gap-3 px-5 py-4 md:px-10 md:py-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
+            <p className="text-[11px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
               Tonight at the house
             </p>
             <h2 className="mt-1 text-2xl leading-tight text-[var(--color-hotel-text)] md:text-3xl">
               A quieter arrival, a better evening.
             </h2>
           </div>
-          <p className="hidden max-w-xs text-right text-xs leading-5 text-white/58 sm:block">
+          <p className="hidden max-w-xs text-right text-xs leading-5 text-[var(--color-hotel-text-dim)] sm:block">
             Ask your concierge to add any experience to your stay before your key is issued.
           </p>
         </div>
 
         <div className="grid min-h-0 gap-3 md:grid-cols-[1.05fr_1fr]">
-          <article className="relative flex min-h-0 flex-col justify-end overflow-hidden rounded-lg border border-white/12 bg-black/30 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)] backdrop-blur-sm">
+          <article className="relative flex min-h-0 flex-col justify-end overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] p-4 shadow-[0_18px_60px_rgba(31,106,88,0.12)] backdrop-blur-sm">
             <div className="absolute left-0 top-0 h-px w-full bg-[linear-gradient(90deg,transparent,var(--color-hotel-accent),transparent)] opacity-60" />
             <div
               key={activeExperience.title}
               className="hotel-card-reveal"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] uppercase tracking-widest text-white/45">
+                <p className="text-[11px] uppercase tracking-widest text-[var(--color-hotel-text-dim)]">
                   {activeExperience.label}
                 </p>
-                <span className="rounded-full border border-[var(--color-hotel-accent)]/35 bg-[var(--color-hotel-accent)]/10 px-2 py-1 text-[9px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
+                <span className="rounded-full border border-[var(--color-hotel-accent)]/35 bg-[var(--color-hotel-accent)]/10 px-2 py-1 text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
                   {activeExperience.meta}
                 </span>
               </div>
               <h3 className="mt-2 text-xl text-[var(--color-hotel-accent)]">
                 {activeExperience.title}
               </h3>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-white/72">
+              <p className="mt-2 max-w-lg text-[15px] leading-6 text-[var(--color-hotel-text-dim)]">
                 {activeExperience.body}
               </p>
             </div>
@@ -119,12 +119,12 @@ export function GuestShowcasePanel() {
                   className={`h-1.5 rounded-full transition-all ${
                     index === activeIndex
                       ? 'w-9 bg-[var(--color-hotel-accent)]'
-                      : 'w-3 bg-white/22'
+                      : 'w-3 bg-[var(--color-hotel-border)]'
                   }`}
                   onClick={() => setActiveIndex(index)}
                 />
               ))}
-              <div className="ml-2 h-px flex-1 overflow-hidden bg-white/12">
+              <div className="ml-2 h-px flex-1 overflow-hidden bg-[var(--color-hotel-border)]">
                 <div
                   key={activeExperience.title}
                   className="hotel-progress h-full bg-[var(--color-hotel-accent)]"
@@ -137,14 +137,14 @@ export function GuestShowcasePanel() {
             {HIGHLIGHTS.map((item, index) => (
               <article
                 key={item.label}
-                className="hotel-float-card overflow-hidden rounded-lg border border-white/12 bg-white/[0.055] p-3 backdrop-blur-sm"
+                className="hotel-float-card overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card)] p-3 backdrop-blur-sm"
                 style={{ animationDelay: `${index * 420}ms` }}
               >
-                <p className="text-[9px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
+                <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
                   {item.label}
                 </p>
-                <h3 className="mt-2 text-sm leading-snug text-white">{item.title}</h3>
-                <p className="mt-2 line-clamp-3 text-[11px] leading-5 text-white/58">
+                <h3 className="mt-2 text-[15px] leading-snug text-[var(--color-hotel-text)]">{item.title}</h3>
+                <p className="mt-2 line-clamp-3 text-xs leading-5 text-[var(--color-hotel-text-dim)]">
                   {item.body}
                 </p>
               </article>
@@ -152,7 +152,7 @@ export function GuestShowcasePanel() {
           </div>
         </div>
 
-        <div className="overflow-hidden border-t border-white/10 pt-3">
+        <div className="overflow-hidden border-t border-[var(--color-hotel-border)] pt-3">
           <div className="hotel-fact-ticker flex w-max gap-8">
             {tickerItems.map((item, index) => {
               const [value, label] = item.split(' / ');
@@ -160,7 +160,7 @@ export function GuestShowcasePanel() {
               return (
                 <div key={`${item}-${index}`} className="flex min-w-max items-baseline gap-2">
                   <p className="text-sm text-[var(--color-hotel-accent)]">{value}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-white/42">
+                  <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-text-dim)]">
                     {label}
                   </p>
                 </div>

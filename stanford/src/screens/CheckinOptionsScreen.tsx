@@ -29,7 +29,7 @@ export function CheckinOptionsScreen({ onChoose, onBack }: Props) {
         <div className="flex w-full max-w-xl flex-col gap-4">
           <button
             type="button"
-            className="rounded-xl border border-[var(--color-hotel-border)] bg-white/5 px-6 py-4 text-left transition hover:border-[var(--color-hotel-accent)]"
+            className="rounded-xl border border-[var(--color-hotel-border)] bg-[var(--guest-card)] px-6 py-4 text-left shadow-[0_14px_38px_rgba(31,106,88,0.08)] transition hover:border-[var(--color-hotel-accent)]"
             onClick={() => onChoose('desk')}
           >
             <span className="text-lg text-[var(--color-hotel-accent)]">Check in at the front desk</span>
@@ -39,7 +39,7 @@ export function CheckinOptionsScreen({ onChoose, onBack }: Props) {
           </button>
           <button
             type="button"
-            className="rounded-xl border border-[var(--color-hotel-border)] bg-white/5 px-6 py-4 text-left transition hover:border-[var(--color-hotel-accent)]"
+            className="rounded-xl border border-[var(--color-hotel-border)] bg-[var(--guest-card)] px-6 py-4 text-left shadow-[0_14px_38px_rgba(31,106,88,0.08)] transition hover:border-[var(--color-hotel-accent)]"
             onClick={() => onChoose('ai')}
           >
             <span className="text-lg text-[var(--color-hotel-accent)]">Check in with an AI agent</span>
@@ -49,7 +49,7 @@ export function CheckinOptionsScreen({ onChoose, onBack }: Props) {
           </button>
           <button
             type="button"
-            className="rounded-xl border-2 border-[var(--color-hotel-accent)] bg-[var(--color-hotel-accent)]/10 px-6 py-4 text-left transition hover:bg-[var(--color-hotel-accent)]/20"
+            className="rounded-xl border-2 border-[var(--color-hotel-accent)] bg-[var(--color-hotel-accent)]/10 px-6 py-4 text-left shadow-[0_18px_44px_rgba(31,106,88,0.14)] transition hover:bg-[var(--color-hotel-accent)]/16"
             onClick={() => onChoose('concierge')}
           >
             <span className="text-lg text-[var(--color-hotel-accent)]">

@@ -9,7 +9,7 @@ export function WelcomeScreen({ onReadyToCheckIn }: Props) {
   return (
     <GuestPortraitShell>
       <div className="flex h-full flex-col px-5 py-5 md:px-10 md:py-8">
-        <header className="flex items-center justify-between text-xs uppercase tracking-widest text-white/45">
+        <header className="flex items-center justify-between text-xs uppercase tracking-widest text-[var(--color-hotel-text-dim)]">
           <span>LuxeDrive Arrival</span>
           <span className="text-[var(--color-hotel-accent)]">Singapore</span>
         </header>
@@ -35,9 +35,9 @@ export function WelcomeScreen({ onReadyToCheckIn }: Props) {
               ].map(([label, value]) => (
                 <div
                   key={label}
-                  className="rounded-lg border border-[var(--color-hotel-border)] bg-white/[0.04] px-3 py-4"
+                  className="rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card)] px-3 py-4 shadow-[0_12px_34px_rgba(31,106,88,0.08)]"
                 >
-                  <p className="text-[10px] uppercase tracking-widest text-white/35">{label}</p>
+                  <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-text-dim)]">{label}</p>
                   <p className="mt-2 text-sm text-[var(--color-hotel-text)]">{value}</p>
                 </div>
               ))}
@@ -45,7 +45,7 @@ export function WelcomeScreen({ onReadyToCheckIn }: Props) {
 
             <button
               type="button"
-              className="mt-8 rounded-lg border border-[var(--color-hotel-accent)] bg-[var(--color-hotel-accent)] px-8 py-4 text-base font-medium tracking-wide text-black shadow-[0_18px_40px_rgba(197,160,89,0.22)] transition hover:bg-[var(--color-hotel-gold)] active:scale-[0.99]"
+              className="mt-8 rounded-lg border border-[var(--color-hotel-accent)] bg-[var(--color-hotel-accent)] px-8 py-4 text-base font-medium tracking-wide text-white shadow-[0_18px_40px_rgba(197,160,89,0.22)] transition hover:bg-[var(--color-hotel-gold)] active:scale-[0.99]"
               onClick={onReadyToCheckIn}
             >
               Begin check-in

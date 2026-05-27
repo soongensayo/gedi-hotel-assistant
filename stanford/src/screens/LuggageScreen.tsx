@@ -44,7 +44,7 @@ export function LuggageScreen({ onSubmit }: Props) {
       </label>
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-black"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
         onClick={() => onSubmit(count, needsHelp, eta)}
       >
         Send to bell team

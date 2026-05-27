@@ -153,7 +153,7 @@ function CameraPassportScan({
       {!captured && cameraReady && (
         <button
           type="button"
-          className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-black"
+          className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
           onClick={capture}
         >
           Capture
@@ -171,7 +171,7 @@ function CameraPassportScan({
           </button>
           <button
             type="button"
-            className="flex-1 rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-black"
+            className="flex-1 rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
             onClick={() => onComplete(undefined, captured)}
           >
             Send to concierge

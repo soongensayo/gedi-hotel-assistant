@@ -14,8 +14,8 @@ export function SignatureCapture({ onSubmit }: Props) {
     if (!canvas) return;
 
     const pad = new SignaturePadLib(canvas, {
-      backgroundColor: 'rgb(12, 10, 9)',
-      penColor: 'rgb(212, 176, 122)',
+      backgroundColor: 'rgb(255, 252, 244)',
+      penColor: 'rgb(31, 106, 88)',
     });
     padRef.current = pad;
 
@@ -54,7 +54,7 @@ export function SignatureCapture({ onSubmit }: Props) {
         </button>
         <button
           type="button"
-          className="rounded-lg bg-[var(--color-hotel-accent)] px-4 py-2 text-sm font-medium text-black"
+          className="rounded-lg bg-[var(--color-hotel-accent)] px-4 py-2 text-sm font-medium text-white"
           onClick={() => {
             const pad = padRef.current;
             if (!pad || pad.isEmpty()) return;
