@@ -12,7 +12,10 @@ const defaultCertPath = fileURLToPath(new URL('./certs/dev-cert.pem', import.met
 const resolveFromRepoRoot = (value: string) => (isAbsolute(value) ? value : resolve(repoRoot, value));
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '..', '');
+  const env = {
+    ...loadEnv(mode, '..', ''),
+    ...process.env,
+  };
   const useHttps = env.STANFORD_HTTPS === 'true';
   const keyPath = env.STANFORD_HTTPS_KEY
     ? resolveFromRepoRoot(env.STANFORD_HTTPS_KEY)

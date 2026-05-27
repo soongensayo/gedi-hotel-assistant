@@ -81,10 +81,41 @@ For 8x8 JaaS, set these in `.env` and restart the Vite server:
 ```bash
 VITE_JITSI_DOMAIN=8x8.vc
 VITE_JITSI_APP_ID=vpaas-magic-cookie-your-jaas-app-id
-VITE_JITSI_JWT=your-short-lived-room-jwt
+JAAS_APP_ID=vpaas-magic-cookie-your-jaas-app-id
+JAAS_KID=vpaas-magic-cookie-your-jaas-app-id/your-key-id
+JAAS_PRIVATE_KEY_PATH=./secrets/jaas-private-key.pem
 ```
 
-The app loads the correct JaaS `external_api.js`, prefixes the room with the JaaS app id, and passes the JWT into the iframe API.
+The app loads the correct JaaS `external_api.js`, prefixes the room with the JaaS app id, and asks the backend for role-specific JWTs. Staff joins as moderator; guest joins as a normal participant. The JaaS private key must stay server-side and should not use the `VITE_` prefix.
+
+### Demo fallback staff launcher
+
+If HTTPS cert setup is fighting you, use the Chrome secure-origin fallback on the staff laptop:
+
+```bash
+npm run demo:staff:fallback -- http://10.32.35.221:5174/staff
+```
+
+This opens a temporary Chrome profile with `http://10.32.35.221:5174` treated as secure for camera and microphone access. Keep that Chrome window open for the demo. This is a lab fallback, not a production deployment mode.
+
+### Recommended showcase runbook
+
+**Public Jitsi fallback, fastest:**
+
+1. Interface machine terminal 1: encoder Python service
+2. Interface machine terminal 2: `npm run dev:backend`
+3. Interface machine terminal 3: `npm run dev:stanford`
+4. Guest screen: `http://localhost:5174/`
+5. Staff laptop: `npm run demo:staff:fallback -- http://<LAN_IP>:5174/staff`
+
+**JaaS, cleaner call behavior:**
+
+1. Add JaaS env vars above.
+2. Interface machine terminal 1: encoder Python service
+3. Interface machine terminal 2: `npm run dev:backend`
+4. Interface machine terminal 3: `npm run dev:stanford`
+5. Guest screen: `http://localhost:5174/`
+6. Staff laptop: `npm run demo:staff:fallback -- http://<LAN_IP>:5174/staff`
 
 ## Concierge flow
 
