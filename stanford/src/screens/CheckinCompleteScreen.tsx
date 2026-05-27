@@ -26,8 +26,8 @@ export function CheckinCompleteScreen({ reservation, onContinue }: Props) {
 
   return (
     <GuestPortraitShell>
-      <div className="flex h-full flex-col items-center justify-center px-6 py-8 text-center">
-        <div className="hotel-card-reveal w-full max-w-2xl rounded-2xl border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] px-6 py-8 shadow-[0_24px_80px_rgba(31,106,88,0.16)]">
+      <div className="flex h-full flex-col items-center justify-center overflow-y-auto px-5 py-5 text-center md:px-6 md:py-8">
+        <div className="hotel-card-reveal checkin-complete-card w-full max-w-2xl rounded-2xl border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] px-5 py-5 shadow-[0_24px_80px_rgba(31,106,88,0.16)] md:px-6 md:py-8">
           <p className="text-xs uppercase tracking-[0.28em] text-[var(--color-hotel-accent)]">
             Check-in complete
           </p>
@@ -38,7 +38,7 @@ export function CheckinCompleteScreen({ reservation, onContinue }: Props) {
             You are fully checked in and may proceed straight to your room.
           </p>
 
-          <div className="mt-7 grid gap-3 sm:grid-cols-3">
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <SummaryCard label="Room" value={room?.roomNumber ?? 'Ready'} />
             <SummaryCard
               label="Time saved"
@@ -48,7 +48,7 @@ export function CheckinCompleteScreen({ reservation, onContinue }: Props) {
             <SummaryCard label="Status" value="Key issued" />
           </div>
 
-          <div className="mt-7 rounded-xl border border-[var(--color-hotel-border)] bg-[var(--color-hotel-accent)]/8 px-5 py-4">
+          <div className="checkin-complete-note mt-6 rounded-xl border border-[var(--color-hotel-border)] bg-[var(--color-hotel-accent)]/8 px-5 py-4">
             <p className="text-base leading-7 text-[var(--color-hotel-text)]">
               Your concierge has completed reservation verification, payment,
               signature, and room-key setup.
@@ -57,7 +57,7 @@ export function CheckinCompleteScreen({ reservation, onContinue }: Props) {
 
           <button
             type="button"
-            className="mt-7 rounded-full bg-[var(--color-hotel-accent)] px-8 py-3 font-medium text-white shadow-[0_18px_44px_rgba(31,106,88,0.22)]"
+            className="mt-6 rounded-full bg-[var(--color-hotel-accent)] px-8 py-3 font-medium text-white shadow-[0_18px_44px_rgba(31,106,88,0.22)]"
             onClick={onContinue}
           >
             Continue
