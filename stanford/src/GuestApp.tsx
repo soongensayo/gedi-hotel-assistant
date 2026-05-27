@@ -1,4 +1,5 @@
 import { STANFORD_ROOM_ID } from './config';
+import { AmbientJazz } from './components/AmbientJazz';
 import { useStanfordGuest } from './hooks/useStanfordGuest';
 import { CheckinCompleteScreen } from './screens/CheckinCompleteScreen';
 import { CheckinOptionsScreen } from './screens/CheckinOptionsScreen';
@@ -11,34 +12,49 @@ export function GuestApp() {
   const roomId = STANFORD_ROOM_ID;
   const stanford = useStanfordGuest(roomId);
   const { phase, setPhase, sendToStaff } = stanford;
+  const ambience = <AmbientJazz enabled={phase !== 'concierge'} />;
 
   if (phase === 'welcome') {
     return (
-      <WelcomeScreen onReadyToCheckIn={() => setPhase('checkin-options')} />
+      <>
+        {ambience}
+        <WelcomeScreen onReadyToCheckIn={() => setPhase('checkin-options')} />
+      </>
     );
   }
 
   if (phase === 'checkin-options') {
     return (
-      <CheckinOptionsScreen
-        onBack={() => setPhase('welcome')}
-        onChoose={(opt) => {
-          if (opt === 'desk') setPhase('stub-front-desk');
-          else if (opt === 'ai') setPhase('stub-ai');
-          else setPhase('concierge');
-        }}
-      />
+      <>
+        {ambience}
+        <CheckinOptionsScreen
+          onBack={() => setPhase('welcome')}
+          onChoose={(opt) => {
+            if (opt === 'desk') setPhase('stub-front-desk');
+            else if (opt === 'ai') setPhase('stub-ai');
+            else setPhase('concierge');
+          }}
+        />
+      </>
     );
   }
 
   if (phase === 'stub-front-desk') {
     return (
-      <StubMessageScreen variant="desk" onBack={() => setPhase('welcome')} />
+      <>
+        {ambience}
+        <StubMessageScreen variant="desk" onBack={() => setPhase('welcome')} />
+      </>
     );
   }
 
   if (phase === 'stub-ai') {
-    return <StubMessageScreen variant="ai" onBack={() => setPhase('welcome')} />;
+    return (
+      <>
+        {ambience}
+        <StubMessageScreen variant="ai" onBack={() => setPhase('welcome')} />
+      </>
+    );
   }
 
   if (phase === 'concierge') {
@@ -47,22 +63,28 @@ export function GuestApp() {
 
   if (phase === 'checkin-complete') {
     return (
-      <CheckinCompleteScreen
-        reservation={stanford.reservation}
-        onContinue={() => setPhase('media')}
-      />
+      <>
+        {ambience}
+        <CheckinCompleteScreen
+          reservation={stanford.reservation}
+          onContinue={() => setPhase('media')}
+        />
+      </>
     );
   }
 
   if (phase === 'media') {
     return (
-      <MediaScreen
-        onCallConcierge={() => {
-          sendToStaff({ type: 'call_concierge' });
-          stanford.setActiveScreen('video-only');
-          setPhase('concierge');
-        }}
-      />
+      <>
+        {ambience}
+        <MediaScreen
+          onCallConcierge={() => {
+            sendToStaff({ type: 'call_concierge' });
+            stanford.setActiveScreen('video-only');
+            setPhase('concierge');
+          }}
+        />
+      </>
     );
   }
 

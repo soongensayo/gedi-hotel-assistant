@@ -94,7 +94,7 @@ button {
 }
 
 .guest-showcase-panel {
-  height: clamp(260px, 34dvh, 380px);
+  height: clamp(290px, 38dvh, 430px);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -104,6 +104,11 @@ button {
 
 .guest-highlight-title {
   overflow-wrap: anywhere;
+}
+
+.checkin-complete-card {
+  max-height: calc(100dvh - 2.5rem);
+  overflow-y: auto;
 }
 
 .hotel-ambient-image {
@@ -211,12 +216,12 @@ button {
 
 @media (orientation: portrait) and (max-width: 900px) {
   .guest-showcase-panel {
-    height: clamp(238px, 30dvh, 320px);
+    height: clamp(285px, 36dvh, 390px);
   }
 
   .guest-showcase-content {
-    gap: 0.55rem;
-    padding: 0.8rem 1rem max(0.8rem, env(safe-area-inset-bottom));
+    gap: 0.7rem;
+    padding: 0.95rem 1rem max(0.95rem, env(safe-area-inset-bottom));
   }
 
   .guest-showcase-content h2 {
@@ -239,9 +244,9 @@ button {
 
   .guest-showcase-content .guest-highlight-card {
     display: flex;
-    min-height: 76px;
+    min-height: 104px;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .guest-showcase-content .guest-highlight-body {
@@ -250,10 +255,10 @@ button {
 
   .guest-showcase-content .guest-highlight-title {
     display: -webkit-box;
-    margin-top: 0.35rem;
+    margin-top: 0.45rem;
     overflow: hidden;
-    font-size: 0.95rem;
-    line-height: 1.25;
+    font-size: 0.9rem;
+    line-height: 1.42;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
@@ -273,7 +278,7 @@ button {
 
 @media (orientation: portrait) and (max-height: 780px) {
   .guest-showcase-panel {
-    height: clamp(215px, 28dvh, 260px);
+    height: clamp(260px, 34dvh, 320px);
   }
 
   .guest-showcase-content {
@@ -291,5 +296,47 @@ button {
 
   .guest-showcase-content .guest-feature-card {
     justify-content: center;
+  }
+
+  .guest-showcase-content .guest-highlight-card {
+    min-height: 88px;
+    padding-block: 0.7rem;
+  }
+
+  .guest-showcase-content .guest-highlight-title {
+    font-size: 0.86rem;
+    line-height: 1.4;
+  }
+
+  .checkin-complete-card {
+    padding: 1rem;
+  }
+
+  .checkin-complete-card h1 {
+    margin-top: 0.65rem;
+    font-size: clamp(2rem, 5.2dvh, 3rem);
+  }
+
+  .checkin-complete-card h1 + p {
+    margin-top: 0.7rem;
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .checkin-complete-card > div:nth-of-type(1) {
+    margin-top: 1rem;
+    grid-template-columns: 1fr;
+  }
+
+  .checkin-complete-card > div:nth-of-type(1) > div {
+    padding-block: 0.75rem;
+  }
+
+  .checkin-complete-card > div:nth-of-type(1) p:nth-child(2) {
+    font-size: 1.45rem;
+  }
+
+  .checkin-complete-note {
+    display: none;
   }
 }
