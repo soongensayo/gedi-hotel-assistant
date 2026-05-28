@@ -36,7 +36,7 @@ public static class PcscDemo {
     out IntPtr context
   );
 
-  [DllImport("winscard.dll", CharSet = CharSet.Unicode)]
+  [DllImport("winscard.dll", EntryPoint = "SCardListReadersW", CharSet = CharSet.Unicode)]
   public static extern int SCardListReaders(
     IntPtr context,
     string groups,
@@ -44,7 +44,7 @@ public static class PcscDemo {
     ref int readerCount
   );
 
-  [DllImport("winscard.dll")]
+  [DllImport("winscard.dll", EntryPoint = "SCardGetStatusChangeW", CharSet = CharSet.Unicode)]
   public static extern int SCardGetStatusChange(
     IntPtr context,
     int timeoutMs,
