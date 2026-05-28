@@ -5,6 +5,7 @@ type Props = {
   qrValue: string;
   instructions?: string;
   onPaidDemo: () => void;
+  successRequestId?: number;
 };
 
 type ReaderState = 'connecting' | 'ready' | 'offline' | 'detected';
@@ -13,7 +14,7 @@ const NFC_POLL_INTERVAL_MS = 1_000;
 const KEYBOARD_TAP_IDLE_MS = 220;
 const MIN_KEYBOARD_TAP_CHARS = 4;
 
-export function PaymentScreen({ instructions, onPaidDemo }: Props) {
+export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }: Props) {
   const [readerState, setReaderState] = useState<ReaderState>('connecting');
   const [readerMessage, setReaderMessage] = useState('Checking NFC reader...');
   const paidRef = useRef(false);
@@ -21,12 +22,14 @@ export function PaymentScreen({ instructions, onPaidDemo }: Props) {
   const keyboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const completePayment = useCallback(
-    (source: 'serial' | 'keyboard' | 'button') => {
+    (source: 'serial' | 'keyboard' | 'button' | 'staff') => {
       if (paidRef.current) return;
       paidRef.current = true;
       setReaderState('detected');
       setReaderMessage(
-        source === 'button' ? 'Demo payment accepted.' : 'NFC tap detected. Payment accepted.'
+        source === 'button' || source === 'staff'
+          ? 'Demo payment accepted.'
+          : 'NFC tap detected. Payment accepted.'
       );
       window.setTimeout(onPaidDemo, 650);
     },
@@ -79,6 +82,11 @@ export function PaymentScreen({ instructions, onPaidDemo }: Props) {
       if (pollTimer) window.clearInterval(pollTimer);
     };
   }, [completePayment]);
+
+  useEffect(() => {
+    if (successRequestId <= 0) return;
+    completePayment('staff');
+  }, [completePayment, successRequestId]);
 
   useEffect(() => {
     const flushKeyboardTap = () => {

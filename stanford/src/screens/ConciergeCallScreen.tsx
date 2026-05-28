@@ -35,6 +35,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
     customMessage,
     passportScanMode,
     passportCaptureRequestId,
+    paymentSuccessRequestId,
     sendToStaff,
     setActiveScreen,
   } = stanford;
@@ -82,6 +83,7 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
           <PaymentScreen
             qrValue={paymentQr.qrValue}
             instructions={paymentQr.instructions}
+            successRequestId={paymentSuccessRequestId}
             onPaidDemo={() => sendToStaffAndClose({ type: 'payment_complete' })}
           />
         ) : (

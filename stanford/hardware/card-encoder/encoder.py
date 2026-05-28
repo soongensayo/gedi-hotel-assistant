@@ -2,6 +2,7 @@ import csv
 import os
 import random
 import string
+import threading
 import time
 from datetime import datetime
 
@@ -15,8 +16,11 @@ CSV_FILE = os.environ.get("ENCODER_GUESTS_CSV", "guests.csv")
 ARDUINO_PORT = os.environ.get("ENCODER_ARDUINO_PORT", "COM3")
 ARDUINO_BAUD = int(os.environ.get("ENCODER_ARDUINO_BAUD", "9600"))
 CARD_TIMEOUT_SECONDS = int(os.environ.get("ENCODER_CARD_TIMEOUT_SECONDS", "25"))
+ARDUINO_COMMAND_TIMEOUT_SECONDS = int(os.environ.get("ENCODER_ARDUINO_COMMAND_TIMEOUT_SECONDS", "30"))
+DISPENSE_SETTLE_SECONDS = float(os.environ.get("ENCODER_DISPENSE_SETTLE_SECONDS", "2"))
 
 arduino = None
+hardware_lock = threading.Lock()
 
 app = Flask(__name__)
 
@@ -35,8 +39,9 @@ def send_arduino_command(cmd):
     ser = get_arduino()
     ser.reset_input_buffer()
     ser.write(str(cmd).encode("ascii"))
+    start = time.time()
 
-    while True:
+    while time.time() - start < ARDUINO_COMMAND_TIMEOUT_SECONDS:
         line = ser.readline().decode(errors="ignore").strip()
 
         if line:
@@ -44,6 +49,21 @@ def send_arduino_command(cmd):
 
         if line == "DONE":
             return
+
+    raise RuntimeError(f"Arduino command {cmd} timed out waiting for DONE.")
+
+
+def with_hardware_lock(action):
+    if not hardware_lock.acquire(blocking=False):
+        return jsonify({
+            "ok": False,
+            "message": "Card hardware is busy. Please wait for the current action to finish."
+        }), 409
+
+    try:
+        return action()
+    finally:
+        hardware_lock.release()
 
 
 def load_data():
@@ -175,6 +195,40 @@ def wait_until_no_card():
         time.sleep(0.3)
 
 
+def wait_until_no_card_or_timeout(timeout=CARD_TIMEOUT_SECONDS):
+    start = time.time()
+
+    while time.time() - start < timeout:
+        if not is_card_present():
+            return True
+
+        time.sleep(0.3)
+
+    return False
+
+
+def preload_card():
+    send_arduino_command("1")
+    wait_for_card(CARD_TIMEOUT_SECONDS)
+    send_arduino_command("2")
+
+
+def dispense_card(wait_for_removal=True):
+    send_arduino_command("3")
+
+    if wait_for_removal:
+        wait_until_no_card()
+        removed = True
+    else:
+        removed = wait_until_no_card_or_timeout(CARD_TIMEOUT_SECONDS)
+
+    time.sleep(DISPENSE_SETTLE_SECONDS)
+    send_arduino_command("4")
+
+    if not removed:
+        raise RuntimeError("Dispense moved out and back, but the card was not removed before timeout.")
+
+
 def write_page(conn, page, data4):
     if len(data4) != 4:
         raise ValueError("Each page write requires exactly 4 bytes.")
@@ -240,9 +294,7 @@ def issue_card_for_guest(name, room=None, card_label="Primary", should_preload=F
         raise RuntimeError("Room number is required to encode a card.")
 
     if should_preload:
-        send_arduino_command("1")
-        wait_for_card(CARD_TIMEOUT_SECONDS)
-        send_arduino_command("2")
+        preload_card()
 
     wait_for_card(CARD_TIMEOUT_SECONDS)
     uid, code = issue_one_card(card_label, room_number)
@@ -254,10 +306,7 @@ def issue_card_for_guest(name, room=None, card_label="Primary", should_preload=F
 
     save_data(data)
 
-    send_arduino_command("3")
-    wait_until_no_card()
-    time.sleep(2)
-    send_arduino_command("4")
+    dispense_card()
 
     return uid, code, guest
 
@@ -303,146 +352,166 @@ def api_find_guest():
 
 @app.route("/api/preload", methods=["POST"])
 def api_preload():
-    try:
-        send_arduino_command("1")
-        wait_for_card()
-        send_arduino_command("2")
+    def action():
+        try:
+            preload_card()
 
-        return jsonify({
-            "ok": True,
-            "message": "Preload complete. Card is ready to encode."
-        })
+            return jsonify({
+                "ok": True,
+                "message": "Preload complete. Card is ready to encode."
+            })
 
-    except Exception as e:
-        return jsonify({
-            "ok": False,
-            "message": f"Preload failed: {e}"
-        })
+        except Exception as e:
+            return jsonify({
+                "ok": False,
+                "message": f"Preload failed: {e}"
+            }), 500
+
+    return with_hardware_lock(action)
+
+
+@app.route("/api/dispense", methods=["POST"])
+def api_dispense():
+    def action():
+        try:
+            dispense_card(wait_for_removal=False)
+
+            return jsonify({
+                "ok": True,
+                "message": "Dispense complete. Drawer extended and returned."
+            })
+
+        except Exception as e:
+            return jsonify({
+                "ok": False,
+                "message": f"Dispense failed: {e}"
+            }), 500
+
+    return with_hardware_lock(action)
 
 
 @app.route("/api/issue_primary", methods=["POST"])
 def api_issue_primary():
-    try:
-        body = request.get_json()
-        name = body.get("name", "").strip()
+    def action():
+        try:
+            body = request.get_json()
+            name = body.get("name", "").strip()
 
-        data = load_data()
-        guest = find_guest(data, name)
+            data = load_data()
+            guest = find_guest(data, name)
 
-        if not guest:
+            if not guest:
+                return jsonify({
+                    "ok": False,
+                    "message": "Guest not found."
+                })
+
+            room = guest["Room"].strip()
+
+            wait_for_card()
+
+            uid, code = issue_one_card("Primary", room)
+
+            update_guest_cards(guest, primary_code=code)
+            save_data(data)
+
+            dispense_card()
+
             return jsonify({
-                "ok": False,
-                "message": "Guest not found."
+                "ok": True,
+                "message": f"First card written successfully. UID: {uid}, Code: {code}",
+                "guest": guest
             })
 
-        room = guest["Room"].strip()
+        except Exception as e:
+            return jsonify({
+                "ok": False,
+                "message": f"Failed during first card sequence: {e}"
+            })
 
-        wait_for_card()
-
-        uid, code = issue_one_card("Primary", room)
-
-        update_guest_cards(guest, primary_code=code)
-        save_data(data)
-
-        send_arduino_command("3")
-        wait_until_no_card()
-
-        time.sleep(2)
-
-        send_arduino_command("4")
-
-        return jsonify({
-            "ok": True,
-            "message": f"First card written successfully. UID: {uid}, Code: {code}",
-            "guest": guest
-        })
-
-    except Exception as e:
-        return jsonify({
-            "ok": False,
-            "message": f"Failed during first card sequence: {e}"
-        })
+    return with_hardware_lock(action)
 
 
 @app.route("/api/issue_secondary", methods=["POST"])
 def api_issue_secondary():
-    try:
-        body = request.get_json()
-        name = body.get("name", "").strip()
+    def action():
+        try:
+            body = request.get_json()
+            name = body.get("name", "").strip()
 
-        data = load_data()
-        guest = find_guest(data, name)
+            data = load_data()
+            guest = find_guest(data, name)
 
-        if not guest:
+            if not guest:
+                return jsonify({
+                    "ok": False,
+                    "message": "Guest not found."
+                })
+
+            room = guest["Room"].strip()
+
+            wait_for_card()
+
+            uid, code = issue_one_card("Secondary", room)
+
+            update_guest_cards(guest, secondary_code=code)
+            save_data(data)
+
+            dispense_card()
+
             return jsonify({
-                "ok": False,
-                "message": "Guest not found."
+                "ok": True,
+                "message": f"Second card written successfully. UID: {uid}, Code: {code}",
+                "guest": guest
             })
 
-        room = guest["Room"].strip()
+        except Exception as e:
+            return jsonify({
+                "ok": False,
+                "message": f"Failed during second card sequence: {e}"
+            })
 
-        wait_for_card()
-
-        uid, code = issue_one_card("Secondary", room)
-
-        update_guest_cards(guest, secondary_code=code)
-        save_data(data)
-
-        send_arduino_command("3")
-        wait_until_no_card()
-
-        time.sleep(2)
-
-        send_arduino_command("4")
-
-        return jsonify({
-            "ok": True,
-            "message": f"Second card written successfully. UID: {uid}, Code: {code}",
-            "guest": guest
-        })
-
-    except Exception as e:
-        return jsonify({
-            "ok": False,
-            "message": f"Failed during second card sequence: {e}"
-        })
+    return with_hardware_lock(action)
 
 
 @app.route("/api/issue_card", methods=["POST"])
 def api_issue_card():
-    try:
-        body = request.get_json() or {}
-        name = body.get("name", "").strip()
-        room = str(body.get("room", "")).strip()
-        card_label = body.get("cardLabel", "Primary").strip() or "Primary"
-        should_preload = bool(body.get("preload", False))
+    def action():
+        try:
+            body = request.get_json() or {}
+            name = body.get("name", "").strip()
+            room = str(body.get("room", "")).strip()
+            card_label = body.get("cardLabel", "Primary").strip() or "Primary"
+            should_preload = bool(body.get("preload", False))
 
-        if not name:
+            if not name:
+                return jsonify({
+                    "ok": False,
+                    "message": "Guest name is required."
+                }), 400
+
+            uid, code, guest = issue_card_for_guest(
+                name=name,
+                room=room,
+                card_label=card_label,
+                should_preload=should_preload,
+            )
+
+            return jsonify({
+                "ok": True,
+                "message": f"{card_label} card written successfully. UID: {uid}, Code: {code}",
+                "uid": uid,
+                "code": code,
+                "guest": guest
+            })
+
+        except Exception as e:
             return jsonify({
                 "ok": False,
-                "message": "Guest name is required."
-            }), 400
+                "message": f"Failed during card issue sequence: {e}"
+            }), 500
 
-        uid, code, guest = issue_card_for_guest(
-            name=name,
-            room=room,
-            card_label=card_label,
-            should_preload=should_preload,
-        )
-
-        return jsonify({
-            "ok": True,
-            "message": f"{card_label} card written successfully. UID: {uid}, Code: {code}",
-            "uid": uid,
-            "code": code,
-            "guest": guest
-        })
-
-    except Exception as e:
-        return jsonify({
-            "ok": False,
-            "message": f"Failed during card issue sequence: {e}"
-        }), 500
+    return with_hardware_lock(action)
 
 
 @app.route("/api/clear_guest_cards", methods=["POST"])

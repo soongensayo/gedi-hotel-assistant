@@ -247,6 +247,23 @@ function Format-CardState {
   return "$($names -join "|") (0x$($State.ToString("X8")))"
 }
 
+function Format-PcscError {
+  param([int]$ErrorCode)
+
+  switch ($ErrorCode) {
+    0 { return "OK" }
+    -2146435062 { return "TIMEOUT / no state change" }
+    -2146435065 { return "UNKNOWN_READER" }
+    -2146435044 { return "NO_SMARTCARD / no card in field" }
+    -2146434967 { return "REMOVED_CARD / no card in field" }
+    -2146434968 { return "RESET_CARD" }
+    -2146434969 { return "UNPOWERED_CARD" }
+    -2146434970 { return "UNRESPONSIVE_CARD" }
+    -2146434971 { return "UNSUPPORTED_CARD" }
+    default { return "0x$($ErrorCode.ToString("X8"))" }
+  }
+}
+
 Write-Host "[PCR532] Watching PC/SC readers. Backend: $BackendUrl"
 
 if ($TestPost) {
@@ -297,7 +314,7 @@ try {
           }
         } else {
           if ($DebugReader -and ((Get-Date) - $lastPollLogAt).TotalSeconds -ge 3) {
-            Write-Host "[PCR532] Polling '$readerName'... no UID yet (0x$($errorCode.ToString("X8")))"
+            Write-Host "[PCR532] Polling '$readerName'... no UID yet ($(Format-PcscError -ErrorCode $errorCode))"
             $lastPollLogAt = Get-Date
           }
           if ($errorCode -ne 0) {

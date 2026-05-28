@@ -43,6 +43,13 @@ interface EncoderIssueResponse {
   guest?: unknown;
 }
 
+type KeyCardHardwareAction = 'preload' | 'dispense';
+
+const encoderHardwareActionPaths: Record<KeyCardHardwareAction, string> = {
+  preload: '/api/preload',
+  dispense: '/api/dispense',
+};
+
 // ---------------------------------------------------------------------------
 // Async passport scanner state
 // ---------------------------------------------------------------------------
@@ -787,6 +794,57 @@ router.get('/nfc-status', (_req: Request, res: Response) => {
 router.post('/nfc-clear', (_req: Request, res: Response) => {
   nfcUidStore.length = 0;
   res.json({ success: true });
+});
+
+/**
+ * POST /api/checkin/key-card-hardware-action
+ * Staff-only manual controls for the Stanford card encoder/dispenser.
+ */
+router.post('/key-card-hardware-action', async (req: Request, res: Response) => {
+  try {
+    const action = req.body?.action as KeyCardHardwareAction | undefined;
+
+    if (
+      !action ||
+      !Object.prototype.hasOwnProperty.call(encoderHardwareActionPaths, action)
+    ) {
+      res.status(400).json({
+        success: false,
+        error: 'action must be one of: preload, dispense',
+      });
+      return;
+    }
+
+    const actionResponse = await fetch(
+      `${config.stanfordEncoderUrl}${encoderHardwareActionPaths[action]}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(action === 'preload' ? 60_000 : 45_000),
+      }
+    );
+    const payload = await actionResponse.json().catch(() => ({})) as EncoderIssueResponse;
+
+    if (!actionResponse.ok || payload.ok === false) {
+      res.status(actionResponse.status === 409 ? 409 : actionResponse.ok ? 502 : actionResponse.status).json({
+        success: false,
+        error: payload.message || `Encoder ${action} responded ${actionResponse.status}`,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: payload.message || `Key-card ${action} complete.`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown encoder error';
+    console.error('[Stanford Encoder] Failed manual key-card action:', message);
+    res.status(502).json({
+      success: false,
+      error: `Card encoder unavailable: ${message}`,
+    });
+  }
 });
 
 /**
