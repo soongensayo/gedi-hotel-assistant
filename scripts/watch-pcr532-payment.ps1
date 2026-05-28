@@ -2,6 +2,8 @@ param(
   [string]$BackendUrl = "http://localhost:3001/api/checkin/nfc-uid",
   [string]$ReaderNamePattern = "PCR532|SmartCard|Smart Card|Usbccid|CCID|NFC|RFID|ACR122",
   [switch]$DebugReader,
+  [switch]$ListReaders,
+  [switch]$PollUid,
   [switch]$SendIfAlreadyPresent,
   [switch]$TestPost
 )
@@ -25,6 +27,16 @@ public static class PcscDemo {
   public const uint SCARD_STATE_EXCLUSIVE = 0x0080;
   public const uint SCARD_STATE_INUSE = 0x0100;
   public const uint SCARD_STATE_MUTE = 0x0200;
+  public const uint SCARD_SHARE_SHARED = 2;
+  public const uint SCARD_PROTOCOL_T0 = 1;
+  public const uint SCARD_PROTOCOL_T1 = 2;
+  public const uint SCARD_LEAVE_CARD = 0;
+
+  [StructLayout(LayoutKind.Sequential)]
+  public struct IoRequest {
+    public uint protocol;
+    public uint pciLength;
+  }
 
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
   public struct ReaderState {
@@ -64,6 +76,30 @@ public static class PcscDemo {
 
   [DllImport("winscard.dll")]
   public static extern int SCardReleaseContext(IntPtr context);
+
+  [DllImport("winscard.dll", EntryPoint = "SCardConnectW", CharSet = CharSet.Unicode)]
+  public static extern int SCardConnect(
+    IntPtr context,
+    string reader,
+    uint shareMode,
+    uint preferredProtocols,
+    out IntPtr card,
+    out uint activeProtocol
+  );
+
+  [DllImport("winscard.dll")]
+  public static extern int SCardDisconnect(IntPtr card, uint disposition);
+
+  [DllImport("winscard.dll")]
+  public static extern int SCardTransmit(
+    IntPtr card,
+    ref IoRequest sendPci,
+    byte[] sendBuffer,
+    int sendLength,
+    IntPtr recvPci,
+    byte[] recvBuffer,
+    ref int recvLength
+  );
 
   public static IntPtr EstablishContext() {
     IntPtr context;
@@ -106,6 +142,60 @@ public static class PcscDemo {
       atrLength = 0,
       atr = new byte[36]
     };
+  }
+
+  public static string TryReadUid(IntPtr context, string readerName, out int errorCode) {
+    IntPtr card;
+    uint protocol;
+    errorCode = SCardConnect(
+      context,
+      readerName,
+      SCARD_SHARE_SHARED,
+      SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
+      out card,
+      out protocol
+    );
+
+    if (errorCode != 0) {
+      return null;
+    }
+
+    try {
+      IoRequest sendPci = new IoRequest {
+        protocol = protocol,
+        pciLength = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(IoRequest))
+      };
+
+      byte[] command = new byte[] { 0xFF, 0xCA, 0x00, 0x00, 0x00 };
+      byte[] response = new byte[258];
+      int responseLength = response.Length;
+      errorCode = SCardTransmit(
+        card,
+        ref sendPci,
+        command,
+        command.Length,
+        IntPtr.Zero,
+        response,
+        ref responseLength
+      );
+
+      if (errorCode != 0 || responseLength < 2) {
+        return null;
+      }
+
+      byte sw1 = response[responseLength - 2];
+      byte sw2 = response[responseLength - 1];
+      if (sw1 != 0x90 || sw2 != 0x00 || responseLength <= 2) {
+        errorCode = unchecked((int)0x6F00);
+        return null;
+      }
+
+      byte[] uid = new byte[responseLength - 2];
+      Array.Copy(response, uid, uid.Length);
+      return BitConverter.ToString(uid).Replace("-", "");
+    } finally {
+      SCardDisconnect(card, SCARD_LEAVE_CARD);
+    }
   }
 }
 "@
@@ -181,6 +271,44 @@ try {
 
   Write-Host "[PCR532] Readers:"
   $readers | ForEach-Object { Write-Host "  - $_" }
+
+  if ($ListReaders) {
+    Write-Host "[PCR532] All PC/SC readers:"
+    $allReaders | ForEach-Object { Write-Host "  - $_" }
+    exit 0
+  }
+
+  if ($PollUid) {
+    Write-Host "[PCR532] Poll UID mode. Waiting for a readable card..."
+    Write-Host "[PCR532] Hold the NTAG/MIFARE card flat on the reader until a UID appears."
+    $lastUid = ""
+    $lastPollLogAt = Get-Date
+
+    while ($true) {
+      foreach ($readerName in $readers) {
+        $errorCode = 0
+        $uid = [PcscDemo]::TryReadUid($context, $readerName, [ref]$errorCode)
+
+        if ($uid) {
+          if ($uid -ne $lastUid) {
+            Write-Host "[PCR532] UID detected on '$readerName': $uid"
+            Send-DemoTap -Uid $uid
+            $lastUid = $uid
+          }
+        } else {
+          if ($DebugReader -and ((Get-Date) - $lastPollLogAt).TotalSeconds -ge 3) {
+            Write-Host "[PCR532] Polling '$readerName'... no UID yet (0x$($errorCode.ToString("X8")))"
+            $lastPollLogAt = Get-Date
+          }
+          if ($errorCode -ne 0) {
+            $lastUid = ""
+          }
+        }
+      }
+
+      Start-Sleep -Milliseconds 250
+    }
+  }
 
   $states = [PcscDemo+ReaderState[]]::new($readers.Count)
   for ($i = 0; $i -lt $readers.Count; $i++) {
