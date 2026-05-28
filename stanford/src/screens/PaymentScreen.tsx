@@ -1,4 +1,5 @@
-import { QRCodeSVG } from 'qrcode.react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { activateNfc, clearNfcStatus, pollNfcStatus } from '../services/api';
 
 type Props = {
   qrValue: string;
@@ -6,25 +7,172 @@ type Props = {
   onPaidDemo: () => void;
 };
 
-export function PaymentScreen({ qrValue, instructions, onPaidDemo }: Props) {
+type ReaderState = 'connecting' | 'ready' | 'offline' | 'detected';
+
+const NFC_POLL_INTERVAL_MS = 1_000;
+const KEYBOARD_TAP_IDLE_MS = 220;
+const MIN_KEYBOARD_TAP_CHARS = 4;
+
+export function PaymentScreen({ instructions, onPaidDemo }: Props) {
+  const [readerState, setReaderState] = useState<ReaderState>('connecting');
+  const [readerMessage, setReaderMessage] = useState('Checking NFC reader...');
+  const paidRef = useRef(false);
+  const keyboardBufferRef = useRef('');
+  const keyboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const completePayment = useCallback(
+    (source: 'serial' | 'keyboard' | 'button') => {
+      if (paidRef.current) return;
+      paidRef.current = true;
+      setReaderState('detected');
+      setReaderMessage(
+        source === 'button' ? 'Demo payment accepted.' : 'NFC tap detected. Payment accepted.'
+      );
+      window.setTimeout(onPaidDemo, 650);
+    },
+    [onPaidDemo]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const checkForTap = async () => {
+      try {
+        const status = await pollNfcStatus();
+        if (!cancelled && status.detected) {
+          if (pollTimer) window.clearInterval(pollTimer);
+          completePayment('serial');
+        }
+      } catch {
+        // A polling miss should not interrupt the demo; keyboard-wedge and button fallbacks remain active.
+      }
+    };
+
+    const startSerialReader = async () => {
+      try {
+        await clearNfcStatus();
+        const result = await activateNfc();
+        if (cancelled) return;
+
+        if (result.success) {
+          setReaderState('ready');
+          setReaderMessage('Reader armed. Ask the guest to tap their card or phone.');
+          await checkForTap();
+          pollTimer = window.setInterval(checkForTap, NFC_POLL_INTERVAL_MS);
+        } else {
+          setReaderState('offline');
+          setReaderMessage('USB serial reader not found. Keyboard-style readers still work.');
+        }
+      } catch {
+        if (!cancelled) {
+          setReaderState('offline');
+          setReaderMessage('USB serial reader not found. Keyboard-style readers still work.');
+        }
+      }
+    };
+
+    void startSerialReader();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) window.clearInterval(pollTimer);
+    };
+  }, [completePayment]);
+
+  useEffect(() => {
+    const flushKeyboardTap = () => {
+      if (keyboardBufferRef.current.length >= MIN_KEYBOARD_TAP_CHARS) {
+        completePayment('keyboard');
+      }
+      keyboardBufferRef.current = '';
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (paidRef.current || event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        flushKeyboardTap();
+        return;
+      }
+
+      if (event.key.length !== 1) return;
+
+      keyboardBufferRef.current += event.key;
+      if (keyboardTimerRef.current) window.clearTimeout(keyboardTimerRef.current);
+      keyboardTimerRef.current = window.setTimeout(flushKeyboardTap, KEYBOARD_TAP_IDLE_MS);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (keyboardTimerRef.current) window.clearTimeout(keyboardTimerRef.current);
+    };
+  }, [completePayment]);
+
+  const isDetected = readerState === 'detected';
+
   return (
-    <div className="space-y-4">
-      <h3 className="text-center text-xl text-[var(--color-hotel-accent)]">Payment</h3>
+    <div className="space-y-5 text-center">
+      <h3 className="text-xl text-[var(--color-hotel-accent)]">Payment</h3>
       {instructions && (
-        <p className="text-center text-sm text-[var(--color-hotel-text-dim)]">{instructions}</p>
+        <p className="text-sm text-[var(--color-hotel-text-dim)]">{instructions}</p>
       )}
-      <div className="flex justify-center rounded-lg bg-white p-4">
-        <QRCodeSVG value={qrValue} size={180} level="M" />
+
+      <div className="flex justify-center">
+        <div className="relative flex h-44 w-44 items-center justify-center">
+          {!isDetected && (
+            <>
+              <div className="payment-tap-ring absolute inset-0 rounded-full border border-[var(--color-hotel-accent)]/25" />
+              <div className="payment-tap-ring payment-tap-ring-delay absolute inset-0 rounded-full border border-[var(--color-hotel-accent)]/15" />
+            </>
+          )}
+          <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-[var(--color-hotel-accent)]/35 bg-[var(--color-hotel-accent)]/10 shadow-[0_0_36px_rgba(211,177,111,0.2)]">
+            {isDetected ? (
+              <svg
+                className="h-11 w-11 text-[var(--color-hotel-accent)]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg
+                className="h-12 w-12 text-[var(--color-hotel-accent)]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0"
+                />
+              </svg>
+            )}
+          </div>
+        </div>
       </div>
-      <p className="text-center text-xs text-[var(--color-hotel-text-dim)]">
-        Scan to pay. Your concierge will confirm when the payment has cleared.
-      </p>
+
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-white">
+          {isDetected ? 'Payment successful' : 'Tap card or phone on the NFC reader'}
+        </p>
+        <p className="text-xs text-[var(--color-hotel-text-dim)]">{readerMessage}</p>
+      </div>
+
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
-        onClick={onPaidDemo}
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white transition hover:brightness-110 disabled:opacity-70"
+        onClick={() => completePayment('button')}
+        disabled={isDetected}
       >
-        I’ve completed payment (demo)
+        Mark payment complete
       </button>
     </div>
   );
