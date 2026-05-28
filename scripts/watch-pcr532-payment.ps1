@@ -229,6 +229,12 @@ try {
   $lastHeartbeatAt = Get-Date
 
   while ($true) {
+    for ($i = 0; $i -lt $states.Count; $i++) {
+      $state = $states[$i]
+      $state.currentState = [PcscDemo]::SCARD_STATE_UNAWARE
+      $states[$i] = $state
+    }
+
     $result = [PcscDemo]::SCardGetStatusChange($context, 1000, $states, $states.Count)
     if ($result -eq -2146435062) {
       continue
@@ -272,6 +278,8 @@ try {
       }
       $lastHeartbeatAt = Get-Date
     }
+
+    Start-Sleep -Milliseconds 200
   }
 } finally {
   [PcscDemo]::SCardReleaseContext($context) | Out-Null
