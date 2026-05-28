@@ -2,6 +2,7 @@ param(
   [string]$BackendUrl = "http://localhost:3001/api/checkin/nfc-uid",
   [string]$ReaderNamePattern = "PCR532|SmartCard|Smart Card|Usbccid|CCID|NFC|RFID|ACR122",
   [switch]$DebugReader,
+  [switch]$SendIfAlreadyPresent,
   [switch]$TestPost
 )
 
@@ -207,7 +208,25 @@ try {
     }
   }
 
+  if ($SendIfAlreadyPresent) {
+    for ($i = 0; $i -lt $states.Count; $i++) {
+      $state = $states[$i]
+      $readerName = $state.readerName
+      $isPresent = (($state.eventState -band [PcscDemo]::SCARD_STATE_PRESENT) -ne 0)
+      if ($isPresent) {
+        $uid = Get-AtrHex -State $state
+        Write-Host "[PCR532] Card already present on '$readerName' ($uid)"
+        Send-DemoTap -Uid $uid
+      }
+    }
+  }
+
   Write-Host "[PCR532] Armed. Waiting for the next card tap..."
+  if (-not $DebugReader) {
+    Write-Host "[PCR532] Tip: rerun with -DebugReader if taps do not show up."
+  }
+
+  $lastHeartbeatAt = Get-Date
 
   while ($true) {
     $result = [PcscDemo]::SCardGetStatusChange($context, 1000, $states, $states.Count)
@@ -244,6 +263,14 @@ try {
       $lastStateByReader[$readerName] = $state.eventState
       $state.currentState = $state.eventState
       $states[$i] = $state
+    }
+
+    if ($DebugReader -and ((Get-Date) - $lastHeartbeatAt).TotalSeconds -ge 5) {
+      for ($i = 0; $i -lt $states.Count; $i++) {
+        $state = $states[$i]
+        Write-Host "[PCR532] Still waiting. '$($state.readerName)' is $(Format-CardState -State $state.eventState)"
+      }
+      $lastHeartbeatAt = Get-Date
     }
   }
 } finally {
