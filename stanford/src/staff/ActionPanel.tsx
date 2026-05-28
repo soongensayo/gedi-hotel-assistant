@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { runKeyCardHardwareAction, type KeyCardHardwareAction } from '../services/api';
 import type { ServiceOffer, StaffToGuestCommand } from '../types';
 
 const DEMO_SERVICES: ServiceOffer[] = [
@@ -32,9 +34,38 @@ type Props = {
 };
 
 export function ActionPanel({ push }: Props) {
+  const [hardwareBusy, setHardwareBusy] = useState<KeyCardHardwareAction | null>(null);
+  const [hardwareStatus, setHardwareStatus] = useState<{
+    tone: 'success' | 'error' | 'neutral';
+    text: string;
+  } | null>(null);
   const paymentDemo =
     (import.meta.env.VITE_STANFORD_PAYMENT_QR as string | undefined) ??
     'https://example.com/pay/demo-luxedrive';
+
+  const runHardwareAction = async (
+    action: KeyCardHardwareAction,
+    runningLabel: string,
+    successLabel: string
+  ) => {
+    if (hardwareBusy) return;
+
+    setHardwareBusy(action);
+    setHardwareStatus({ tone: 'neutral', text: `${runningLabel}...` });
+
+    const result = await runKeyCardHardwareAction(action);
+
+    if (result.success) {
+      setHardwareStatus({ tone: 'success', text: result.message || successLabel });
+    } else {
+      setHardwareStatus({
+        tone: 'error',
+        text: result.error || 'Key-card hardware action failed.',
+      });
+    }
+
+    setHardwareBusy(null);
+  };
 
   return (
     <div className="flex max-h-[70vh] flex-col gap-2 overflow-y-auto pr-1">
@@ -74,6 +105,43 @@ export function ActionPanel({ push }: Props) {
         label="Key card / drawer"
         onClick={() => push({ type: 'dispense_key_card' })}
       />
+      <div className="grid grid-cols-2 gap-2">
+        <FlowButton
+          label={hardwareBusy === 'preload' ? 'Encode/load...' : 'Encode and load'}
+          onClick={() =>
+            void runHardwareAction(
+              'preload',
+              'Loading card',
+              'Card loaded for encoding.'
+            )
+          }
+          disabled={hardwareBusy !== null}
+        />
+        <FlowButton
+          label={hardwareBusy === 'dispense' ? 'Dispensing...' : 'Dispense'}
+          onClick={() =>
+            void runHardwareAction(
+              'dispense',
+              'Dispensing card',
+              'Dispense cycle complete.'
+            )
+          }
+          disabled={hardwareBusy !== null}
+        />
+      </div>
+      {hardwareStatus && (
+        <p
+          className={`rounded-md border px-3 py-2 text-xs ${
+            hardwareStatus.tone === 'success'
+              ? 'border-emerald-300/50 bg-emerald-950/35 text-emerald-100'
+              : hardwareStatus.tone === 'error'
+              ? 'border-red-400/50 bg-red-950/35 text-red-100'
+              : 'border-[var(--color-hotel-border)] bg-white/5 text-[var(--color-hotel-text-dim)]'
+          }`}
+        >
+          {hardwareStatus.text}
+        </p>
+      )}
       <FlowButton
         label="Personalization"
         onClick={() => push({ type: 'show_screen', screen: 'personalization' })}
@@ -112,11 +180,13 @@ function FlowButton({
   onClick,
   danger,
   complete,
+  disabled,
 }: {
   label: string;
   onClick: () => void;
   danger?: boolean;
   complete?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -127,7 +197,8 @@ function FlowButton({
           : danger
           ? 'border border-red-400/50 bg-red-950/40 text-red-200'
           : 'border border-[var(--color-hotel-border)] bg-white/5 text-[var(--color-hotel-text)] hover:border-[var(--color-hotel-accent)]'
-      }`}
+      } disabled:cursor-not-allowed disabled:opacity-50`}
+      disabled={disabled}
       onClick={onClick}
     >
       {label}

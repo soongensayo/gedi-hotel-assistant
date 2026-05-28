@@ -123,6 +123,14 @@ export interface IssueKeyCardResponse {
   error?: string;
 }
 
+export type KeyCardHardwareAction = 'preload' | 'dispense';
+
+export interface KeyCardHardwareActionResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
 export async function issueKeyCard(
   body: IssueKeyCardRequest
 ): Promise<IssueKeyCardResponse> {
@@ -130,6 +138,29 @@ export async function issueKeyCard(
     timeout: 120000,
   });
   return data;
+}
+
+export async function runKeyCardHardwareAction(
+  action: KeyCardHardwareAction
+): Promise<KeyCardHardwareActionResponse> {
+  try {
+    const { data } = await api.post('/checkin/key-card-hardware-action', { action }, {
+      timeout: action === 'preload' ? 70000 : 55000,
+    });
+    return data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data;
+      if (data && typeof data === 'object') {
+        return data as KeyCardHardwareActionResponse;
+      }
+    }
+
+    return {
+      success: false,
+      error: 'The key-card encoder is not reachable.',
+    };
+  }
 }
 
 export default api;

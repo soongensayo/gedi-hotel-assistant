@@ -17,7 +17,8 @@ On Windows, set `ENCODER_ARDUINO_PORT=COM3` or whichever COM port the Arduino us
 The service listens on `http://0.0.0.0:5000` and exposes:
 
 - `POST /api/issue_card` with `{ "name": "...", "room": "311", "cardLabel": "Primary", "preload": true }`
-- The original teammate endpoints such as `POST /api/preload`, `POST /api/issue_primary`, and `POST /api/issue_secondary`
+- Manual hardware endpoints: `POST /api/preload` runs Arduino `1` then `2`, and `POST /api/dispense` runs Arduino `3` then `4`
+- The original teammate endpoints such as `POST /api/issue_primary` and `POST /api/issue_secondary`
 
 ## Connect from the Stanford app
 
