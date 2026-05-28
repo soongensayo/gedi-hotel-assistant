@@ -188,6 +188,27 @@ try {
   $presentByReader = @{}
   $lastStateByReader = @{}
 
+  $initialResult = [PcscDemo]::SCardGetStatusChange($context, 1000, $states, $states.Count)
+  if ($initialResult -ne 0 -and $initialResult -ne -2146435062) {
+    Write-Warning "[PCR532] Initial SCardGetStatusChange failed: 0x$($initialResult.ToString("X8"))"
+  }
+
+  for ($i = 0; $i -lt $states.Count; $i++) {
+    $state = $states[$i]
+    $readerName = $state.readerName
+    $isPresent = (($state.eventState -band [PcscDemo]::SCARD_STATE_PRESENT) -ne 0)
+    $presentByReader[$readerName] = $isPresent
+    $lastStateByReader[$readerName] = $state.eventState
+    $state.currentState = $state.eventState
+    $states[$i] = $state
+
+    if ($DebugReader) {
+      Write-Host "[PCR532] Initial state '$readerName': $(Format-CardState -State $state.eventState)"
+    }
+  }
+
+  Write-Host "[PCR532] Armed. Waiting for the next card tap..."
+
   while ($true) {
     $result = [PcscDemo]::SCardGetStatusChange($context, 1000, $states, $states.Count)
     if ($result -eq -2146435062) {
