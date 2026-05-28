@@ -28,6 +28,7 @@ export function useStanfordGuest(roomId: string) {
   const [activeScreen, setActiveScreen] = useState<GuestScreenId>('video-only');
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [paymentQr, setPaymentQr] = useState<PaymentQrState | null>(null);
+  const [paymentSuccessRequestId, setPaymentSuccessRequestId] = useState(0);
   const [services, setServices] = useState<ServiceOffer[]>([]);
   const [customMessage, setCustomMessage] = useState<CustomMessageState | null>(null);
   const [passportScanMode, setPassportScanMode] = useState<'camera' | 'hardware'>('camera');
@@ -76,6 +77,15 @@ export function useStanfordGuest(roomId: string) {
           });
           setActiveScreen('payment');
           setCustomMessage(null);
+          break;
+        case 'payment_success_demo':
+          setPaymentQr((current) => current ?? {
+            qrValue: 'demo-payment-complete',
+            instructions: 'Payment is being confirmed by your concierge.',
+          });
+          setActiveScreen('payment');
+          setCustomMessage(null);
+          setPaymentSuccessRequestId((current) => current + 1);
           break;
         case 'request_signature':
           setActiveScreen('signature');
@@ -138,6 +148,7 @@ export function useStanfordGuest(roomId: string) {
     setReservation,
     paymentQr,
     setPaymentQr,
+    paymentSuccessRequestId,
     services,
     customMessage,
     passportScanMode,

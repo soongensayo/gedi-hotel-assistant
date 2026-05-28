@@ -119,6 +119,7 @@ export type StaffToGuestCommand =
   | { type: 'activate_passport_scan'; mode?: 'camera' | 'hardware' }
   | { type: 'capture_passport_camera' }
   | { type: 'show_payment_qr'; qrValue: string; instructions?: string }
+  | { type: 'payment_success_demo' }
   | { type: 'request_signature' }
   | { type: 'dispense_key_card' }
   | { type: 'show_services'; services: ServiceOffer[] }

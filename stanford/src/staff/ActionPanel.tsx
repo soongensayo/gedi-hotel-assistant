@@ -52,14 +52,19 @@ export function ActionPanel({ push }: Props) {
         onClick={() => push({ type: 'activate_passport_scan', mode: 'hardware' })}
       />
       <FlowButton
-        label="Payment + QR"
+        label="Payment / NFC"
         onClick={() =>
           push({
             type: 'show_payment_qr',
             qrValue: paymentDemo,
-            instructions: 'Scan to complete payment for your stay.',
+            instructions: 'Tap your card or phone on the NFC reader to complete payment.',
           })
         }
+      />
+      <FlowButton
+        label="Trigger payment success"
+        onClick={() => push({ type: 'payment_success_demo' })}
+        complete
       />
       <FlowButton
         label="Request signature"
