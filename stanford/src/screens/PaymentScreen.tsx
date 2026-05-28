@@ -62,12 +62,12 @@ export function PaymentScreen({ instructions, onPaidDemo }: Props) {
           pollTimer = window.setInterval(checkForTap, NFC_POLL_INTERVAL_MS);
         } else {
           setReaderState('offline');
-          setReaderMessage('USB serial reader not found. Keyboard-style readers still work.');
+          setReaderMessage('Waiting for PCR532 watcher, keyboard reader, or demo confirmation.');
         }
       } catch {
         if (!cancelled) {
           setReaderState('offline');
-          setReaderMessage('USB serial reader not found. Keyboard-style readers still work.');
+          setReaderMessage('Waiting for PCR532 watcher, keyboard reader, or demo confirmation.');
         }
       }
     };
