@@ -1,6 +1,8 @@
 param(
   [string]$BackendUrl = "http://localhost:3001/api/checkin/nfc-uid",
-  [string]$ReaderNamePattern = "PCR532|SmartCard|Smart Card|Usbccid|CCID|NFC|RFID"
+  [string]$ReaderNamePattern = "PCR532|SmartCard|Smart Card|Usbccid|CCID|NFC|RFID|ACR122",
+  [switch]$DebugReader,
+  [switch]$TestPost
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,8 +15,15 @@ using System.Runtime.InteropServices;
 public static class PcscDemo {
   public const uint SCARD_SCOPE_SYSTEM = 2;
   public const uint SCARD_STATE_UNAWARE = 0x0000;
+  public const uint SCARD_STATE_CHANGED = 0x0002;
+  public const uint SCARD_STATE_UNKNOWN = 0x0004;
+  public const uint SCARD_STATE_UNAVAILABLE = 0x0008;
   public const uint SCARD_STATE_EMPTY = 0x0010;
   public const uint SCARD_STATE_PRESENT = 0x0020;
+  public const uint SCARD_STATE_ATRMATCH = 0x0040;
+  public const uint SCARD_STATE_EXCLUSIVE = 0x0080;
+  public const uint SCARD_STATE_INUSE = 0x0100;
+  public const uint SCARD_STATE_MUTE = 0x0200;
 
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
   public struct ReaderState {
@@ -100,6 +109,21 @@ public static class PcscDemo {
 }
 "@
 
+function Send-DemoTap {
+  param([string]$Uid)
+
+  try {
+    Invoke-RestMethod `
+      -Method Post `
+      -Uri $BackendUrl `
+      -ContentType "application/json" `
+      -Body (@{ uid = $Uid } | ConvertTo-Json -Compress) | Out-Null
+    Write-Host "[PCR532] Sent tap to backend."
+  } catch {
+    Write-Warning "[PCR532] Could not notify backend: $($_.Exception.Message)"
+  }
+}
+
 function Get-AtrHex {
   param([PcscDemo+ReaderState]$State)
 
@@ -111,7 +135,34 @@ function Get-AtrHex {
   return (($bytes | ForEach-Object { $_.ToString("X2") }) -join "")
 }
 
+function Format-CardState {
+  param([uint32]$State)
+
+  $names = New-Object System.Collections.Generic.List[string]
+  if (($State -band [PcscDemo]::SCARD_STATE_CHANGED) -ne 0) { $names.Add("CHANGED") }
+  if (($State -band [PcscDemo]::SCARD_STATE_UNKNOWN) -ne 0) { $names.Add("UNKNOWN") }
+  if (($State -band [PcscDemo]::SCARD_STATE_UNAVAILABLE) -ne 0) { $names.Add("UNAVAILABLE") }
+  if (($State -band [PcscDemo]::SCARD_STATE_EMPTY) -ne 0) { $names.Add("EMPTY") }
+  if (($State -band [PcscDemo]::SCARD_STATE_PRESENT) -ne 0) { $names.Add("PRESENT") }
+  if (($State -band [PcscDemo]::SCARD_STATE_ATRMATCH) -ne 0) { $names.Add("ATRMATCH") }
+  if (($State -band [PcscDemo]::SCARD_STATE_EXCLUSIVE) -ne 0) { $names.Add("EXCLUSIVE") }
+  if (($State -band [PcscDemo]::SCARD_STATE_INUSE) -ne 0) { $names.Add("INUSE") }
+  if (($State -band [PcscDemo]::SCARD_STATE_MUTE) -ne 0) { $names.Add("MUTE") }
+
+  if ($names.Count -eq 0) {
+    return "0x$($State.ToString("X8"))"
+  }
+
+  return "$($names -join "|") (0x$($State.ToString("X8")))"
+}
+
 Write-Host "[PCR532] Watching PC/SC readers. Backend: $BackendUrl"
+
+if ($TestPost) {
+  Write-Host "[PCR532] Sending test tap to backend..."
+  Send-DemoTap -Uid "532"
+  exit 0
+}
 
 $context = [PcscDemo]::EstablishContext()
 
@@ -130,11 +181,18 @@ try {
   Write-Host "[PCR532] Readers:"
   $readers | ForEach-Object { Write-Host "  - $_" }
 
-  $states = @($readers | ForEach-Object { [PcscDemo]::NewReaderState($_) })
+  $states = [PcscDemo+ReaderState[]]::new($readers.Count)
+  for ($i = 0; $i -lt $readers.Count; $i++) {
+    $states[$i] = [PcscDemo]::NewReaderState($readers[$i])
+  }
   $presentByReader = @{}
+  $lastStateByReader = @{}
 
   while ($true) {
     $result = [PcscDemo]::SCardGetStatusChange($context, 1000, $states, $states.Count)
+    if ($result -eq -2146435062) {
+      continue
+    }
     if ($result -ne 0) {
       Write-Warning "[PCR532] SCardGetStatusChange failed: 0x$($result.ToString("X8"))"
       Start-Sleep -Seconds 1
@@ -146,24 +204,25 @@ try {
       $readerName = $state.readerName
       $isPresent = (($state.eventState -band [PcscDemo]::SCARD_STATE_PRESENT) -ne 0)
       $wasPresent = [bool]$presentByReader[$readerName]
+      $formattedState = Format-CardState -State $state.eventState
+
+      if ($DebugReader -and $lastStateByReader[$readerName] -ne $state.eventState) {
+        Write-Host "[PCR532] State '$readerName': $formattedState"
+        if ($state.atrLength -gt 0) {
+          Write-Host "[PCR532] ATR: $(Get-AtrHex -State $state)"
+        }
+      }
 
       if ($isPresent -and -not $wasPresent) {
         $uid = Get-AtrHex -State $state
         Write-Host "[PCR532] Tap detected on '$readerName' ($uid)"
-        try {
-          Invoke-RestMethod `
-            -Method Post `
-            -Uri $BackendUrl `
-            -ContentType "application/json" `
-            -Body (@{ uid = $uid } | ConvertTo-Json -Compress) | Out-Null
-          Write-Host "[PCR532] Sent tap to backend."
-        } catch {
-          Write-Warning "[PCR532] Could not notify backend: $($_.Exception.Message)"
-        }
+        Send-DemoTap -Uid $uid
       }
 
       $presentByReader[$readerName] = $isPresent
-      $states[$i].currentState = $state.eventState
+      $lastStateByReader[$readerName] = $state.eventState
+      $state.currentState = $state.eventState
+      $states[$i] = $state
     }
   }
 } finally {
