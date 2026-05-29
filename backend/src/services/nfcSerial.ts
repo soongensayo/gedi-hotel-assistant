@@ -3,6 +3,10 @@ import { normalizeUid } from '../utils/nfcCrypto';
 
 type UidCallback = (uid: string) => void;
 
+interface NfcSerialOptions {
+  acceptAnyData?: boolean;
+}
+
 let activePort: SerialPort | null = null;
 let activeParser: ReadlineParser | null = null;
 let opening = false;
@@ -16,6 +20,7 @@ export function startNfcSerialListener(
   portPath: string,
   baudRate: number,
   onUid: UidCallback,
+  options: NfcSerialOptions = {},
 ): boolean {
   if (activePort?.isOpen || opening) {
     console.log('[NFC Serial] Already listening or opening — skipping duplicate start');
@@ -32,6 +37,28 @@ export function startNfcSerialListener(
     return false;
   }
 
+  const openedAt = Date.now();
+  let dispatched = false;
+
+  const dispatchUid = (uid: string, source: string) => {
+    if (dispatched) return;
+    dispatched = true;
+    console.log(`[NFC Serial] UID detected from ${source}: ${uid}`);
+    onUid(uid);
+  };
+
+  const maybeDispatchRawChunk = (chunk: Buffer) => {
+    if (!options.acceptAnyData || dispatched) return;
+    if (Date.now() - openedAt < 800) return;
+
+    const text = chunk.toString('utf8').trim();
+    const normalized = normalizeUid(text);
+    const uid = normalized || chunk.toString('hex').toUpperCase() || '532';
+    dispatchUid(uid, 'raw serial data');
+  };
+
+  activePort.on('data', maybeDispatchRawChunk);
+
   activeParser = activePort.pipe(new ReadlineParser({ delimiter: '\n' }));
 
   activeParser.on('data', (line: string) => {
@@ -41,8 +68,7 @@ export function startNfcSerialListener(
     const uid = normalizeUid(trimmed);
     if (!uid) return;
 
-    console.log(`[NFC Serial] UID detected: ${uid}`);
-    onUid(uid);
+    dispatchUid(uid, 'serial line');
   });
 
   activePort.on('error', (err) => {
@@ -64,7 +90,10 @@ export function startNfcSerialListener(
       activeParser = null;
       return;
     }
-    console.log(`[NFC Serial] Listening on ${portPath} @ ${baudRate} baud`);
+    console.log(
+      `[NFC Serial] Listening on ${portPath} @ ${baudRate} baud` +
+        (options.acceptAnyData ? ' (accept-any-data demo mode)' : ''),
+    );
   });
 
   return true;

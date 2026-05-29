@@ -66,6 +66,7 @@ export const config = {
   nfcMode: (process.env.NFC_MODE || 'serial') as 'serial' | 'wifi',
   nfcSerialPort: process.env.NFC_SERIAL_PORT || '/dev/ttyUSB0',
   nfcSerialBaud: parseInt(process.env.NFC_SERIAL_BAUD || '115200', 10),
+  nfcSerialAcceptAny: (process.env.NFC_SERIAL_ACCEPT_ANY || '').toLowerCase() === 'true',
   // Legacy WiFi mode settings (only used when NFC_MODE=wifi)
   nfcSharedSecretKey: process.env.NFC_SHARED_SECRET_KEY || '',
   esp32WifiStartUrl: process.env.ESP32_WIFI_START_URL || '',
