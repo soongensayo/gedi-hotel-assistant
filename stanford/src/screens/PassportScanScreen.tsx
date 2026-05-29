@@ -206,7 +206,7 @@ function CameraPassportScan({
               autoPlay
               playsInline
               muted
-              className="h-56 w-full bg-black object-cover"
+              className="h-56 w-full -scale-x-100 bg-black object-cover"
             />
             {/* Passport placement overlay guide */}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

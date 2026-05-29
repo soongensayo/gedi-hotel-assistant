@@ -60,17 +60,17 @@ export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }
 
         if (result.success) {
           setReaderState('ready');
-          setReaderMessage('Reader armed. Ask the guest to tap their card or phone.');
+          setReaderMessage('Reader ready. Tap your card or phone when prompted.');
           await checkForTap();
           pollTimer = window.setInterval(checkForTap, NFC_POLL_INTERVAL_MS);
         } else {
           setReaderState('offline');
-          setReaderMessage('Waiting for PCR532 watcher, keyboard reader, or demo confirmation.');
+          setReaderMessage('Reader is warming up. Your concierge can also confirm payment.');
         }
       } catch {
         if (!cancelled) {
           setReaderState('offline');
-          setReaderMessage('Waiting for PCR532 watcher, keyboard reader, or demo confirmation.');
+          setReaderMessage('Reader is warming up. Your concierge can also confirm payment.');
         }
       }
     };
