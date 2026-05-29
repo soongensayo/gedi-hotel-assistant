@@ -662,6 +662,7 @@ router.post('/activate-nfc', async (_req: Request, res: Response) => {
 
       const ok = startNfcSerialListener(config.nfcSerialPort, config.nfcSerialBaud, onUid, {
         acceptAnyData: config.nfcSerialAcceptAny,
+        protocol: config.nfcSerialProtocol,
       });
       if (!ok) {
         res.json({ success: false, error: `Failed to open serial port ${config.nfcSerialPort}` });
