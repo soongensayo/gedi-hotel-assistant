@@ -142,6 +142,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
           startWithAudioMuted: false,
           startWithVideoMuted: false,
           disableDeepLinking: true,
+          doNotFlipLocalVideo: false,
         },
         interfaceConfigOverwrite: {
           TOOLBAR_BUTTONS: isGuest
