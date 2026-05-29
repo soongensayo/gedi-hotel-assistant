@@ -184,29 +184,40 @@ function CameraPassportScan({
         Passport scan
       </h3>
       <p className="text-center text-sm text-[var(--color-hotel-text-dim)]">
-        Position your passport photo page within the frame, then tap Capture.
+        Hold your passport toward the webcam above the screen, then fit the photo page
+        in the frame.
       </p>
 
       {error && <p className="text-center text-sm text-red-300">{error}</p>}
 
       {!captured && (
-        <div className="relative mx-auto overflow-hidden rounded-lg border-2 border-[var(--color-hotel-accent)]">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="h-56 w-full bg-black object-cover"
-          />
-          {/* Passport placement overlay guide */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="flex h-[75%] w-[85%] flex-col justify-between rounded-lg border-2 border-dashed border-[var(--color-hotel-accent)]/60">
-              <span className="ml-2 mt-1 text-[10px] text-[var(--color-hotel-accent)]/80">
-                Chip / photo page
-              </span>
-              <span className="mb-1 ml-2 text-[10px] text-[var(--color-hotel-accent)]/80">
-                MRZ lines &darr;
-              </span>
+        <div className="space-y-3">
+          <div className="mx-auto flex w-fit max-w-full items-center gap-2 rounded-full border border-[var(--color-hotel-accent)]/35 bg-[var(--guest-card-strong)] px-3 py-2 text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)] shadow-[0_10px_28px_rgba(31,106,88,0.12)]">
+            <span className="relative h-5 w-5 shrink-0" aria-hidden="true">
+              <span className="absolute left-1/2 top-1 h-3 w-px -translate-x-1/2 bg-[var(--color-hotel-accent)]" />
+              <span className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rotate-45 border-l border-t border-[var(--color-hotel-accent)]" />
+            </span>
+            Webcam above screen
+          </div>
+
+          <div className="relative mx-auto overflow-hidden rounded-lg border-2 border-[var(--color-hotel-accent)]">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="h-56 w-full bg-black object-cover"
+            />
+            {/* Passport placement overlay guide */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="flex h-[75%] w-[85%] flex-col justify-between rounded-lg border-2 border-dashed border-[var(--color-hotel-accent)]/60">
+                <span className="ml-2 mt-1 text-[10px] text-[var(--color-hotel-accent)]/80">
+                  Chip / photo page
+                </span>
+                <span className="mb-1 ml-2 text-[10px] text-[var(--color-hotel-accent)]/80">
+                  MRZ lines &darr;
+                </span>
+              </div>
             </div>
           </div>
         </div>
