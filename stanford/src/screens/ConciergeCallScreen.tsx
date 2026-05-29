@@ -169,7 +169,9 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
   };
 
   return (
-    <GuestPortraitShell>
+    <GuestPortraitShell
+      showcaseOverlay={<ScreenOverlay open={showOverlay}>{overlayInner()}</ScreenOverlay>}
+    >
       <div className="guest-call-surface relative h-full w-full bg-[var(--guest-deep)]">
         <JitsiMeeting
           roomName={meetingRoom}
@@ -193,11 +195,10 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
           <div className="max-w-xl rounded-lg border border-white/18 bg-[#10251f]/42 p-4 backdrop-blur-sm">
             <p className="text-sm leading-6 text-white/76">
               Keep this screen open. Your reservation, ID check, payment, signature, and
-              key card steps will appear here while the concierge stays connected.
+              key card steps will appear below while the concierge stays connected.
             </p>
           </div>
         </div>
-        <ScreenOverlay open={showOverlay}>{overlayInner()}</ScreenOverlay>
       </div>
     </GuestPortraitShell>
   );

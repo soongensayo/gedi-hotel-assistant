@@ -145,10 +145,14 @@ function CameraPassportScan({
     lastCaptureRequestRef.current = captureRequestId;
     if (!cameraReady || captured) return;
 
-    const dataUrl = captureFrame({ stopStream: true });
-    if (!dataUrl) return;
-    setCaptured(dataUrl);
-    onCompleteRef.current(undefined, dataUrl);
+    const timer = window.setTimeout(() => {
+      const dataUrl = captureFrame({ stopStream: true });
+      if (!dataUrl) return;
+      setCaptured(dataUrl);
+      onCompleteRef.current(undefined, dataUrl);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [cameraReady, captureFrame, captureRequestId, captured]);
 
   const retake = useCallback(() => {

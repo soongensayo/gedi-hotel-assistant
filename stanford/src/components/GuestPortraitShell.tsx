@@ -3,16 +3,24 @@ import { GuestShowcasePanel } from './GuestShowcasePanel';
 
 type Props = {
   children: ReactNode;
+  showcaseOverlay?: ReactNode;
   topClassName?: string;
 };
 
-export function GuestPortraitShell({ children, topClassName = '' }: Props) {
+export function GuestPortraitShell({
+  children,
+  showcaseOverlay,
+  topClassName = '',
+}: Props) {
   return (
     <div className="guest-portrait-shell flex h-full w-full flex-col overflow-hidden bg-[var(--color-hotel-dark)]">
       <div className={`relative min-h-0 flex-1 overflow-hidden ${topClassName}`}>
         {children}
       </div>
-      <GuestShowcasePanel />
+      <div className="relative shrink-0 overflow-hidden">
+        <GuestShowcasePanel />
+        {showcaseOverlay}
+      </div>
     </div>
   );
 }
