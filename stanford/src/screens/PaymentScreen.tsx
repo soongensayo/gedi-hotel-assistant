@@ -85,7 +85,8 @@ export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }
 
   useEffect(() => {
     if (successRequestId <= 0) return;
-    completePayment('staff');
+    const timer = window.setTimeout(() => completePayment('staff'), 0);
+    return () => window.clearTimeout(timer);
   }, [completePayment, successRequestId]);
 
   useEffect(() => {
