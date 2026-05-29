@@ -3,6 +3,7 @@ param(
   [string]$ReaderNamePattern = "PCR532|SmartCard|Smart Card|Usbccid|CCID|NFC|RFID|ACR122",
   [switch]$DebugReader,
   [switch]$ListReaders,
+  [switch]$WatchPnpCard,
   [switch]$PollUid,
   [switch]$SendIfAlreadyPresent,
   [switch]$TestPost
@@ -270,6 +271,56 @@ if ($TestPost) {
   Write-Host "[PCR532] Sending test tap to backend..."
   Send-DemoTap -Uid "532"
   exit 0
+}
+
+if ($WatchPnpCard) {
+  Write-Host "[PCR532] PnP card mode. Waiting for Windows to report a present SmartCard device..."
+  Write-Host "[PCR532] This mode treats an 'Unknown Smart Card' appearance as a demo payment tap."
+
+  $knownCards = @{}
+  Get-PnpDevice -PresentOnly -Class SmartCard -ErrorAction SilentlyContinue | ForEach-Object {
+    $knownCards[$_.InstanceId] = $true
+    if ($DebugReader) {
+      Write-Host "[PCR532] Initial SmartCard: $($_.FriendlyName) [$($_.Status)]"
+    }
+  }
+
+  Write-Host "[PCR532] Armed. Waiting for the next SmartCard device..."
+  $lastPnpHeartbeatAt = Get-Date
+
+  while ($true) {
+    $cards = @(Get-PnpDevice -PresentOnly -Class SmartCard -ErrorAction SilentlyContinue)
+    foreach ($card in $cards) {
+      if (-not $knownCards.ContainsKey($card.InstanceId)) {
+        Write-Host "[PCR532] SmartCard detected: $($card.FriendlyName) [$($card.Status)]"
+        Send-DemoTap -Uid "532"
+        $knownCards[$card.InstanceId] = $true
+      }
+    }
+
+    $currentIds = @{}
+    foreach ($card in $cards) {
+      $currentIds[$card.InstanceId] = $true
+    }
+
+    foreach ($knownId in @($knownCards.Keys)) {
+      if (-not $currentIds.ContainsKey($knownId)) {
+        $knownCards.Remove($knownId)
+      }
+    }
+
+    if ($DebugReader -and ((Get-Date) - $lastPnpHeartbeatAt).TotalSeconds -ge 5) {
+      if ($cards.Count -eq 0) {
+        Write-Host "[PCR532] Still waiting. No SmartCard devices are present."
+      } else {
+        $names = ($cards | ForEach-Object { "$($_.FriendlyName) [$($_.Status)]" }) -join "; "
+        Write-Host "[PCR532] Still waiting. Present SmartCards: $names"
+      }
+      $lastPnpHeartbeatAt = Get-Date
+    }
+
+    Start-Sleep -Milliseconds 300
+  }
 }
 
 $context = [PcscDemo]::EstablishContext()
