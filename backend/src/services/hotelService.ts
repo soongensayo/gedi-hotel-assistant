@@ -1083,3 +1083,56 @@ export async function updateGuestPassportData(
   }
   return false;
 }
+
+/**
+ * Persist only a captured passport photo for avatar-led Stanford check-in.
+ * This intentionally avoids changing the passport number/OCR fields.
+ */
+export async function updateGuestPassportPhoto(
+  guestId: string,
+  imageBase64: string
+): Promise<boolean> {
+  if (!guestId || !imageBase64) return false;
+
+  if (supabase) {
+    const { data: guest, error: guestError } = await supabase
+      .from('guests')
+      .select('passport_number')
+      .eq('id', guestId)
+      .maybeSingle();
+
+    if (guestError) {
+      console.error('[Hotel Service] Failed to fetch guest before passport photo upload:', guestError);
+    }
+
+    const storageKey =
+      typeof guest?.passport_number === 'string' && guest.passport_number.trim()
+        ? guest.passport_number.trim()
+        : `guest-${guestId}`;
+    const passportPath = await uploadPassportImage(storageKey, imageBase64);
+    if (!passportPath) return false;
+
+    const { error } = await supabase
+      .from('guests')
+      .update({ passport_path: passportPath })
+      .eq('id', guestId);
+
+    if (error) {
+      console.error('[Hotel Service] Failed to update guest passport photo:', error);
+      return false;
+    }
+
+    console.log(`[Hotel Service] Guest ${guestId} passport photo saved: ${passportPath}`);
+    return true;
+  }
+
+  const guest = MOCK_GUESTS.find((g) => g.id === guestId);
+  if (guest) {
+    const storageKey = guest.passportNumber || `guest-${guestId}`;
+    (guest as Record<string, unknown>).passportPath = `mock/${storageKey}/avatar-camera.png`;
+    console.log(`[Hotel Service] Updated mock guest ${guestId} with avatar passport photo`);
+    return true;
+  }
+
+  return false;
+}

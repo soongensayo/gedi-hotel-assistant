@@ -109,6 +109,68 @@ export async function clearNfcStatus(): Promise<void> {
   await api.post('/checkin/nfc-clear');
 }
 
+export interface StanfordAvatarAction {
+  type:
+    | 'store_reservation'
+    | 'capture_passport_photo'
+    | 'show_reservation'
+    | 'show_payment'
+    | 'show_key_card'
+    | 'end_session';
+  payload?: Record<string, unknown>;
+}
+
+export interface StanfordAvatarChatResponse {
+  reply: string;
+  actions: StanfordAvatarAction[];
+  sessionId: string;
+}
+
+export async function sendStanfordAvatarMessage(
+  message: string,
+  sessionId: string,
+  context?: Record<string, unknown>
+): Promise<StanfordAvatarChatResponse> {
+  const { data } = await api.post('/stanford-avatar/chat', {
+    message,
+    sessionId,
+    context,
+  });
+  return data;
+}
+
+export async function clearStanfordAvatarSession(sessionId: string): Promise<void> {
+  await api.delete(`/stanford-avatar/chat/${encodeURIComponent(sessionId)}`);
+}
+
+export async function synthesizeSpeech(text: string): Promise<Blob> {
+  const { data } = await api.post('/voice/tts', { text }, { responseType: 'blob' });
+  return data;
+}
+
+export async function transcribeAudio(audioBlob: Blob): Promise<{ text: string }> {
+  const formData = new FormData();
+  formData.append('audio', audioBlob, 'recording.webm');
+  const { data } = await api.post('/voice/stt', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function savePassportPhoto(
+  guestId: string,
+  photoDataUrl: string
+): Promise<{ success: boolean; error?: string }> {
+  const passportImageBase64 = photoDataUrl.includes(',')
+    ? photoDataUrl.split(',')[1]
+    : photoDataUrl;
+  const { data } = await api.post('/checkin/save-passport-photo', {
+    guestId,
+    passportImageBase64,
+  });
+  return data;
+}
+
 export interface IssueKeyCardRequest {
   guestName: string;
   roomNumber: string;

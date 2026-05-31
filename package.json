@@ -12,6 +12,7 @@
     "predev": "node -e \"if(process.platform!=='win32'){require('child_process').execSync('bash hardware/apply-audio.sh',{stdio:'inherit'})}\"",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:stanford\"",
     "dev:stanford": "npm run dev --workspace=stanford",
+    "dev:avatar": "npm run dev --workspace=stanford -- --mode avatar --port 5175",
     "dev:stanford:https": "node scripts/run-stanford-https.mjs",
     "demo:staff:fallback": "node scripts/open-staff-fallback-chrome.mjs",
     "setup:stanford-https": "node scripts/setup-stanford-https.mjs",

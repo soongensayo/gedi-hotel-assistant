@@ -16,6 +16,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.6",
+    "simli-client": "^3.0.1",
     "signature_pad": "^5.1.3",
     "socket.io-client": "^4.8.3",
     "tailwindcss": "^4.1.18"

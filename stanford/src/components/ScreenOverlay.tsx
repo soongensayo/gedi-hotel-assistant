@@ -10,7 +10,7 @@ type Props = {
 export function ScreenOverlay({ open, children, onClose }: Props) {
   if (!open) return null;
   return (
-    <div className="pointer-events-auto absolute inset-0 z-20 flex bg-[#10251f]/45 p-3 backdrop-blur-[2px] md:p-4">
+    <div className="screen-overlay-enter pointer-events-auto absolute inset-0 z-20 flex bg-[#10251f]/45 p-3 backdrop-blur-[2px] md:p-4">
       {onClose && (
         <button
           type="button"
@@ -20,7 +20,7 @@ export function ScreenOverlay({ open, children, onClose }: Props) {
           Minimize
         </button>
       )}
-      <div className="guest-action-panel h-full w-full overflow-y-auto rounded-lg border border-[var(--color-hotel-border)] bg-[var(--color-hotel-dark)] p-5 shadow-[0_18px_70px_rgba(16,37,31,0.22)] md:p-6">
+      <div className="guest-action-panel screen-panel-enter h-full w-full overflow-y-auto rounded-lg border border-[var(--color-hotel-border)] bg-[var(--color-hotel-dark)] p-5 shadow-[0_18px_70px_rgba(16,37,31,0.22)] md:p-6">
         {children}
       </div>
     </div>
