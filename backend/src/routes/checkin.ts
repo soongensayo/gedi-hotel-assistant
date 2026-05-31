@@ -9,6 +9,7 @@ import {
   searchReservations,
   getGuestByPassport,
   updateGuestPassportData,
+  updateGuestPassportPhoto,
 } from '../services/hotelService';
 import { generateWalletPass, isWalletConfigured } from '../services/wallet';
 import { sendCheckinEmail, isEmailConfigured } from '../services/emailService';
@@ -516,6 +517,30 @@ router.post('/save-passport-data', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[Checkin Route] Save passport data error:', error);
     res.status(500).json({ success: false, error: 'Failed to save passport data' });
+  }
+});
+
+/**
+ * POST /api/checkin/save-passport-photo
+ * Persist only a guest-camera passport photo, used by avatar-led Stanford check-in.
+ */
+router.post('/save-passport-photo', async (req: Request, res: Response) => {
+  try {
+    const { guestId, passportImageBase64 } = req.body;
+    if (!guestId || typeof guestId !== 'string') {
+      res.status(400).json({ success: false, error: 'guestId is required' });
+      return;
+    }
+    if (!passportImageBase64 || typeof passportImageBase64 !== 'string') {
+      res.status(400).json({ success: false, error: 'passportImageBase64 is required' });
+      return;
+    }
+
+    const saved = await updateGuestPassportPhoto(guestId, passportImageBase64);
+    res.status(saved ? 200 : 500).json({ success: saved });
+  } catch (error) {
+    console.error('[Checkin Route] Save passport photo error:', error);
+    res.status(500).json({ success: false, error: 'Failed to save passport photo' });
   }
 });
 

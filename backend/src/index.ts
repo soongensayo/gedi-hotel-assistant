@@ -27,6 +27,7 @@ import hotelRoutes from './routes/hotel';
 import checkinRoutes from './routes/checkin';
 import videocallRoutes from './routes/videocall';
 import jitsiRoutes from './routes/jitsi';
+import stanfordAvatarRoutes from './routes/stanfordAvatar';
 
 const app = express();
 const server = http.createServer(app);
@@ -52,6 +53,7 @@ app.use('/api/hotel', hotelRoutes);
 app.use('/api/checkin', checkinRoutes);
 app.use('/api/videocall', videocallRoutes);
 app.use('/api/jitsi', jitsiRoutes);
+app.use('/api/stanford-avatar', stanfordAvatarRoutes);
 
 // --- Health check ---
 app.get('/api/health', (_req, res) => {
