@@ -85,19 +85,19 @@ export function KeyCardScreen({
   }, [guestName, roomNumber, useHardwareNfc]);
 
   return (
-    <div className="space-y-6 text-center">
-      <h3 className="text-xl text-[var(--color-hotel-accent)]">Your key card</h3>
+    <div className="flex h-full flex-col justify-center gap-4 text-center">
+      <h3 className="text-lg text-[var(--color-hotel-accent)]">Your key card</h3>
       {phase === 'encoding' && (
-        <p className="text-[var(--color-hotel-text-dim)]">
+        <p className="text-sm text-[var(--color-hotel-text-dim)]">
           {statusText}
         </p>
       )}
       {phase === 'ready' && (
         <>
-          <p className="text-[var(--color-hotel-text-dim)]">
+          <p className="text-sm text-[var(--color-hotel-text-dim)]">
             The drawer will extend — please take your key card when it appears.
           </p>
-          <div className="mx-auto flex h-24 w-40 items-center justify-center rounded border border-[var(--color-hotel-accent)] bg-gradient-to-br from-[#f8f1df] via-[#d8c090] to-[#1f6a58] shadow-lg">
+          <div className="mx-auto flex h-20 w-36 items-center justify-center rounded border border-[var(--color-hotel-accent)] bg-gradient-to-br from-[#f8f1df] via-[#d8c090] to-[#1f6a58] shadow-lg">
             <span className="text-xs tracking-widest text-[#10251f]">KEY</span>
           </div>
         </>
@@ -108,14 +108,14 @@ export function KeyCardScreen({
         </p>
       )}
       {phase === 'done' && (
-        <p className="text-[var(--color-hotel-text-dim)]">{statusText}</p>
+        <p className="text-sm text-[var(--color-hotel-text-dim)]">{statusText}</p>
       )}
       {phase === 'error' && (
         <p className="text-sm text-red-200">{statusText}</p>
       )}
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         disabled={useHardwareNfc && (phase === 'encoding' || phase === 'dispensing')}
         onClick={completeKeyCard}
       >

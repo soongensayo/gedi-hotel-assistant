@@ -9,11 +9,11 @@ export function ReservationScreen({ reservation, onConfirm }: Props) {
   const guest = reservation.guest;
   const room = reservation.room;
   return (
-    <div className="space-y-4">
-      <h3 className="text-center text-xl text-[var(--color-hotel-accent)]">
+    <div className="flex h-full flex-col justify-center gap-3">
+      <h3 className="text-center text-lg text-[var(--color-hotel-accent)]">
         Confirm your reservation
       </h3>
-      <div className="rounded-lg border border-[var(--color-hotel-border)] bg-white/5 p-4 text-sm">
+      <div className="rounded-lg border border-[var(--color-hotel-border)] bg-white/5 p-3 text-sm">
         <p>
           <span className="text-[var(--color-hotel-text-dim)]">Confirmation</span>{' '}
           <span className="font-mono text-[var(--color-hotel-accent)]">
@@ -21,7 +21,7 @@ export function ReservationScreen({ reservation, onConfirm }: Props) {
           </span>
         </p>
         {guest && (
-          <p className="mt-2">
+          <p className="mt-1.5">
             Guest: {guest.firstName} {guest.lastName}
           </p>
         )}
@@ -35,7 +35,7 @@ export function ReservationScreen({ reservation, onConfirm }: Props) {
             </p>
           </>
         )}
-        <p className="mt-2">
+        <p className="mt-1.5">
           {reservation.currency} {reservation.totalAmount.toFixed(2)} total
         </p>
       </div>
@@ -44,7 +44,7 @@ export function ReservationScreen({ reservation, onConfirm }: Props) {
       </p>
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-2.5 text-sm font-medium text-white"
         onClick={onConfirm}
       >
         Yes, this is my reservation

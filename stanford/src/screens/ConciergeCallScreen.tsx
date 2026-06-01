@@ -154,13 +154,13 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
         );
       case 'custom':
         return customMessage ? (
-          <div className="space-y-3 text-center">
+          <div className="flex h-full flex-col justify-center gap-3 text-center">
             {customMessage.title && (
-              <h3 className="text-xl text-[var(--color-hotel-accent)]">
+              <h3 className="text-lg text-[var(--color-hotel-accent)]">
                 {customMessage.title}
               </h3>
             )}
-            <p className="text-white/85">{customMessage.body}</p>
+            <p className="text-sm leading-6 text-white/85">{customMessage.body}</p>
           </div>
         ) : null;
       default:

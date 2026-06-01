@@ -179,11 +179,11 @@ function CameraPassportScan({
   }, []);
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-center text-xl text-[var(--color-hotel-accent)]">
+    <div className="flex h-full flex-col justify-center gap-2.5">
+      <h3 className="text-center text-lg text-[var(--color-hotel-accent)]">
         Passport scan
       </h3>
-      <p className="text-center text-sm text-[var(--color-hotel-text-dim)]">
+      <p className="text-center text-xs leading-5 text-[var(--color-hotel-text-dim)]">
         Hold your passport toward the webcam above the screen, then fit the photo page
         in the frame.
       </p>
@@ -191,8 +191,8 @@ function CameraPassportScan({
       {error && <p className="text-center text-sm text-red-300">{error}</p>}
 
       {!captured && (
-        <div className="space-y-3">
-          <div className="mx-auto flex w-fit max-w-full items-center gap-2 rounded-full border border-[var(--color-hotel-accent)]/35 bg-[var(--guest-card-strong)] px-3 py-2 text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)] shadow-[0_10px_28px_rgba(31,106,88,0.12)]">
+        <div className="space-y-2.5">
+          <div className="mx-auto flex w-fit max-w-full items-center gap-2 rounded-full border border-[var(--color-hotel-accent)]/35 bg-[var(--guest-card-strong)] px-3 py-1.5 text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)] shadow-[0_10px_28px_rgba(31,106,88,0.12)]">
             <span className="relative h-5 w-5 shrink-0" aria-hidden="true">
               <span className="absolute left-1/2 top-1 h-3 w-px -translate-x-1/2 bg-[var(--color-hotel-accent)]" />
               <span className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rotate-45 border-l border-t border-[var(--color-hotel-accent)]" />
@@ -206,7 +206,7 @@ function CameraPassportScan({
               autoPlay
               playsInline
               muted
-              className="h-56 w-full -scale-x-100 bg-black object-cover"
+              className="h-[clamp(9rem,30dvh,13rem)] w-full -scale-x-100 bg-black object-cover"
             />
             {/* Passport placement overlay guide */}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -225,14 +225,14 @@ function CameraPassportScan({
 
       {captured && (
         <div className="mx-auto overflow-hidden rounded-lg border border-[var(--color-hotel-accent)]">
-          <img src={captured} alt="Captured passport" className="h-56 w-full object-cover" />
+          <img src={captured} alt="Captured passport" className="h-[clamp(9rem,30dvh,13rem)] w-full object-cover" />
         </div>
       )}
 
       {!captured && cameraReady && (
         <button
           type="button"
-          className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
+          className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-2.5 text-sm font-medium text-white"
           onClick={capture}
         >
           Capture
@@ -243,14 +243,14 @@ function CameraPassportScan({
         <div className="flex gap-3">
           <button
             type="button"
-            className="flex-1 rounded-lg border border-white/20 py-3 text-sm text-white/80"
+            className="flex-1 rounded-lg border border-white/20 py-2.5 text-sm text-white/80"
             onClick={retake}
           >
             Retake
           </button>
           <button
             type="button"
-            className="flex-1 rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
+            className="flex-1 rounded-lg bg-[var(--color-hotel-accent)] py-2.5 text-sm font-medium text-white"
             onClick={() => onCompleteRef.current(undefined, captured)}
           >
             Send to concierge
@@ -329,14 +329,14 @@ function HardwarePassportScan({
   }, []);
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-center text-xl text-[var(--color-hotel-accent)]">
+    <div className="flex h-full flex-col justify-center gap-3">
+      <h3 className="text-center text-lg text-[var(--color-hotel-accent)]">
         Passport scan
       </h3>
-      <p className="text-center text-sm text-[var(--color-hotel-text-dim)]">
+      <p className="text-center text-xs leading-5 text-[var(--color-hotel-text-dim)]">
         Place your passport photo page face-up, aligned with the guide on the scanner.
       </p>
-      <div className="mx-auto flex h-28 w-44 items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-hotel-accent)] bg-black/50 text-xs text-[var(--color-hotel-text-dim)]">
+      <div className="mx-auto flex h-24 w-40 items-center justify-center rounded-lg border-2 border-dashed border-[var(--color-hotel-accent)] bg-black/50 text-xs text-[var(--color-hotel-text-dim)]">
         MRZ at bottom · chip top-left
       </div>
       <p className="text-center text-sm capitalize text-white/80">{status}</p>

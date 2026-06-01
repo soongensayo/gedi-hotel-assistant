@@ -40,11 +40,11 @@ export function SignatureCapture({ onSubmit }: Props) {
   }, []);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <div className="overflow-hidden rounded-lg border border-[var(--color-hotel-border)]">
-        <canvas ref={canvasRef} className="h-40 w-full touch-none" />
+        <canvas ref={canvasRef} className="h-32 w-full touch-none" />
       </div>
-      <div className="flex gap-3">
+      <div className="flex gap-2.5">
         <button
           type="button"
           className="rounded-lg border border-white/20 px-4 py-2 text-sm text-white/80"
@@ -54,7 +54,7 @@ export function SignatureCapture({ onSubmit }: Props) {
         </button>
         <button
           type="button"
-          className="rounded-lg bg-[var(--color-hotel-accent)] px-4 py-2 text-sm font-medium text-white"
+          className="flex-1 rounded-lg bg-[var(--color-hotel-accent)] px-4 py-2 text-sm font-medium text-white"
           onClick={() => {
             const pad = padRef.current;
             if (!pad || pad.isEmpty()) return;

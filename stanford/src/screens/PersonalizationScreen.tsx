@@ -10,8 +10,8 @@ export function PersonalizationScreen({ onSubmit }: Props) {
   const [celebration, setCelebration] = useState('');
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-center text-xl text-[var(--color-hotel-accent)]">
+    <div className="flex h-full flex-col justify-center gap-3">
+      <h3 className="text-center text-lg text-[var(--color-hotel-accent)]">
         Personalize your stay
       </h3>
       <label className="block text-sm">
@@ -31,7 +31,7 @@ export function PersonalizationScreen({ onSubmit }: Props) {
         <select
           value={pillows}
           onChange={(e) => setPillows(e.target.value)}
-          className="mt-2 w-full rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-2 text-white"
+          className="mt-1.5 w-full rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-2 text-white"
         >
           <option value="standard">Standard</option>
           <option value="extra-soft">Extra soft</option>
@@ -46,12 +46,12 @@ export function PersonalizationScreen({ onSubmit }: Props) {
           value={celebration}
           onChange={(e) => setCelebration(e.target.value)}
           placeholder="Anniversary, birthday…"
-          className="mt-2 w-full rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-2 text-white placeholder:text-white/30"
+          className="mt-1.5 w-full rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-2 text-white placeholder:text-white/30"
         />
       </label>
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-2.5 text-sm font-medium text-white"
         onClick={() => onSubmit({ temperature, pillows, celebration })}
       >
         Save preferences
