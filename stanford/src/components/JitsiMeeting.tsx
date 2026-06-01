@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   JITSI_DOMAIN,
   JITSI_JWT,
@@ -13,12 +13,16 @@ type Props = {
 };
 
 type MeetingState = 'loading' | 'connecting' | 'ready' | 'warning' | 'error';
+type BackgroundState = 'idle' | 'applying' | 'on' | 'off' | 'failed';
 
 type VideoIssue = {
   title: string;
   body: string;
   actions: string[];
 };
+
+const STAFF_VIRTUAL_BACKGROUND_URL = '/images/staff-virtual-background.jpg';
+let staffVirtualBackgroundDataUrl: string | null = null;
 
 function isLoopbackHost(hostname: string) {
   return (
@@ -97,6 +101,24 @@ async function fetchJitsiToken({
   return String(data.token || '');
 }
 
+async function loadStaffVirtualBackground(): Promise<string> {
+  if (staffVirtualBackgroundDataUrl) return staffVirtualBackgroundDataUrl;
+
+  const response = await fetch(STAFF_VIRTUAL_BACKGROUND_URL);
+  if (!response.ok) {
+    throw new Error('Could not load staff virtual background.');
+  }
+
+  const blob = await response.blob();
+  staffVirtualBackgroundDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+  return staffVirtualBackgroundDataUrl;
+}
+
 export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<JitsiMeetExternalAPI | null>(null);
@@ -104,6 +126,39 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
   const [meetingState, setMeetingState] = useState<MeetingState>(readiness.state);
   const videoIssue = readiness.issue;
   const [errorDetail, setErrorDetail] = useState('');
+  const [staffBackgroundEnabled, setStaffBackgroundEnabled] = useState(!isGuest);
+  const [staffBackgroundState, setStaffBackgroundState] = useState<BackgroundState>(
+    isGuest ? 'idle' : 'applying'
+  );
+
+  const applyStaffBackground = useCallback(
+    async (api: JitsiMeetExternalAPI, enabled: boolean) => {
+      if (isGuest) return;
+      setStaffBackgroundState('applying');
+
+      try {
+        if (!enabled) {
+          api.executeCommand('setVirtualBackground', false, '');
+          setStaffBackgroundState('off');
+          return;
+        }
+
+        const backgroundImage = await loadStaffVirtualBackground();
+        api.executeCommand('setVirtualBackground', true, backgroundImage);
+        setStaffBackgroundState('on');
+      } catch {
+        setStaffBackgroundState('failed');
+      }
+    },
+    [isGuest]
+  );
+
+  const toggleStaffBackground = () => {
+    if (isGuest || !apiRef.current) return;
+    const nextEnabled = staffBackgroundState === 'failed' ? true : !staffBackgroundEnabled;
+    setStaffBackgroundEnabled(nextEnabled);
+    void applyStaffBackground(apiRef.current, nextEnabled);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -168,6 +223,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
 
       api.on('videoConferenceJoined', () => {
         if (!cancelled) setMeetingState('ready');
+        if (!isGuest) void applyStaffBackground(api, true);
       });
       api.on('cameraError', (...details) => {
         if (!cancelled) {
@@ -242,7 +298,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
       apiRef.current = null;
       if (containerEl) containerEl.innerHTML = '';
     };
-  }, [roomName, displayName, isGuest, videoIssue]);
+  }, [applyStaffBackground, roomName, displayName, isGuest, videoIssue]);
 
   const showBlockingOverlay = meetingState !== 'ready' && (videoIssue || meetingState === 'error');
   const showSpinner = meetingState === 'loading' || meetingState === 'connecting';
@@ -255,6 +311,23 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
         <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-md border border-white/10 bg-black/70 px-2.5 py-1 text-[10px] uppercase tracking-widest text-white/55">
           {JITSI_PROVIDER_LABEL}
         </div>
+      )}
+
+      {!isGuest && (
+        <button
+          type="button"
+          className="absolute right-3 top-3 z-20 rounded-md border border-white/10 bg-black/70 px-2.5 py-1 text-[10px] uppercase tracking-widest text-white/75 transition hover:border-[var(--color-hotel-accent)] hover:text-white disabled:cursor-wait disabled:opacity-65"
+          onClick={toggleStaffBackground}
+          disabled={staffBackgroundState === 'applying'}
+        >
+          {staffBackgroundState === 'applying'
+            ? 'Background...'
+            : staffBackgroundEnabled
+              ? staffBackgroundState === 'failed'
+                ? 'Retry background'
+                : 'Background on'
+              : 'Background off'}
+        </button>
       )}
 
       {showSpinner && !showBlockingOverlay && (
