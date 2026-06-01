@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { enableSuccessSoundOnNextGesture, playSuccessSound } from '../audio/successSound';
 import { activateNfc, clearNfcStatus, pollNfcStatus } from '../services/api';
 
 type Props = {
@@ -21,10 +22,15 @@ export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }
   const keyboardBufferRef = useRef('');
   const keyboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    enableSuccessSoundOnNextGesture();
+  }, []);
+
   const completePayment = useCallback(
     (source: 'serial' | 'keyboard' | 'button' | 'staff') => {
       if (paidRef.current) return;
       paidRef.current = true;
+      playSuccessSound();
       setReaderState('detected');
       setReaderMessage(
         source === 'button' || source === 'staff'
@@ -122,24 +128,24 @@ export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }
   const isDetected = readerState === 'detected';
 
   return (
-    <div className="space-y-5 text-center">
-      <h3 className="text-xl text-[var(--color-hotel-accent)]">Payment</h3>
+    <div className="flex h-full flex-col justify-center gap-3 text-center">
+      <h3 className="text-lg text-[var(--color-hotel-accent)]">Payment</h3>
       {instructions && (
-        <p className="text-sm text-[var(--color-hotel-text-dim)]">{instructions}</p>
+        <p className="text-xs leading-5 text-[var(--color-hotel-text-dim)]">{instructions}</p>
       )}
 
       <div className="flex justify-center">
-        <div className="relative flex h-44 w-44 items-center justify-center">
+        <div className="relative flex h-32 w-32 items-center justify-center">
           {!isDetected && (
             <>
               <div className="payment-tap-ring absolute inset-0 rounded-full border border-[var(--color-hotel-accent)]/25" />
               <div className="payment-tap-ring payment-tap-ring-delay absolute inset-0 rounded-full border border-[var(--color-hotel-accent)]/15" />
             </>
           )}
-          <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-[var(--color-hotel-accent)]/35 bg-[var(--color-hotel-accent)]/10 shadow-[0_0_36px_rgba(211,177,111,0.2)]">
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-[var(--color-hotel-accent)]/35 bg-[var(--color-hotel-accent)]/10 shadow-[0_0_36px_rgba(211,177,111,0.2)]">
             {isDetected ? (
               <svg
-                className="h-11 w-11 text-[var(--color-hotel-accent)]"
+                className="h-9 w-9 text-[var(--color-hotel-accent)]"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -150,7 +156,7 @@ export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }
               </svg>
             ) : (
               <svg
-                className="h-12 w-12 text-[var(--color-hotel-accent)]"
+                className="h-10 w-10 text-[var(--color-hotel-accent)]"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -168,7 +174,7 @@ export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }
         </div>
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         <p className="text-sm font-medium text-white">
           {isDetected ? 'Payment successful' : 'Tap card or phone on the NFC reader'}
         </p>
@@ -177,7 +183,7 @@ export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }
 
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white transition hover:brightness-110 disabled:opacity-70"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-2.5 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-70"
         onClick={() => completePayment('button')}
         disabled={isDetected}
       >

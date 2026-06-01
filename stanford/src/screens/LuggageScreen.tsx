@@ -10,8 +10,8 @@ export function LuggageScreen({ onSubmit }: Props) {
   const [eta, setEta] = useState('');
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-center text-xl text-[var(--color-hotel-accent)]">Luggage</h3>
+    <div className="flex h-full flex-col justify-center gap-3">
+      <h3 className="text-center text-lg text-[var(--color-hotel-accent)]">Luggage</h3>
       <label className="block text-sm">
         <span className="text-[var(--color-hotel-text-dim)]">Number of bags</span>
         <input
@@ -20,7 +20,7 @@ export function LuggageScreen({ onSubmit }: Props) {
           max={20}
           value={count}
           onChange={(e) => setCount(Number(e.target.value))}
-          className="mt-2 w-full rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-2 text-white"
+          className="mt-1.5 w-full rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-2 text-white"
         />
       </label>
       <label className="flex items-center gap-2 text-sm">
@@ -39,12 +39,12 @@ export function LuggageScreen({ onSubmit }: Props) {
           value={eta}
           onChange={(e) => setEta(e.target.value)}
           placeholder="Approx. arrival time"
-          className="mt-2 w-full rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-2 text-white"
+          className="mt-1.5 w-full rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-2 text-white"
         />
       </label>
       <button
         type="button"
-        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white"
+        className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-2.5 text-sm font-medium text-white"
         onClick={() => onSubmit(count, needsHelp, eta)}
       >
         Send to bell team
