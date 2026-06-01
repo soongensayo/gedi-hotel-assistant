@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { enableSuccessSoundOnNextGesture, playSuccessSound } from '../audio/successSound';
 import { issueKeyCard } from '../services/api';
 
 type Props = {
@@ -22,6 +23,17 @@ export function KeyCardScreen({
   useEffect(() => {
     onReceivedRef.current = onReceived;
   }, [onReceived]);
+
+  useEffect(() => {
+    enableSuccessSoundOnNextGesture();
+  }, []);
+
+  const completeKeyCard = () => {
+    if (phase === 'done') return;
+    playSuccessSound();
+    setPhase('done');
+    onReceivedRef.current();
+  };
 
   useEffect(() => {
     if (useHardwareNfc) return;
@@ -57,6 +69,7 @@ export function KeyCardScreen({
         }
 
         setStatusText(result.message || 'Your key card is ready.');
+        playSuccessSound();
         setPhase('done');
         onReceivedRef.current();
       } catch {
@@ -104,10 +117,7 @@ export function KeyCardScreen({
         type="button"
         className="w-full rounded-lg bg-[var(--color-hotel-accent)] py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         disabled={useHardwareNfc && (phase === 'encoding' || phase === 'dispensing')}
-        onClick={() => {
-          setPhase('done');
-          onReceived();
-        }}
+        onClick={completeKeyCard}
       >
         I have my key card
       </button>

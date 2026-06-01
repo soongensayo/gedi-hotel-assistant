@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { enableSuccessSoundOnNextGesture, playSuccessSound } from '../audio/successSound';
 import { activateNfc, clearNfcStatus, pollNfcStatus } from '../services/api';
 
 type Props = {
@@ -21,10 +22,15 @@ export function PaymentScreen({ instructions, onPaidDemo, successRequestId = 0 }
   const keyboardBufferRef = useRef('');
   const keyboardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    enableSuccessSoundOnNextGesture();
+  }, []);
+
   const completePayment = useCallback(
     (source: 'serial' | 'keyboard' | 'button' | 'staff') => {
       if (paidRef.current) return;
       paidRef.current = true;
+      playSuccessSound();
       setReaderState('detected');
       setReaderMessage(
         source === 'button' || source === 'staff'
