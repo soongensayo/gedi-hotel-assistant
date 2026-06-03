@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent } from 'react';
 
 const EXPERIENCES = [
   {
@@ -30,21 +31,75 @@ const FACTS = [
   ['24 hr', 'Concierge, luggage, and dining support'],
 ];
 
+const AUTO_ADVANCE_MS = 5800;
+const SWIPE_THRESHOLD_PX = 48;
+
 export function GuestShowcasePanel() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [manualAdvanceCount, setManualAdvanceCount] = useState(0);
+  const pointerStartX = useRef<number | null>(null);
+  const pointerStartY = useRef<number | null>(null);
+  const activePointerId = useRef<number | null>(null);
   const activeExperience = EXPERIENCES[activeIndex];
   const tickerItems = useMemo(
     () => [...FACTS, ...FACTS].map(([value, label]) => `${value} / ${label}`),
     []
   );
 
+  const showExperience = useCallback((nextIndex: number) => {
+    setActiveIndex((nextIndex + EXPERIENCES.length) % EXPERIENCES.length);
+    setManualAdvanceCount((count) => count + 1);
+  }, []);
+
+  const go = useCallback(
+    (direction: -1 | 1) => {
+      setActiveIndex((current) => (current + direction + EXPERIENCES.length) % EXPERIENCES.length);
+      setManualAdvanceCount((count) => count + 1);
+    },
+    []
+  );
+
   useEffect(() => {
     const interval = window.setInterval(() => {
       setActiveIndex((current) => (current + 1) % EXPERIENCES.length);
-    }, 5800);
+    }, AUTO_ADVANCE_MS);
 
     return () => window.clearInterval(interval);
-  }, []);
+  }, [manualAdvanceCount]);
+
+  const onPointerDown = (event: PointerEvent<HTMLElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    pointerStartX.current = event.clientX;
+    pointerStartY.current = event.clientY;
+    activePointerId.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const finishSwipe = (event: PointerEvent<HTMLElement>) => {
+    if (activePointerId.current !== event.pointerId || pointerStartX.current === null) return;
+
+    const dx = event.clientX - pointerStartX.current;
+    const dy = event.clientY - (pointerStartY.current ?? event.clientY);
+    pointerStartX.current = null;
+    pointerStartY.current = null;
+    activePointerId.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    go(dx < 0 ? 1 : -1);
+  };
+
+  const cancelSwipe = (event: PointerEvent<HTMLElement>) => {
+    if (activePointerId.current !== event.pointerId) return;
+    pointerStartX.current = null;
+    pointerStartY.current = null;
+    activePointerId.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   return (
     <section className="guest-showcase-panel relative shrink-0 overflow-hidden border-t border-[var(--color-hotel-border)] bg-[#eee5d5]">
@@ -74,7 +129,13 @@ export function GuestShowcasePanel() {
         </div>
 
         <div className="guest-showcase-main grid min-h-0">
-          <article className="guest-feature-card relative flex min-h-0 flex-col justify-between overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] p-5 shadow-[0_18px_60px_rgba(31,106,88,0.12)] backdrop-blur-sm">
+          <article
+            className="guest-feature-card relative flex min-h-0 touch-pan-y flex-col justify-between overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] p-5 shadow-[0_18px_60px_rgba(31,106,88,0.12)] backdrop-blur-sm"
+            onPointerDown={onPointerDown}
+            onPointerUp={finishSwipe}
+            onPointerCancel={cancelSwipe}
+            onPointerLeave={cancelSwipe}
+          >
             <img
               key={activeExperience.imageSrc}
               src={activeExperience.imageSrc}
@@ -114,7 +175,7 @@ export function GuestShowcasePanel() {
                       ? 'w-9 bg-[var(--color-hotel-accent)]'
                       : 'w-3 bg-[var(--color-hotel-border)]'
                   }`}
-                  onClick={() => setActiveIndex(index)}
+                  onClick={() => showExperience(index)}
                 />
               ))}
               <div className="ml-2 h-px flex-1 overflow-hidden bg-[var(--color-hotel-border)]">
