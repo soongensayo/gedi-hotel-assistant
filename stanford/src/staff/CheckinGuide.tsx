@@ -96,7 +96,7 @@ export function CheckinGuide({ guestPhase, guestScreen, completedEventTypes }: P
   );
 
   return (
-    <section className="rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-3">
+    <section className="rounded-lg border border-[var(--color-hotel-border)] bg-[var(--staff-surface)] p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-widest text-[var(--color-hotel-accent)]">
@@ -106,20 +106,20 @@ export function CheckinGuide({ guestPhase, guestScreen, completedEventTypes }: P
             Mock staff script and policy helper for this prototype property.
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-green-700/40 bg-green-950/30 px-2 py-1 text-[10px] uppercase tracking-wider text-green-300">
+        <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] uppercase tracking-wider text-emerald-800">
           live
         </span>
       </div>
 
-      <div className="mt-3 rounded border border-white/10 bg-white/[0.04] p-3">
+      <div className="mt-3 rounded border border-[var(--staff-line)] bg-white p-3 shadow-sm">
         <p className="text-[10px] uppercase tracking-wider text-[var(--color-hotel-text-dim)]">
           Suggested now
         </p>
-        <p className="mt-1 text-sm font-medium text-white">{currentHint.title}</p>
-        <p className="mt-1 text-xs leading-relaxed text-white/70">{currentHint.body}</p>
+        <p className="mt-1 text-sm font-medium text-[var(--color-hotel-text)]">{currentHint.title}</p>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--color-hotel-text-dim)]">{currentHint.body}</p>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
+      <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg border border-[var(--staff-line)] bg-[var(--staff-surface-muted)] p-1">
         <GuideTabButton label="Flow" isActive={activeTab === 'flow'} onClick={() => setActiveTab('flow')} />
         <GuideTabButton label="Policy" isActive={activeTab === 'policies'} onClick={() => setActiveTab('policies')} />
         <GuideTabButton label="Script" isActive={activeTab === 'talk'} onClick={() => setActiveTab('talk')} />
@@ -136,23 +136,23 @@ export function CheckinGuide({ guestPhase, guestScreen, completedEventTypes }: P
                   key={item.id}
                   className={`rounded border p-2 ${
                     isDone
-                      ? 'border-green-700/40 bg-green-950/20'
-                      : 'border-white/10 bg-white/[0.03]'
+                      ? 'border-emerald-200 bg-emerald-50'
+                      : 'border-[var(--staff-line)] bg-white'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <span
                       className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] ${
                         isDone
-                          ? 'border-green-500/60 bg-green-500/15 text-green-300'
-                          : 'border-white/20 text-white/45'
+                          ? 'border-emerald-300 bg-emerald-100 text-emerald-800'
+                          : 'border-[var(--staff-line)] text-[var(--color-hotel-text-dim)]'
                       }`}
                     >
                       {isDone ? 'OK' : ''}
                     </span>
-                    <p className="text-xs font-medium text-white/90">{item.label}</p>
+                    <p className="text-xs font-medium text-[var(--color-hotel-text)]">{item.label}</p>
                   </div>
-                  <p className="mt-1 pl-7 text-[11px] leading-relaxed text-white/55">
+                  <p className="mt-1 pl-7 text-[11px] leading-relaxed text-[var(--color-hotel-text-dim)]">
                     {item.detail}
                   </p>
                 </div>
@@ -166,7 +166,7 @@ export function CheckinGuide({ guestPhase, guestScreen, completedEventTypes }: P
             {POLICIES.map((policy) => (
               <p
                 key={policy}
-                className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-white/70"
+                className="rounded border border-[var(--staff-line)] bg-white px-3 py-2 text-xs leading-relaxed text-[var(--color-hotel-text)]"
               >
                 {policy}
               </p>
@@ -177,18 +177,18 @@ export function CheckinGuide({ guestPhase, guestScreen, completedEventTypes }: P
         {activeTab === 'talk' && (
           <div className="space-y-3">
             {TALK_TRACK.map((line) => (
-              <div key={line.label} className="rounded border border-white/10 bg-white/[0.03] p-3">
+              <div key={line.label} className="rounded border border-[var(--staff-line)] bg-white p-3">
                 <p className="text-[10px] uppercase tracking-wider text-[var(--color-hotel-accent)]">
                   {line.label}
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-white/75">{line.copy}</p>
+                <p className="mt-1 text-xs leading-relaxed text-[var(--color-hotel-text)]">{line.copy}</p>
               </div>
             ))}
-            <div className="rounded border border-red-400/30 bg-red-950/20 p-3">
-              <p className="text-[10px] uppercase tracking-wider text-red-200">
+            <div className="rounded border border-red-200 bg-red-50 p-3">
+              <p className="text-[10px] uppercase tracking-wider text-red-800">
                 Escalate when
               </p>
-              <ul className="mt-2 space-y-1 text-xs leading-relaxed text-red-100/75">
+              <ul className="mt-2 space-y-1 text-xs leading-relaxed text-red-800">
                 {ESCALATIONS.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -215,8 +215,8 @@ function GuideTabButton({
       type="button"
       className={`rounded-md px-2 py-1.5 text-xs font-medium uppercase tracking-wide ${
         isActive
-          ? 'bg-[var(--color-hotel-accent)] text-black'
-          : 'text-white/55 hover:bg-white/10 hover:text-white'
+          ? 'bg-[var(--color-hotel-accent)] text-white'
+          : 'text-[var(--color-hotel-text-dim)] hover:bg-white hover:text-[var(--color-hotel-text)]'
       }`}
       onClick={onClick}
     >

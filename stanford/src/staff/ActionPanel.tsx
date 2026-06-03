@@ -133,10 +133,10 @@ export function ActionPanel({ push }: Props) {
         <p
           className={`rounded-md border px-3 py-2 text-xs ${
             hardwareStatus.tone === 'success'
-              ? 'border-emerald-300/50 bg-emerald-950/35 text-emerald-100'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
               : hardwareStatus.tone === 'error'
-              ? 'border-red-400/50 bg-red-950/35 text-red-100'
-              : 'border-[var(--color-hotel-border)] bg-white/5 text-[var(--color-hotel-text-dim)]'
+              ? 'border-red-200 bg-red-50 text-red-800'
+              : 'border-[var(--color-hotel-border)] bg-[var(--staff-surface-muted)] text-[var(--color-hotel-text-dim)]'
           }`}
         >
           {hardwareStatus.text}
@@ -193,10 +193,10 @@ function FlowButton({
       type="button"
       className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium uppercase tracking-wide ${
         complete
-          ? 'border border-emerald-300/60 bg-emerald-900/45 text-emerald-100 hover:bg-emerald-800/55'
+          ? 'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
           : danger
-          ? 'border border-red-400/50 bg-red-950/40 text-red-200'
-          : 'border border-[var(--color-hotel-border)] bg-white/5 text-[var(--color-hotel-text)] hover:border-[var(--color-hotel-accent)]'
+            ? 'border border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
+            : 'border border-[var(--color-hotel-border)] bg-white text-[var(--color-hotel-text)] shadow-sm hover:border-[var(--color-hotel-accent)] hover:bg-[var(--staff-surface-muted)]'
       } disabled:cursor-not-allowed disabled:opacity-50`}
       disabled={disabled}
       onClick={onClick}

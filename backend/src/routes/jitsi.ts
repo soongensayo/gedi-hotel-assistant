@@ -100,7 +100,7 @@ function signJaasJwt({
 
 router.post('/token', (req: Request<unknown, unknown, JitsiTokenRequest>, res: Response) => {
   const roomName = String(req.body.roomName || '').trim();
-  const displayName = String(req.body.displayName || 'LuxeDrive').trim();
+  const displayName = String(req.body.displayName || 'PrimeDrive').trim();
   const role = req.body.role === 'staff' ? 'staff' : 'guest';
 
   if (!roomName) {

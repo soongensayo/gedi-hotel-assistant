@@ -35,7 +35,7 @@ export function ArtifactViewer({
   if (!hasAnything) return null;
 
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-3">
+    <div className="space-y-3 rounded-lg border border-[var(--color-hotel-border)] bg-[var(--staff-surface)] p-3 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-widest text-[var(--color-hotel-accent)]">
         Received from guest
       </p>
@@ -47,7 +47,7 @@ export function ArtifactViewer({
             <p className="text-[10px] text-[var(--color-hotel-text-dim)]">
               Live passport camera
             </p>
-            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] uppercase tracking-widest text-emerald-200">
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] uppercase tracking-widest text-emerald-800">
               live
             </span>
           </div>
@@ -80,12 +80,12 @@ export function ArtifactViewer({
             />
           </button>
           {passportNumber && (
-            <p className="font-mono text-xs text-white/80">#{passportNumber}</p>
+            <p className="font-mono text-xs text-[var(--color-hotel-text)]">#{passportNumber}</p>
           )}
         </div>
       )}
       {!passportPhotoUrl && passportNumber && (
-        <p className="text-xs text-white/80">
+        <p className="text-xs text-[var(--color-hotel-text)]">
           Passport (OCR): <span className="font-mono">{passportNumber}</span>
         </p>
       )}
@@ -106,7 +106,7 @@ export function ArtifactViewer({
 
       {/* Preferences */}
       {preferences && (
-        <div className="text-xs text-white/80">
+        <div className="text-xs text-[var(--color-hotel-text)]">
           <p className="text-[10px] text-[var(--color-hotel-text-dim)]">Room preferences</p>
           <p>
             {preferences.temperature}°C · {preferences.pillows}
@@ -117,7 +117,7 @@ export function ArtifactViewer({
 
       {/* Services */}
       {selectedServices.length > 0 && (
-        <div className="text-xs text-white/80">
+        <div className="text-xs text-[var(--color-hotel-text)]">
           <p className="text-[10px] text-[var(--color-hotel-text-dim)]">Services booked</p>
           <ul className="list-inside list-disc">
             {selectedServices.map((s) => (
@@ -129,7 +129,7 @@ export function ArtifactViewer({
 
       {/* Luggage */}
       {luggageInfo && (
-        <div className="text-xs text-white/80">
+        <div className="text-xs text-[var(--color-hotel-text)]">
           <p className="text-[10px] text-[var(--color-hotel-text-dim)]">Luggage</p>
           <p>
             {luggageInfo.count} bag{luggageInfo.count !== 1 ? 's' : ''}

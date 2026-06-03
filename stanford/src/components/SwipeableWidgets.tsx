@@ -51,7 +51,7 @@ export function SwipeableWidgets() {
         ))}
       </div>
 
-      {w === 'clock' && <ClockWidget />}
+      {w === 'clock' && <SingaporeClockCard />}
       {w === 'maps' && <MapsWidget />}
       {w === 'weather' && <WeatherWidget />}
       {w === 'news' && <NewsWidget />}
@@ -59,21 +59,31 @@ export function SwipeableWidgets() {
   );
 }
 
-function ClockWidget() {
+export function SingaporeClockCard({ compact = false }: { compact?: boolean }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="text-center">
-      <p className="text-sm tracking-widest text-[var(--color-hotel-text-dim)]">
+    <div
+      className={`text-center ${
+        compact
+          ? 'rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] px-4 py-4 shadow-[0_14px_36px_rgba(31,106,88,0.1)]'
+          : ''
+      }`}
+    >
+      <p className="text-xs uppercase tracking-[0.24em] text-[var(--color-hotel-text-dim)]">
         Singapore
       </p>
-      <p className="mt-2 font-mono text-4xl text-[var(--color-hotel-accent)]">
+      <p
+        className={`mt-2 font-mono leading-none text-[var(--color-hotel-accent)] ${
+          compact ? 'text-3xl md:text-4xl' : 'text-4xl'
+        }`}
+      >
         {now.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })}
       </p>
-      <p className="mt-1 text-[var(--color-hotel-text-dim)]">
+      <p className="mt-2 text-sm text-[var(--color-hotel-text-dim)]">
         {now.toLocaleDateString('en-SG', {
           weekday: 'long',
           month: 'long',
@@ -122,7 +132,7 @@ function NewsWidget() {
         best airport hub in Asia-Pacific.
       </li>
       <li>
-        <span className="text-[var(--color-hotel-accent)]">Hotel</span> — LuxeDrive
+        <span className="text-[var(--color-hotel-accent)]">Hotel</span> — PrimeDrive
         partners announce in-car concierge pilot.
       </li>
     </ul>

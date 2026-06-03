@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 type Props = {
   enabled: boolean;
+  woodThemeActive?: boolean;
+  onToggleWoodTheme?: () => void;
 };
 
 const chordProgression = [
@@ -15,7 +17,11 @@ const configuredJazzUrl = (
   import.meta.env.VITE_STANFORD_JAZZ_AUDIO_URL as string | undefined
 )?.trim();
 
-export function AmbientJazz({ enabled }: Props) {
+export function AmbientJazz({
+  enabled,
+  woodThemeActive = false,
+  onToggleWoodTheme,
+}: Props) {
   const engineRef = useRef<AmbientJazzEngine | null>(null);
   const [userStarted, setUserStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -44,20 +50,48 @@ export function AmbientJazz({ enabled }: Props) {
   if (!enabled) return null;
 
   return (
-    <button
-      type="button"
-      className="fixed right-4 top-4 z-50 rounded-full border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-hotel-accent)] shadow-[0_14px_36px_rgba(31,106,88,0.14)] backdrop-blur"
-      onClick={() => {
-        if (playing) {
-          engineRef.current?.stop();
-          setPlaying(false);
-          return;
-        }
-        setUserStarted(true);
-      }}
-    >
-      {playing ? (usingFallback ? 'Jazz ambience on' : 'Jazz on') : 'Tap for jazz'}
-    </button>
+    <div className="fixed right-4 top-4 z-50 flex items-center gap-2">
+      <button
+        type="button"
+        className="guest-chrome-control rounded-full border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-[var(--color-hotel-accent)] shadow-[0_14px_36px_rgba(31,106,88,0.14)] backdrop-blur"
+        onClick={() => {
+          if (playing) {
+            engineRef.current?.stop();
+            setPlaying(false);
+            return;
+          }
+          setUserStarted(true);
+        }}
+      >
+        {playing ? (usingFallback ? 'Jazz ambience on' : 'Jazz on') : 'Tap for jazz'}
+      </button>
+      {onToggleWoodTheme && (
+        <button
+          type="button"
+          aria-label={
+            woodThemeActive
+              ? 'Return to the original guest colour scheme'
+              : 'Switch to the white and wood guest colour scheme'
+          }
+          aria-pressed={woodThemeActive}
+          title={woodThemeActive ? 'Original colours' : 'White and wood colours'}
+          className={`guest-chrome-control flex h-9 w-9 items-center justify-center rounded-full border bg-[var(--guest-card-strong)] shadow-[0_14px_36px_rgba(31,106,88,0.14)] backdrop-blur transition ${
+            woodThemeActive
+              ? 'border-[var(--color-hotel-accent)]'
+              : 'border-[var(--color-hotel-border)]'
+          }`}
+          onClick={onToggleWoodTheme}
+        >
+          <span
+            aria-hidden="true"
+            className="h-4 w-4 rounded-full border border-[var(--color-hotel-border)] bg-[linear-gradient(135deg,#ffffff_0_42%,#b88452_42%_68%,#5d3821_68%_100%)] shadow-inner"
+          />
+          <span className="sr-only">
+            {woodThemeActive ? 'Use original colours' : 'Use white and wood colours'}
+          </span>
+        </button>
+      )}
+    </div>
   );
 }
 

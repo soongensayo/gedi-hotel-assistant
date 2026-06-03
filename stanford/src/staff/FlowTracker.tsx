@@ -34,7 +34,7 @@ export function FlowTracker({ guestPhase, guestScreen, completedEventTypes }: Pr
   const inConcierge = guestPhase === 'concierge';
 
   return (
-    <div className="rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-3">
+    <div className="rounded-lg border border-[var(--color-hotel-border)] bg-[var(--staff-surface)] p-3 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-widest text-[var(--color-hotel-accent)]">
           Flow
@@ -42,10 +42,10 @@ export function FlowTracker({ guestPhase, guestScreen, completedEventTypes }: Pr
         <span
           className={`rounded-full px-2 py-0.5 text-[10px] ${
             inConcierge
-              ? 'bg-green-900/50 text-green-300'
+              ? 'bg-emerald-50 text-emerald-800'
               : guestPhase === 'media'
-                ? 'bg-blue-900/50 text-blue-300'
-                : 'bg-white/10 text-white/50'
+                ? 'bg-blue-50 text-blue-800'
+                : 'bg-stone-100 text-stone-600'
           }`}
         >
           {guestPhase ?? 'disconnected'}
@@ -64,8 +64,8 @@ export function FlowTracker({ guestPhase, guestScreen, completedEventTypes }: Pr
                 isCurrent
                   ? 'border border-[var(--color-hotel-accent)] bg-[var(--color-hotel-accent)]/20 text-[var(--color-hotel-accent)]'
                   : isDone
-                    ? 'border border-green-700/50 bg-green-950/40 text-green-300'
-                    : 'border border-white/10 text-white/30'
+                    ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                    : 'border border-[var(--staff-line)] bg-white/60 text-[var(--color-hotel-text-dim)]'
               }`}
             >
               {isDone ? '✓ ' : ''}

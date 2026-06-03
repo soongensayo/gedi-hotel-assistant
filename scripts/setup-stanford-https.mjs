@@ -44,7 +44,7 @@ distinguished_name = dn
 x509_extensions = v3_req
 
 [dn]
-CN = LuxeDrive Stanford Dev
+CN = PrimeDrive Stanford Dev
 
 [v3_req]
 subjectAltName = @alt_names

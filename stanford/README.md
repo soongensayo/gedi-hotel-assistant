@@ -1,4 +1,4 @@
-# LuxeDrive — Stanford showcase (in-car tablet)
+# PrimeDrive — Stanford showcase (in-car tablet)
 
 ## Quick start
 
@@ -57,7 +57,7 @@ Because this uses a self-signed local certificate, each browser must accept/trus
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_STANFORD_ROOM_ID` | Shared session id for Socket.IO + Jitsi room suffix (default: `luxe-demo`) |
+| `VITE_STANFORD_ROOM_ID` | Shared session id for Socket.IO + Jitsi room suffix (default: `prime-demo`) |
 | `VITE_STANFORD_USE_NFC` | Set `true` to use the hardware card encoder/dispenser during the key-card step |
 | `STANFORD_ENCODER_URL` | Backend URL for the Python card encoder/dispenser service (default: `http://localhost:5000`) |
 | `VITE_STANFORD_KEY_GUEST` | Fallback guest name for key-card demos when no reservation has been pushed |
@@ -66,7 +66,7 @@ Because this uses a self-signed local certificate, each browser must accept/trus
 | `VITE_STANFORD_YOUTUBE_EMBED` | Full embed URL for media mode video |
 | `VITE_SOCKET_URL` | Override Socket.IO origin (defaults to same host as the Vite dev server) |
 | `VITE_JITSI_DOMAIN` | Jitsi domain (default: `meet.jit.si`; use `8x8.vc` for JaaS) |
-| `VITE_JITSI_APP_ID` | JaaS app id / magic cookie. When set, rooms become `<app-id>/LuxeDrive_Stanford_<room>` |
+| `VITE_JITSI_APP_ID` | JaaS app id / magic cookie. When set, rooms become `<app-id>/PrimeDrive_Stanford_<room>` |
 | `VITE_JITSI_JWT` | Optional JaaS JWT for the embedded meeting. For production, generate short-lived JWTs server-side instead of hard-coding them in frontend env |
 | `STANFORD_HTTPS` | Set `true` to run Vite over HTTPS for LAN staff-laptop camera/mic access |
 | `STANFORD_HTTPS_KEY` | Optional HTTPS key path (default: `stanford/certs/dev-key.pem`) |

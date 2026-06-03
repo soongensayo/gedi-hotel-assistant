@@ -184,9 +184,6 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
               <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
                 Assisted check-in
               </p>
-              <h1 className="mt-2 text-2xl leading-tight text-white md:text-4xl">
-                Your concierge is preparing the call.
-              </h1>
             </div>
             <span className="rounded-full border border-white/30 bg-[#10251f]/45 px-3 py-1 text-[10px] uppercase tracking-widest text-white/85">
               Private session

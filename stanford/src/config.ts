@@ -1,5 +1,5 @@
 export const STANFORD_ROOM_ID =
-  (import.meta.env.VITE_STANFORD_ROOM_ID as string | undefined) ?? 'luxe-demo';
+  (import.meta.env.VITE_STANFORD_ROOM_ID as string | undefined) ?? 'prime-demo';
 
 export const JITSI_DOMAIN =
   (import.meta.env.VITE_JITSI_DOMAIN as string | undefined) ?? 'meet.jit.si';
@@ -18,7 +18,7 @@ export const JITSI_PROVIDER_LABEL = JITSI_APP_ID
 
 export function jitsiRoomName(roomId: string): string {
   const safe = roomId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const room = `LuxeDrive_Stanford_${safe}`;
+  const room = `PrimeDrive_Stanford_${safe}`;
   return JITSI_APP_ID ? `${JITSI_APP_ID}/${room}` : room;
 }
 

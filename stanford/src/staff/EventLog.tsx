@@ -58,7 +58,7 @@ export function EventLog({ entries }: Props) {
         {entries.map((entry) => (
           <li
             key={entry.id}
-            className="flex gap-2 rounded border border-transparent px-1 py-0.5 text-white/70 hover:border-[var(--color-hotel-border)]"
+            className="flex gap-2 rounded border border-transparent px-1 py-0.5 text-[var(--color-hotel-text)] hover:border-[var(--color-hotel-border)] hover:bg-white"
           >
             <span className="shrink-0 font-mono text-[var(--color-hotel-text-dim)]">
               {formatTime(entry.ts)}
