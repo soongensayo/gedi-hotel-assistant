@@ -173,12 +173,14 @@ export function ConciergeCallScreen({ roomId, stanford }: Props) {
       showcaseOverlay={<ScreenOverlay open={showOverlay}>{overlayInner()}</ScreenOverlay>}
     >
       <div className="guest-call-surface relative h-full w-full bg-[var(--guest-deep)]">
-        <JitsiMeeting
-          roomName={meetingRoom}
-          displayName={`Guest · ${roomId}`}
-          isGuest
-        />
-        <div className="guest-video-chrome pointer-events-none absolute inset-0 z-10 flex flex-col justify-between bg-[linear-gradient(180deg,rgba(16,37,31,0.64),transparent_34%,rgba(16,37,31,0.72))] p-5 md:p-8">
+        <div className="guest-jitsi-frame absolute left-0 right-0 top-1/2 -translate-y-1/2">
+          <JitsiMeeting
+            roomName={meetingRoom}
+            displayName={`Guest · ${roomId}`}
+            isGuest
+          />
+        </div>
+        <div className="guest-video-chrome pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-5 md:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
