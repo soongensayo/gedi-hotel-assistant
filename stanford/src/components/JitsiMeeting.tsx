@@ -194,6 +194,7 @@ export function JitsiMeeting({ roomName, displayName, isGuest }: Props) {
         userInfo: { displayName },
         configOverwrite: {
           prejoinPageEnabled: false,
+          prejoinConfig: { enabled: false },
           startWithAudioMuted: false,
           startWithVideoMuted: false,
           disableDeepLinking: true,
