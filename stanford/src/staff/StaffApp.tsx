@@ -21,7 +21,7 @@ export function StaffApp() {
   );
 
   return (
-    <div className="flex h-full flex-col gap-2 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-hidden md:p-4">
+    <div className="staff-interface flex h-full flex-col gap-2 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-hidden md:p-4">
       {/* Left: video + flow tracker + event log */}
       <div className="flex min-h-[40vh] flex-1 flex-col gap-3 md:min-h-0">
         <p className="shrink-0 text-center text-xs text-[var(--color-hotel-text-dim)]">
@@ -40,7 +40,7 @@ export function StaffApp() {
           guestScreen={staff.guestScreen}
           completedEventTypes={completedEventTypes}
         />
-        <div className="shrink-0 rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-3">
+        <div className="shrink-0 rounded-lg border border-[var(--color-hotel-border)] bg-[var(--staff-surface)] p-3 shadow-sm">
           <p className="mb-2 text-xs font-medium uppercase tracking-widest text-[var(--color-hotel-accent)]">
             Event log
           </p>

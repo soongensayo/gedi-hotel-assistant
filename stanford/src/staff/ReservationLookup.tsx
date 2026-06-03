@@ -54,7 +54,7 @@ export function ReservationLookup({ onPushReservation, onProfileLoaded }: Props)
   const room = activeReservation?.room;
 
   return (
-    <div className="space-y-2 rounded-lg border border-[var(--color-hotel-border)] bg-black/40 p-3">
+    <div className="space-y-2 rounded-lg border border-[var(--color-hotel-border)] bg-[var(--staff-surface)] p-3 shadow-sm">
       <p className="text-sm font-medium text-[var(--color-hotel-accent)]">
         Guest profile
       </p>
@@ -69,18 +69,18 @@ export function ReservationLookup({ onPushReservation, onProfileLoaded }: Props)
             if (e.key === 'Enter' && query.trim()) void search();
           }}
           placeholder="James, GAH-2026-1, passport..."
-          className="min-w-0 flex-1 rounded border border-white/20 bg-black/50 px-2 py-1.5 text-sm text-white"
+          className="min-w-0 flex-1 rounded border border-[var(--staff-line)] bg-white px-2 py-1.5 text-sm text-[var(--color-hotel-text)] placeholder:text-[var(--color-hotel-text-dim)]"
         />
         <button
           type="button"
-          className="shrink-0 rounded bg-[var(--color-hotel-accent)] px-3 py-1.5 text-sm font-medium text-black"
+          className="shrink-0 rounded bg-[var(--color-hotel-accent)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-55"
           onClick={() => void search()}
           disabled={loading || !query.trim()}
         >
           {loading ? '…' : 'Find'}
         </button>
       </div>
-      {error && <p className="text-xs text-red-300">{error}</p>}
+      {error && <p className="text-xs text-red-700">{error}</p>}
 
       {results.length > 1 && !profile && (
         <div className="space-y-1">
@@ -88,16 +88,16 @@ export function ReservationLookup({ onPushReservation, onProfileLoaded }: Props)
             <button
               key={reservation.id}
               type="button"
-              className="w-full rounded border border-white/10 bg-white/5 px-2 py-2 text-left text-xs text-white/80 hover:border-[var(--color-hotel-accent)]"
+              className="w-full rounded border border-[var(--staff-line)] bg-white px-2 py-2 text-left text-xs text-[var(--color-hotel-text-dim)] shadow-sm hover:border-[var(--color-hotel-accent)]"
               onClick={() => void loadProfile(reservation)}
             >
-              <span className="block text-sm text-white">
+              <span className="block text-sm text-[var(--color-hotel-text)]">
                 {guestName(reservation)}
               </span>
               <span className="font-mono text-[var(--color-hotel-accent)]">
                 {reservation.confirmationCode}
               </span>
-              <span className="text-white/40"> · </span>
+              <span className="text-[var(--color-hotel-text-dim)]"> · </span>
               <span>{reservation.room?.roomNumber ?? 'room pending'}</span>
             </button>
           ))}
@@ -105,11 +105,11 @@ export function ReservationLookup({ onPushReservation, onProfileLoaded }: Props)
       )}
 
       {activeReservation && (
-        <div className="space-y-3 text-xs text-white/80">
-          <div className="rounded border border-white/10 bg-white/5 p-3">
+        <div className="space-y-3 text-xs text-[var(--color-hotel-text)]">
+          <div className="rounded border border-[var(--staff-line)] bg-white p-3 shadow-sm">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-base text-white">{guestName(activeReservation)}</p>
+                <p className="text-base text-[var(--color-hotel-text)]">{guestName(activeReservation)}</p>
                 <p className="font-mono text-[var(--color-hotel-accent)]">
                   {activeReservation.confirmationCode}
                 </p>
@@ -125,7 +125,7 @@ export function ReservationLookup({ onPushReservation, onProfileLoaded }: Props)
             </div>
 
             {(guest?.loyaltyTier || guest?.vipNotes || guest?.accessibilityNotes || activeReservation.specialRequests) && (
-              <div className="mt-3 space-y-1 border-t border-white/10 pt-2">
+              <div className="mt-3 space-y-1 border-t border-[var(--staff-line)] pt-2">
                 {guest?.loyaltyTier && <Line label="Tier" value={guest.loyaltyTier} />}
                 {guest?.vipNotes && <Line label="Notes" value={guest.vipNotes} />}
                 {guest?.accessibilityNotes && <Line label="Access" value={guest.accessibilityNotes} />}
@@ -136,7 +136,7 @@ export function ReservationLookup({ onPushReservation, onProfileLoaded }: Props)
             )}
 
             {profile?.activeSession && (
-              <div className="mt-3 border-t border-white/10 pt-2">
+              <div className="mt-3 border-t border-[var(--staff-line)] pt-2">
                 <Line label="Live step" value={profile.activeSession.currentStep ?? 'video-only'} />
                 <Line label="Identity" value={profile.activeSession.identityStatus ?? 'not started'} />
                 <Line label="Payment" value={profile.activeSession.paymentStatus ?? 'pending'} />
@@ -146,7 +146,7 @@ export function ReservationLookup({ onPushReservation, onProfileLoaded }: Props)
 
           <button
             type="button"
-            className="mt-2 w-full rounded border border-[var(--color-hotel-accent)] py-1.5 text-[var(--color-hotel-accent)]"
+            className="mt-2 w-full rounded border border-[var(--color-hotel-accent)] bg-white py-1.5 font-medium text-[var(--color-hotel-accent)] hover:bg-[var(--staff-surface-muted)]"
             onClick={() => onPushReservation(activeReservation)}
           >
             Show on guest tablet
@@ -176,7 +176,7 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] uppercase tracking-wider text-[var(--color-hotel-text-dim)]">
         {label}
       </p>
-      <p className="truncate text-white/85">{value}</p>
+      <p className="truncate text-[var(--color-hotel-text)]">{value}</p>
     </div>
   );
 }

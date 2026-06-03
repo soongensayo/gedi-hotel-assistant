@@ -6,36 +6,21 @@ const EXPERIENCES = [
     title: 'Lantern Lounge aperitif',
     body: 'Complimentary first pour from 18:00 to 19:00 for arriving guests. Low music, skyline seats, and a short walk from the lift lobby.',
     meta: 'Tonight only',
+    imageSrc: '/images/first-pour.png',
   },
   {
     label: 'Private dining',
     title: 'Chef counter encore',
     body: 'A limited tasting menu opens after check-in, with a late seating held for arriving suite guests.',
     meta: '19:30 seating',
+    imageSrc: '/images/chef-encore.png',
   },
   {
     label: 'Wellness ritual',
     title: 'Steam, tea, stillness',
     body: 'The recovery suite pairs a eucalyptus steam room with a calming tea service before turndown.',
     meta: 'Level 6',
-  },
-];
-
-const HIGHLIGHTS = [
-  {
-    label: 'Sky Pool',
-    title: 'Golden hour cabanas',
-    body: 'Reserve a private bay for sunset views over Marina Bay.',
-  },
-  {
-    label: 'Dining',
-    title: 'Chef counter tonight',
-    body: 'A six-course tasting menu is available from 19:30.',
-  },
-  {
-    label: 'Wellness',
-    title: 'Quiet recovery suite',
-    body: 'Steam, tea service, and a 60-minute signature massage.',
+    imageSrc: '/images/steam-room.png',
   },
 ];
 
@@ -88,14 +73,22 @@ export function GuestShowcasePanel() {
           </p>
         </div>
 
-        <div className="guest-showcase-main grid min-h-0 gap-3 md:grid-cols-[1.05fr_1fr]">
-          <article className="guest-feature-card relative flex min-h-0 flex-col justify-end overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] p-4 shadow-[0_18px_60px_rgba(31,106,88,0.12)] backdrop-blur-sm">
+        <div className="guest-showcase-main grid min-h-0">
+          <article className="guest-feature-card relative flex min-h-0 flex-col justify-between overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] p-5 shadow-[0_18px_60px_rgba(31,106,88,0.12)] backdrop-blur-sm">
+            <img
+              key={activeExperience.imageSrc}
+              src={activeExperience.imageSrc}
+              alt=""
+              className="guest-offering-image absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,252,244,0.92),rgba(255,252,244,0.72)_34%,rgba(255,252,244,0.18)_58%,rgba(255,252,244,0)_78%)]" />
+            <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(255,252,244,0.18),transparent_36%,rgba(255,252,244,0.04))]" />
             <div className="absolute left-0 top-0 h-px w-full bg-[linear-gradient(90deg,transparent,var(--color-hotel-accent),transparent)] opacity-60" />
             <div
               key={activeExperience.title}
-              className="hotel-card-reveal"
+              className="hotel-card-reveal relative max-w-[45%]"
             >
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <p className="text-[11px] uppercase tracking-widest text-[var(--color-hotel-text-dim)]">
                   {activeExperience.label}
                 </p>
@@ -106,11 +99,11 @@ export function GuestShowcasePanel() {
               <h3 className="mt-2 text-xl text-[var(--color-hotel-accent)]">
                 {activeExperience.title}
               </h3>
-              <p className="guest-feature-body mt-2 max-w-lg text-[15px] leading-6 text-[var(--color-hotel-text-dim)]">
+              <p className="guest-feature-body mt-2 max-w-2xl text-[15px] leading-6 text-[var(--color-hotel-text-dim)]">
                 {activeExperience.body}
               </p>
             </div>
-            <div className="mt-4 flex items-center gap-2">
+            <div className="relative mt-4 flex items-center gap-2">
               {EXPERIENCES.map((item, index) => (
                 <button
                   key={item.title}
@@ -132,24 +125,6 @@ export function GuestShowcasePanel() {
               </div>
             </div>
           </article>
-
-          <div className="guest-highlight-grid grid min-h-0 grid-cols-3 gap-2">
-            {HIGHLIGHTS.map((item, index) => (
-              <article
-                key={item.label}
-                className="guest-highlight-card hotel-float-card overflow-hidden rounded-lg border border-[var(--color-hotel-border)] bg-[var(--guest-card)] p-3 backdrop-blur-sm"
-                style={{ animationDelay: `${index * 420}ms` }}
-              >
-                <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-accent)]">
-                  {item.label}
-                </p>
-                <h3 className="guest-highlight-title mt-2 text-[15px] leading-snug text-[var(--color-hotel-text)]">{item.title}</h3>
-                <p className="guest-highlight-body mt-2 line-clamp-3 text-xs leading-5 text-[var(--color-hotel-text-dim)]">
-                  {item.body}
-                </p>
-              </article>
-            ))}
-          </div>
         </div>
 
         <div className="overflow-hidden border-t border-[var(--color-hotel-border)] pt-3">
