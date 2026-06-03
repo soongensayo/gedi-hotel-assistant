@@ -163,6 +163,9 @@ export function GuestShowcasePanel() {
               <p className="guest-feature-body mt-2 max-w-2xl text-[15px] leading-6 text-[var(--color-hotel-text-dim)]">
                 {activeExperience.body}
               </p>
+              <p className="mt-3 text-[10px] uppercase tracking-widest text-[var(--color-hotel-text-dim)]">
+                Ask concierge for more details
+              </p>
             </div>
             <div className="relative mt-4 flex items-center gap-2">
               {EXPERIENCES.map((item, index) => (
@@ -175,7 +178,11 @@ export function GuestShowcasePanel() {
                       ? 'w-9 bg-[var(--color-hotel-accent)]'
                       : 'w-3 bg-[var(--color-hotel-border)]'
                   }`}
-                  onClick={() => showExperience(index)}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    showExperience(index);
+                  }}
                 />
               ))}
               <div className="ml-2 h-px flex-1 overflow-hidden bg-[var(--color-hotel-border)]">
