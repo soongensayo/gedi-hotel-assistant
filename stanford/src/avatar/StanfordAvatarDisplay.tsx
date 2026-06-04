@@ -22,17 +22,14 @@ export function StanfordAvatarDisplay({ thinking, speaking, onClientChange }: Pr
   const startedRef = useRef(false);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const startAvatar = useCallback(async () => {
     if (startedRef.current || !videoRef.current || !audioRef.current) return;
     if (!SIMLI_API_KEY || !SIMLI_FACE_ID) {
-      setError('Avatar keys are not configured.');
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
       const [tokenResult, iceServers] = await Promise.all([
@@ -59,15 +56,13 @@ export function StanfordAvatarDisplay({ thinking, speaking, onClientChange }: Pr
       client.on('start', () => {
         setConnected(true);
         setLoading(false);
-        setError(null);
         onClientChange(client, true);
       });
       client.on('stop', () => {
         setConnected(false);
         onClientChange(null, false);
       });
-      client.on('error', (detail: string) => {
-        setError(`Avatar connection failed: ${detail}`);
+      client.on('error', () => {
         setConnected(false);
         setLoading(false);
         onClientChange(null, false);
@@ -76,8 +71,7 @@ export function StanfordAvatarDisplay({ thinking, speaking, onClientChange }: Pr
       clientRef.current = client;
       await client.start();
       startedRef.current = true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start avatar.');
+    } catch {
       setLoading(false);
       onClientChange(null, false);
     }
@@ -99,7 +93,7 @@ export function StanfordAvatarDisplay({ thinking, speaking, onClientChange }: Pr
   }, [onClientChange]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#10251f]">
+    <div className="relative h-full w-full overflow-hidden bg-[var(--guest-deep)]">
       <video
         ref={videoRef}
         className="absolute inset-0 h-full w-full object-cover"
@@ -111,20 +105,20 @@ export function StanfordAvatarDisplay({ thinking, speaking, onClientChange }: Pr
       <audio ref={audioRef} autoPlay playsInline className="hidden" />
 
       {!connected && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_center,rgba(31,106,88,0.34),#10251f_66%)]">
+        <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_center,rgba(31,106,88,0.34),var(--guest-deep)_66%)]">
           <div className="flex flex-col items-center gap-5 text-center text-white/88">
-            <div className="relative flex h-40 w-40 items-center justify-center rounded-full border border-[#d3b16f]/35 bg-white/8">
-              <div className={`h-24 w-24 rounded-full border border-[#d3b16f]/55 ${loading ? 'animate-pulse' : ''}`} />
+            <div className="relative flex h-40 w-40 items-center justify-center rounded-full border border-[var(--color-hotel-gold)]/35 bg-white/8">
+              <div className={`h-24 w-24 rounded-full border border-[var(--color-hotel-gold)]/55 ${loading ? 'animate-pulse' : ''}`} />
               {loading && (
-                <div className="absolute h-32 w-32 animate-spin rounded-full border-2 border-transparent border-t-[#d3b16f]" />
+                <div className="absolute h-32 w-32 animate-spin rounded-full border-2 border-transparent border-t-[var(--color-hotel-gold)]" />
               )}
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-[#d3b16f]">
+              <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-gold)]">
                 AI avatar concierge
               </p>
               <p className="mt-2 text-sm text-white/70">
-                {loading ? 'Connecting avatar...' : error ?? 'Voice mode is ready.'}
+                {loading ? 'Preparing voice...' : 'Voice mode is ready.'}
               </p>
             </div>
           </div>
@@ -138,7 +132,7 @@ export function StanfordAvatarDisplay({ thinking, speaking, onClientChange }: Pr
           {[0, 1, 2, 3, 4].map((bar) => (
             <span
               key={bar}
-              className="w-1.5 rounded-full bg-[#d3b16f]/80"
+              className="w-1.5 rounded-full bg-[var(--color-hotel-gold)]/80"
               style={{
                 height: `${speaking ? 18 + ((bar % 3) * 8) : 8}px`,
                 animation: 'avatar-eq 820ms ease-in-out infinite',
