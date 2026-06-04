@@ -3,7 +3,6 @@ import { AmbientJazz } from '../components/AmbientJazz';
 import { GuestPortraitShell } from '../components/GuestPortraitShell';
 import { ScreenOverlay } from '../components/ScreenOverlay';
 import { CheckinCompleteScreen } from '../screens/CheckinCompleteScreen';
-import { KeyCardScreen } from '../screens/KeyCardScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';
 import { ReservationScreen } from '../screens/ReservationScreen';
 import {
@@ -14,6 +13,7 @@ import {
 } from '../services/api';
 import type { GuestScreenId, Reservation } from '../types';
 import { AutoPassportCaptureScreen } from './AutoPassportCaptureScreen';
+import { AvatarKeyCardScreen } from './AvatarKeyCardScreen';
 import {
   StanfordAvatarChatPanel,
   type AvatarMessage,
@@ -238,6 +238,7 @@ export function AvatarGuestApp() {
     ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim()
     : fallbackKeyGuest;
   const roomNumber = reservation?.room?.roomNumber ?? fallbackKeyRoom;
+  const keyCardIssueKey = `${sessionIdRef.current}:${reservation?.id ?? 'fallback'}:${guestName}:${roomNumber}`;
   const guestThemeClassName = woodThemeActive ? 'guest-interface guest-theme-wood' : 'guest-interface';
   const themeControls = (
     <AmbientJazz
@@ -282,8 +283,8 @@ export function AvatarGuestApp() {
         );
       case 'key-card':
         return (
-          <KeyCardScreen
-            useHardwareNfc
+          <AvatarKeyCardScreen
+            issueKey={keyCardIssueKey}
             guestName={guestName}
             roomNumber={roomNumber}
             onReceived={() => {
@@ -348,7 +349,7 @@ export function AvatarGuestApp() {
                 Avatar check-in
               </p>
               <h1 className="mt-2 text-2xl leading-tight md:text-4xl">
-                Azure is ready to check you in.
+                PrimeDrive is ready to check you in.
               </h1>
             </div>
             <button
