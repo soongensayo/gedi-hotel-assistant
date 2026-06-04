@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AmbientJazz } from '../components/AmbientJazz';
 import { GuestPortraitShell } from '../components/GuestPortraitShell';
 import { ScreenOverlay } from '../components/ScreenOverlay';
 import { CheckinCompleteScreen } from '../screens/CheckinCompleteScreen';
@@ -30,6 +31,7 @@ const fallbackKeyGuest =
   (import.meta.env.VITE_STANFORD_KEY_GUEST as string | undefined) ?? 'Stanford Guest';
 const fallbackKeyRoom =
   (import.meta.env.VITE_STANFORD_KEY_ROOM as string | undefined) ?? '311';
+const GUEST_THEME_STORAGE_KEY = 'stanford-guest-wood-theme';
 
 export function AvatarGuestApp() {
   const [activeScreen, setActiveScreen] = useState<AvatarScreen>(null);
@@ -51,6 +53,13 @@ export function AvatarGuestApp() {
   const [passportVerifying, setPassportVerifying] = useState(false);
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [keyCardReceived, setKeyCardReceived] = useState(false);
+  const [woodThemeActive, setWoodThemeActive] = useState(() => {
+    try {
+      return window.localStorage.getItem(GUEST_THEME_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const sessionIdRef = useRef(`stanford-avatar-${Date.now()}`);
   const avatarClientRef = useRef<SimliAudioClient | null>(null);
   const avatarConnectedRef = useRef(false);
@@ -78,6 +87,17 @@ export function AvatarGuestApp() {
   );
 
   useEffect(() => clearTransitionTimers, [clearTransitionTimers]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        GUEST_THEME_STORAGE_KEY,
+        String(woodThemeActive)
+      );
+    } catch {
+      // Theme persistence is a nicety; the visible toggle should still work.
+    }
+  }, [woodThemeActive]);
 
   const resetSession = useCallback(() => {
     stop();
@@ -218,6 +238,14 @@ export function AvatarGuestApp() {
     ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim()
     : fallbackKeyGuest;
   const roomNumber = reservation?.room?.roomNumber ?? fallbackKeyRoom;
+  const guestThemeClassName = woodThemeActive ? 'guest-interface guest-theme-wood' : 'guest-interface';
+  const themeControls = (
+    <AmbientJazz
+      enabled
+      woodThemeActive={woodThemeActive}
+      onToggleWoodTheme={() => setWoodThemeActive((current) => !current)}
+    />
+  );
 
   const overlayContent = () => {
     switch (activeScreen) {
@@ -273,11 +301,12 @@ export function AvatarGuestApp() {
 
   if (complete) {
     return (
-      <div className="relative h-full w-full">
+      <div className={`relative h-full w-full ${guestThemeClassName}`}>
+        {themeControls}
         <button
           type="button"
           onClick={resetSession}
-          className="absolute right-5 top-5 z-30 rounded-full border border-[#1f6a58]/18 bg-[#fffdf5]/88 px-3 py-1.5 text-[10px] uppercase tracking-widest text-[#627168] shadow-[0_10px_28px_rgba(31,106,88,0.12)] transition hover:border-[#1f6a58] hover:text-[#19251f] md:right-8 md:top-8"
+          className="absolute left-5 top-5 z-30 rounded-full border border-[var(--color-hotel-border)] bg-[var(--guest-card-strong)] px-3 py-1.5 text-[10px] uppercase tracking-widest text-[var(--color-hotel-text-dim)] shadow-[0_10px_28px_rgba(31,106,88,0.12)] transition hover:border-[var(--color-hotel-accent)] hover:text-[var(--color-hotel-text)] md:left-8 md:top-8"
         >
           Restart session
         </button>
@@ -293,49 +322,52 @@ export function AvatarGuestApp() {
   }
 
   return (
-    <GuestPortraitShell
-      showcaseOverlay={
-        <ScreenOverlay open={Boolean(activeScreen)}>
-          <div key={activeScreen} className="avatar-step-enter">
-            {overlayContent()}
+    <div className={`h-full w-full ${guestThemeClassName}`}>
+      {themeControls}
+      <GuestPortraitShell
+        showcaseOverlay={
+          <ScreenOverlay open={Boolean(activeScreen)}>
+            <div key={activeScreen} className="avatar-step-enter">
+              {overlayContent()}
+            </div>
+          </ScreenOverlay>
+        }
+      >
+        <div className="guest-call-surface relative flex h-full w-full flex-col overflow-hidden">
+          <div className="relative min-h-0 flex-1">
+            <StanfordAvatarDisplay
+              thinking={busy}
+              speaking={isSpeaking}
+              onClientChange={(client, connected) => {
+                avatarClientRef.current = client;
+                avatarConnectedRef.current = connected;
+              }}
+            />
+            <div className="pointer-events-none absolute left-5 top-16 z-10 max-w-lg text-white md:left-8 md:top-20">
+              <p className="text-[10px] uppercase tracking-widest text-[var(--color-hotel-gold)]">
+                Avatar check-in
+              </p>
+              <h1 className="mt-2 text-2xl leading-tight md:text-4xl">
+                Azure is ready to check you in.
+              </h1>
+            </div>
+            <button
+              type="button"
+              onClick={resetSession}
+              className="absolute left-5 top-5 z-20 rounded-full border border-white/14 bg-white/8 px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/68 backdrop-blur-md transition hover:border-[var(--color-hotel-gold)]/45 hover:text-[#f8f1df] md:left-8 md:top-8"
+            >
+              Restart session
+            </button>
           </div>
-        </ScreenOverlay>
-      }
-    >
-      <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#10251f]">
-        <div className="relative min-h-0 flex-1">
-          <StanfordAvatarDisplay
-            thinking={busy}
+          <StanfordAvatarChatPanel
+            messages={messages}
+            busy={busy}
             speaking={isSpeaking}
-            onClientChange={(client, connected) => {
-              avatarClientRef.current = client;
-              avatarConnectedRef.current = connected;
-            }}
+            onSend={sendMessage}
+            onInterrupt={stop}
           />
-          <div className="pointer-events-none absolute left-5 top-5 z-10 max-w-lg text-white md:left-8 md:top-8">
-            <p className="text-[10px] uppercase tracking-widest text-[#d3b16f]">
-              Avatar check-in
-            </p>
-            <h1 className="mt-2 text-2xl leading-tight md:text-4xl">
-              Azure is ready to check you in.
-            </h1>
-          </div>
-          <button
-            type="button"
-            onClick={resetSession}
-            className="absolute right-5 top-5 z-20 rounded-full border border-white/14 bg-white/8 px-3 py-1.5 text-[10px] uppercase tracking-widest text-white/68 backdrop-blur-md transition hover:border-[#d3b16f]/45 hover:text-[#f8f1df] md:right-8 md:top-8"
-          >
-            Restart session
-          </button>
         </div>
-        <StanfordAvatarChatPanel
-          messages={messages}
-          busy={busy}
-          speaking={isSpeaking}
-          onSend={sendMessage}
-          onInterrupt={stop}
-        />
-      </div>
-    </GuestPortraitShell>
+      </GuestPortraitShell>
+    </div>
   );
 }

@@ -51,7 +51,7 @@ export function StanfordAvatarChatPanel({
   );
 
   return (
-    <div className="border-t border-white/12 bg-[#10251f]/88 px-4 py-3 text-white shadow-[0_-18px_48px_rgba(0,0,0,0.22)] backdrop-blur-md">
+    <div className="border-t border-[var(--color-hotel-border)] bg-[var(--guest-deep)]/90 px-4 py-3 text-white shadow-[0_-18px_48px_rgba(0,0,0,0.22)] backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-end gap-3">
         <div className="min-h-[58px] flex-1 overflow-hidden">
           <div className="flex max-h-20 flex-col gap-1 overflow-y-auto pr-2">
@@ -59,7 +59,7 @@ export function StanfordAvatarChatPanel({
               <p
                 key={message.id}
                 className={`text-sm leading-5 ${
-                  message.role === 'avatar' ? 'text-white/86' : 'text-[#d3b16f]'
+                  message.role === 'avatar' ? 'text-white/86' : 'text-[var(--color-hotel-gold)]'
                 }`}
               >
                 <span className="mr-2 text-[10px] uppercase tracking-widest text-white/42">
@@ -83,12 +83,12 @@ export function StanfordAvatarChatPanel({
               onChange={(event) => setText(event.target.value)}
               disabled={busy}
               placeholder="Type or tap the microphone..."
-              className="min-w-0 flex-1 rounded-lg border border-white/14 bg-white/8 px-3 py-2 text-sm text-white outline-none transition focus:border-[#d3b16f]/60 disabled:opacity-50"
+              className="min-w-0 flex-1 rounded-lg border border-white/14 bg-white/8 px-3 py-2 text-sm text-white outline-none transition focus:border-[var(--color-hotel-gold)]/60 disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={busy || !text.trim()}
-              className="rounded-lg border border-[#d3b16f]/45 bg-[#d3b16f]/16 px-4 py-2 text-sm font-medium text-[#f8f1df] transition hover:bg-[#d3b16f]/22 disabled:cursor-not-allowed disabled:opacity-45"
+              className="rounded-lg border border-[var(--color-hotel-gold)]/45 bg-[var(--color-hotel-gold)]/16 px-4 py-2 text-sm font-medium text-[#f8f1df] transition hover:bg-[var(--color-hotel-gold)]/22 disabled:cursor-not-allowed disabled:opacity-45"
             >
               Send
             </button>
@@ -106,14 +106,14 @@ export function StanfordAvatarChatPanel({
             isRecording
               ? 'border-red-300/70 bg-red-500/18 text-red-100'
               : isListening
-                ? 'border-[#d3b16f]/70 bg-[#d3b16f]/18 text-[#f8f1df]'
-                : 'border-white/18 bg-white/8 text-white/72 hover:border-[#d3b16f]/55'
+                ? 'border-[var(--color-hotel-gold)]/70 bg-[var(--color-hotel-gold)]/18 text-[#f8f1df]'
+                : 'border-white/18 bg-white/8 text-white/72 hover:border-[var(--color-hotel-gold)]/55'
           } disabled:cursor-not-allowed disabled:opacity-45`}
           title={isListening ? 'Stop voice mode' : 'Start voice mode'}
         >
           {isListening && (
             <span
-              className="absolute inset-[-4px] rounded-full border border-[#d3b16f]/24"
+              className="absolute inset-[-4px] rounded-full border border-[var(--color-hotel-gold)]/24"
               style={{ transform: `scale(${1 + audioLevel * 0.32})` }}
             />
           )}
